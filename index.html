@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Universe Invoice" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>Universe Invoice Prototype</title>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">PWA 原型版</div>
+      <h1>Universe Invoice</h1>
+    </div>
+    <button id="installBtn" class="ghost hidden">安裝 App</button>
+  </header>
+
+  <main>
+    <section class="card hero">
+      <div>
+        <h2>展覽 Invoice 工作台</h2>
+        <p>匯入每次展覽的倉存 Excel、共用款號圖片、掃 Barcode 或輸入 LOTNO，再以客戶 Sales Rate 計算 Invoice。</p>
+      </div>
+      <div class="status-grid">
+        <div><span>產品</span><strong id="productCount">1</strong></div>
+        <div><span>圖片</span><strong id="imageCount">0</strong></div>
+        <div><span>Invoice 款數</span><strong id="invoiceCount">0</strong></div>
+        <div><span>總額</span><strong id="headerTotal">$0</strong></div>
+      </div>
+    </section>
+
+    <nav class="tabs" aria-label="功能">
+      <button class="tab active" data-tab="setup">資料設定</button>
+      <button class="tab" data-tab="invoice">建立 Invoice</button>
+      <button class="tab" data-tab="preview">Invoice 預覽</button>
+    </nav>
+
+    <section id="setup" class="tab-panel active">
+      <div class="two-col">
+        <article class="card">
+          <h3>1. 展覽及倉存 Excel</h3>
+          <label>展覽名稱
+            <input id="exhibitionName" value="Prototype Exhibition 2026" />
+          </label>
+          <label class="file-picker">選擇倉存 Excel (.xls / .xlsx)
+            <input id="excelInput" type="file" accept=".xls,.xlsx" />
+          </label>
+          <div id="excelStatus" class="notice">目前載入內置示範貨品：LOTNO 133685 / PT-37499 / 3092u。</div>
+          <details>
+            <summary>Excel 欄位規則</summary>
+            <p>Barcode = LOTNO、圖片 = ARTNO、U價 = PRICE、描述 = DESC1 至 DESC7、單位 = UNIT。</p>
+          </details>
+        </article>
+
+        <article class="card">
+          <h3>2. 共用款號圖片庫</h3>
+          <label class="file-picker">批量選擇圖片
+            <input id="imageInput" type="file" accept="image/*" multiple />
+          </label>
+          <p class="muted">檔名例：PT-37499.jpg、PT-37499 AM.jpg、PT-37499 CT.jpg。無後綴圖片為預設。</p>
+          <div id="imageStatus" class="notice">尚未匯入圖片；原型仍可測試所有 Invoice 功能。</div>
+          <div id="imageLibrary" class="image-library"></div>
+        </article>
+      </div>
+
+      <article class="card">
+        <h3>3. 客戶及 Sales Rate</h3>
+        <div class="form-grid">
+          <label>客戶名稱
+            <input id="customerName" value="ICHIMARU JEWELRY CO., LTD" />
+          </label>
+          <label>Currency
+            <select id="currency"><option>USD</option><option>EUR</option><option>JPY</option><option>HKD</option></select>
+          </label>
+          <label>Sales Rate
+            <input id="salesRate" type="number" step="0.01" value="0.34" />
+          </label>
+          <label>Shipment Method
+            <input id="shipmentMethod" placeholder="可留空" />
+          </label>
+          <label class="wide">地址
+            <textarea id="customerAddress" rows="3">31-21, 2-CHOME YUSHIMA, BUNKYO-KU, TOKYO\n113-0034, JAPAN</textarea>
+          </label>
+        </div>
+      </article>
+    </section>
+
+    <section id="invoice" class="tab-panel">
+      <article class="card invoice-header-card">
+        <div class="form-grid">
+          <label>Invoice No.
+            <input id="invoiceNo" value="INV260011" />
+          </label>
+          <label>Invoice Date
+            <input id="invoiceDate" type="date" />
+          </label>
+          <label>Discount Amount
+            <input id="discountAmount" type="number" min="0" step="1" value="0" />
+          </label>
+          <label>Remark
+            <input id="remark" placeholder="可留空" />
+          </label>
+        </div>
+      </article>
+
+      <article class="card add-card">
+        <h3>加入貨品</h3>
+        <div class="add-row">
+          <button id="scanBtn" class="primary">📷 掃 Barcode</button>
+          <div class="lot-entry">
+            <input id="lotInput" inputmode="numeric" placeholder="手動輸入 LOTNO" />
+            <button id="addLotBtn">加入</button>
+          </div>
+        </div>
+        <div id="addMessage" class="notice">可先輸入示範 LOTNO：133685</div>
+      </article>
+
+      <article class="card">
+        <div class="section-title-row">
+          <h3>Invoice 貨品</h3>
+          <button id="clearInvoiceBtn" class="danger ghost">清空草稿</button>
+        </div>
+        <div id="invoiceItems" class="invoice-items empty-state">尚未加入貨品。</div>
+        <div class="totals">
+          <div><span>Total Quantity</span><strong id="totalQty">0</strong></div>
+          <div><span>Sub Total</span><strong id="subtotal">$0.00</strong></div>
+          <div><span>Discount</span><strong id="discountDisplay">$0.00</strong></div>
+          <div class="grand"><span>Total</span><strong id="grandTotal">$0.00</strong></div>
+        </div>
+      </article>
+    </section>
+
+    <section id="preview" class="tab-panel">
+      <article class="card preview-actions no-print">
+        <button id="refreshPreviewBtn">更新預覽</button>
+        <button id="printBtn" class="primary">列印 / 儲存 PDF</button>
+      </article>
+      <article id="invoiceDocument" class="invoice-document"></article>
+    </section>
+  </main>
+
+  <dialog id="scannerDialog">
+    <div class="dialog-head"><h3>掃 Barcode</h3><button id="closeScannerBtn" class="ghost">關閉</button></div>
+    <video id="scannerVideo" playsinline muted></video>
+    <div class="scan-frame"></div>
+    <p id="scannerStatus" class="muted">正在啟動相機…</p>
+    <p class="muted">如裝置不支援網頁 Barcode 掃描，請關閉後手動輸入 LOTNO。</p>
+  </dialog>
+
+  <template id="itemTemplate">
+    <div class="invoice-item" draggable="true">
+      <div class="drag-handle">☰</div>
+      <img class="item-thumb" alt="產品圖片" />
+      <div class="item-main">
+        <div class="item-title-row"><strong class="item-artno"></strong><span class="item-lot"></span></div>
+        <div class="item-desc"></div>
+        <div class="item-price-note"></div>
+      </div>
+      <div class="item-controls">
+        <select class="variant-select"></select>
+        <label>Qty <input class="qty-input" type="number" min="1" step="1" /></label>
+        <label>Unit Price <input class="price-input" type="number" min="0" step="1" /></label>
+        <button class="insert-above">上方插入</button>
+        <button class="insert-below">下方插入</button>
+        <button class="delete-item danger">刪除</button>
+      </div>
+    </div>
+  </template>
+
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
