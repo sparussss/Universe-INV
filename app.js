@@ -93,11 +93,13 @@ function renderSelectedCustomer(){$('#selectedCustomerSummary').innerHTML=`<stro
 
 function parseImageName(name){
   const base=name.replace(/\.[^.]+$/,'').trim();
-  const clean=base.replace(/\s+\(\d+\)$/,'').trim();
+  const duplicateMatch=base.match(/\s+\((\d+)\)$/);
+  const duplicateIndex=duplicateMatch?Number(duplicateMatch[1]):0;
+  const clean=duplicateMatch?base.slice(0,duplicateMatch.index).trim():base;
   const firstSpace=clean.search(/\s/);
   const art=normalizeArticle(firstSpace<0?clean:clean.slice(0,firstSpace));
   const variant=firstSpace<0?'Default':clean.slice(firstSpace).trim()||'Default';
-  return {art,variant};
+  return {art,variant,duplicateIndex};
 }
 $('#imageFolderInput').addEventListener('change',e=>{
   state.imageFiles=[...e.target.files].filter(f=>f.type.startsWith('image/')||/\.(jpe?g|png|webp|heic)$/i.test(f.name));
@@ -108,11 +110,18 @@ function rebuildImageIndex(){
   state.images=new Map(); let matched=0,ignored=0;
   const needed=new Set([...state.products.values()].map(p=>normalizeArticle(p.artNo)));
   for(const file of state.imageFiles){
-    const {art,variant}=parseImageName(file.name); if(!needed.has(art)){ignored++;continue}
-    const arr=state.images.get(art)||[]; const url=URL.createObjectURL(file);
-    const existing=arr.findIndex(x=>x.variant.toUpperCase()===variant.toUpperCase());
-    if(existing>=0){URL.revokeObjectURL(arr[existing].url);arr.splice(existing,1)}
-    arr.push({variant,fileName:file.name,url}); arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));
+    const {art,variant,duplicateIndex}=parseImageName(file.name); if(!needed.has(art)){ignored++;continue}
+    const arr=state.images.get(art)||[];
+    const variantKey=variant.trim().toUpperCase();
+    const existing=arr.findIndex(x=>x.variantKey===variantKey);
+    if(existing>=0){
+      // 同款同變體：沒有 (1)/(2) 的原檔永遠優先；只有更佳候選才取代。
+      if(duplicateIndex>=arr[existing].duplicateIndex){matched++;continue}
+      URL.revokeObjectURL(arr[existing].url);arr.splice(existing,1);
+    }
+    const url=URL.createObjectURL(file);
+    arr.push({variant,variantKey,duplicateIndex,fileName:file.name,url});
+    arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant,undefined,{numeric:true,sensitivity:'base'}));
     state.images.set(art,arr);matched++;
   }
   state.items.forEach(item=>{if(!item.imageManual)item.imageVariant=chooseImageVariant(item,getImages(item.artNo))});
@@ -121,7 +130,7 @@ function rebuildImageIndex(){
 }
 function renderImageLibrary(){}
 function getImages(art){return state.images.get(normalizeArticle(art))||[]}
-function getSelectedImage(item){const imgs=getImages(item.artNo);return imgs.find(x=>x.variant===item.imageVariant)||imgs.find(x=>x.variant==='Default')||imgs[0]}
+function getSelectedImage(item){const imgs=getImages(item.artNo),wanted=String(item.imageVariant||'').trim().toUpperCase();return imgs.find(x=>x.variantKey===wanted)||imgs.find(x=>x.variant==='Default')||imgs[0]}
 function placeholderSvg(text){return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="#eef2f6"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="18" fill="#64748b">${text}</text></svg>`)}`}
 
 const STONE_IMAGE_MAP={
@@ -275,9 +284,9 @@ async function startScanner(){
   try{
     if(state.scanner){try{await state.scanner.clear()}catch{}}
     $('#reader').innerHTML='';
-    state.scanner=new Html5Qrcode('reader',{verbose:false});
     const formats=[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,Html5QrcodeSupportedFormats.ITF];
-    await state.scanner.start({facingMode:{ideal:'environment'}},{fps:24,qrbox:(w,h)=>({width:Math.floor(w*.72),height:Math.max(54,Math.min(82,Math.floor(h*.12)))}),aspectRatio:1.7778,formatsToSupport:formats,experimentalFeatures:{useBarCodeDetectorIfSupported:true}},onBarcodeSuccess,()=>{});
+    state.scanner=new Html5Qrcode('reader',{verbose:false,formatsToSupport:formats});
+    await state.scanner.start({facingMode:'environment'},{fps:24,qrbox:(w,h)=>({width:Math.floor(w*.72),height:Math.max(54,Math.min(82,Math.floor(h*.12)))}),aspectRatio:1.7778,experimentalFeatures:{useBarCodeDetectorIfSupported:true}},onBarcodeSuccess,()=>{});
     if(state.scannerCancelRequested){try{await state.scanner.stop();await state.scanner.clear()}catch{}state.scanner=null;state.scannerRunning=false;return}
     state.scannerRunning=true;state.scannerPaused=false;$('#scannerStatus').textContent='請把小條碼橫向填滿中央細長框。';
     setScannerControlsDisabled(false);$('#pauseScannerBtn').disabled=false;

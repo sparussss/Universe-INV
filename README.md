@@ -1,4 +1,4 @@
-# Universe Invoice PWA v0.5
+# Universe Invoice PWA v0.6
 
 功能測試版，主要修正：
 
