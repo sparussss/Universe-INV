@@ -1,33 +1,22 @@
-# Universe Invoice PWA v0.7
+# Universe Invoice PWA v0.6
 
-此 ZIP 固定包含 9 個檔案：
+功能測試版，主要修正：
 
-1. index.html
-2. styles.css
-3. app.js
-4. manifest.webmanifest
-5. sw.js
-6. icon-192.png
-7. icon-512.png
-8. icon.svg
-9. README.md
+- 選擇 Pictures Folder 後只顯示統計，不列出圖片清單。
+- 修正相機重複啟動造成 `already under transition` 的問題。
+- 圖片自動選擇會依據倉存表 `DESC2`，使用 `Stone List & Shape & Cutting.xlsx` 的 Breakdown → Quotation 代碼規則配對。
+- 新加入貨品顯示在清單最上方，編號保留加入次序，例如 3、2、1。
+- Invoice 貨品區為固定高度，可在區內上下捲動，適合超過 100 件貨。
+- LOTNO 支援語音輸入；如瀏覽器不支援直接語音辨識，會開啟文字鍵盤供使用 iPhone 系統聽寫。
+- Confirm Invoice 後匯出 Remaining Stock Excel。
 
-## 主要功能
+## GitHub Pages 更新
 
-- 手機選擇倉存 Excel、客戶 Excel、Pictures Folder
-- Pictures Folder 只建立當次索引，不複製圖片
-- Customer Code 自動移除空格；Column L 空白時 Sales Rate 使用 0.34
-- 手動、語音、Barcode 掃描三種 LOTNO 輸入
-- 掃描預設 3×；支架連續掃描
-- 成功顯示綠色大 LOTNO；重複橙色；找不到紅色
-- DESC2 配合 Stone List 對照自動選圖片
-- 無 (1) 的圖片優先；圖片完整顯示不裁切
-- 最新貨品在最上方；固定高度清單內捲動
-- 新增、插入、刪除、復原、改 Qty／Unit Price／圖片版本
-- Confirm 後輸出可編輯 Invoice XLSX 及 Remaining Stock XLSX
+把 ZIP 解壓後的所有檔案直接上傳到 Repository 根目錄，覆蓋舊版。若仍顯示舊版本，刪除主畫面舊 PWA，再由 Safari 重新加入主畫面。
 
-## GitHub Pages
 
-解壓後把以上 9 個檔案直接放到 Repository 根目錄並覆蓋舊檔案。不要多包一層資料夾。
-
-第一次使用需有網絡載入 Excel 與 Barcode 程式；成功載入後 Service Worker 會嘗試快取。相機必須在 HTTPS 網址使用。
+## v0.6 修正版驗收
+- 左上角顯示 v0.6。
+- 相機改用 cameraId 選取後置鏡頭，避免 facingMode 錯誤。
+- 同款同變體圖片以無 (1)/(2) 的檔案優先。
+- 貨品圖片使用 object-fit: contain，完整顯示而不裁切。

@@ -1,1063 +1,362 @@
-'use strict';
+const $=(s,root=document)=>root.querySelector(s);
+const $$=(s,root=document)=>[...root.querySelectorAll(s)];
 
-const $ = (selector, root = document) => root.querySelector(selector);
-const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-
-const STONE_MAP = {
-  'SKY BTO': 'SKY BT', 'SKY BT': 'SKY BT', 'AMCT': 'AMCT', 'QAM': 'AM', 'LBT': 'LBT',
-  'BTO': 'BT', 'YCT': 'CT', 'GPS': 'G.AM', 'GAM': 'G.AM', 'GPD': 'PD', 'RQZ': 'RQZ',
-  'MG': 'MG', 'PTQ': 'PTR', 'AQ': 'AQ', 'PAM': 'P.AM', 'MCT': 'MCT', 'RGT': 'RGT',
-  'TZ': 'TZ', 'IO': 'IO', 'GTQ': 'GTR', 'GT': 'GT', 'ALEX': 'ALEX', 'KU': 'KU',
-  'LQZ': 'LQZ', 'SQZ': 'SQZ', 'BSA': 'BSA', 'PSA': 'PSA', 'GGT': 'GGT', 'OSA': 'OSA',
-  'YSA': 'YSA', 'SSU': 'SSU', 'RRU': 'RRU', 'GEM': 'GEM', 'GSA': 'GSA', 'WSA': 'WSA',
-  'ZSA': 'ZSA', 'ZSP': 'ZSP', 'DIA': 'DIA', 'AG': 'AG', 'AMZ': 'AMZ', 'BCH': 'BCH',
-  'BO': 'BO', 'GMA': 'GMA', 'LAB': 'LAB', 'LAP': 'LAP', 'MOON': 'MOON', 'OPAL': 'OPAL',
-  'WPL': 'WPL', 'RCH': 'RCH', 'TE': 'TE', 'TQ': 'TQ'
+const state={
+  products:new Map(), customers:new Map(), images:new Map(), imageFiles:[], items:[], soldLots:new Map(),
+  stockRows:null, stockHeaderRow:-1, stockLotCol:-1, stockFileName:'jmsdata.xls',
+  insertAt:null, scanner:null, scannerRunning:false, scannerPaused:false, scannerTransitioning:false, scannerCancelRequested:false,
+  nextSequence:1, lastScan:{value:'',time:0}, installPrompt:null
 };
-const STONE_ALIASES = Object.keys(STONE_MAP).sort((a, b) => b.length - a.length);
+const sample={lotNo:'133685',artNo:'PT-37499',price:3092,unit:'PC',desc2:'1-AMCTOCT25x9-10.75ct',descriptions:['2.10Y750','1-AMCTOCT25x9-10.75ct','6-CDMRD(B2)-0.05ct']};
+const sampleCustomer={code:'JP1221',company:'ICHIMARU JEWELRY CO., LTD',address:'31-21, 2-CHOME YUSHIMA, BUNKYO-KU, TOKYO\n113-0034, JAPAN',rate:0.34,terms:'COD'};
+state.products.set(sample.lotNo,sample); state.customers.set(sampleCustomer.code,sampleCustomer);
 
-const state = {
-  products: new Map(),
-  customers: new Map(),
-  stockHeader: [],
-  stockRows: [],
-  stockLotIndex: -1,
-  stockFileName: '',
-  imageIndex: new Map(),
-  items: [],
-  insertIndex: null,
-  deletedItem: null,
-  deletedTimer: null,
-  scanner: null,
-  scannerBusy: false,
-  scannerStarted: false,
-  currentZoom: 3,
-  torchOn: false,
-  lastScan: { value: '', time: 0 },
-  feedbackTimer: null,
-  audioContext: null,
-  soldHistory: new Map()
-};
+function normalizeKey(v){return String(v??'').trim()}
+function normalizeArticle(v){return normalizeKey(v).toUpperCase()}
+function normalizeCustomerCode(v){return String(v??'').replace(/\s+/g,'').trim().toUpperCase()}
+function normalizeLot(v){return String(v??'').replace(/\s+/g,'').trim()}
+function field(row,names){const keys=Object.keys(row);for(const name of names){const k=keys.find(x=>x.trim().toUpperCase()===name);if(k)return row[k]}return''}
+function setStatus(id,text,type=''){const el=$(id);el.textContent=text;el.className='notice'+(type?' '+type:'')}
+function formatCurrency(v){const c=$('#currency').value||'USD';return new Intl.NumberFormat('en-US',{style:'currency',currency:c,minimumFractionDigits:2}).format(v||0)}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function updateHeader(){const t=calcTotals();$('#productCount').textContent=state.products.size;$('#customerCount').textContent=state.customers.size;$('#invoiceCount').textContent=state.items.length;$('#headerTotal').textContent=formatCurrency(t.total)}
+$('#invoiceDate').value=new Date().toISOString().slice(0,10);
 
-function normalizeText(value) {
-  return String(value ?? '').trim();
-}
-function normalizeCode(value) {
-  return normalizeText(value).replace(/\s+/g, '').toUpperCase();
-}
-function normalizeArticle(value) {
-  return normalizeText(value).replace(/\s+/g, ' ').toUpperCase();
-}
-function normalizeVariant(value) {
-  return normalizeText(value).replace(/\s+/g, ' ').toUpperCase();
-}
-function safeFileName(value) {
-  return normalizeText(value).replace(/[\\/:*?"<>|]+/g, '_') || 'Invoice';
-}
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-}
-function showStatus(selector, text, type = '') {
-  const el = $(selector);
-  el.textContent = text;
-  el.className = `status${type ? ` ${type}` : ''}`;
-}
-function formatMoney(value) {
-  const currency = $('#currency').value || 'USD';
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 2 }).format(Number(value) || 0);
-}
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-$('#invoiceDate').value = todayIso();
+$$('.tab').forEach(btn=>btn.addEventListener('click',()=>{
+  $$('.tab').forEach(x=>x.classList.remove('active')); $$('.tab-panel').forEach(x=>x.classList.remove('active'));
+  btn.classList.add('active'); $('#'+btn.dataset.tab).classList.add('active');
+  if(btn.dataset.tab==='invoice')renderSelectedCustomer(); if(btn.dataset.tab==='preview')renderPreview();
+}));
 
-function switchTab(name) {
-  $$('.tab').forEach(button => button.classList.toggle('active', button.dataset.tab === name));
-  $$('.tab-panel').forEach(panel => panel.classList.toggle('active', panel.id === name));
-  if (name === 'invoice') {
-    renderCustomerSummary();
-    renderItems();
-  }
+async function readWorkbook(file){
+  if(typeof XLSX==='undefined')throw new Error('Excel 解析程式未載入。請連接網絡並重新開啟。');
+  const data=await file.arrayBuffer(); return XLSX.read(data,{type:'array',cellDates:false});
 }
-$$('.tab').forEach(button => button.addEventListener('click', () => switchTab(button.dataset.tab)));
-$('#goInvoiceBtn').addEventListener('click', () => switchTab('invoice'));
-
-function readWorkbook(file) {
-  if (!window.XLSX) throw new Error('Excel 程式未載入，請連接網絡後重新開啟。');
-  return file.arrayBuffer().then(buffer => XLSX.read(buffer, { type: 'array', cellDates: false }));
-}
-
-function findHeaderIndex(headers, names) {
-  const normalized = headers.map(h => normalizeText(h).toUpperCase().replace(/[.\s_]/g, ''));
-  for (const name of names) {
-    const target = name.toUpperCase().replace(/[.\s_]/g, '');
-    const index = normalized.indexOf(target);
-    if (index >= 0) return index;
+function findHeader(rows,required){
+  for(let i=0;i<Math.min(rows.length,30);i++){
+    const values=(rows[i]||[]).map(v=>normalizeKey(v).toUpperCase().replace(/[ .]/g,''));
+    if(required.every(r=>values.includes(r)))return i;
   }
   return -1;
 }
-
-$('#stockInput').addEventListener('change', async event => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  try {
-    const workbook = await readWorkbook(file);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
-    if (!rows.length) throw new Error('Excel 沒有資料。');
-    const header = rows[0].map(normalizeText);
-    const lotIndex = findHeaderIndex(header, ['LOTNO', 'LOT NO']);
-    const artIndex = findHeaderIndex(header, ['ARTNO', 'ART NO']);
-    const priceIndex = findHeaderIndex(header, ['PRICE']);
-    const unitIndex = findHeaderIndex(header, ['UNIT']);
-    const descIndexes = [1, 2, 3, 4, 5, 6].map(n => findHeaderIndex(header, [`DESC${n}`]));
-    if ([lotIndex, artIndex, priceIndex].some(index => index < 0)) throw new Error('找不到 LOTNO、ARTNO 或 PRICE 欄位。');
-
-    const products = new Map();
-    const validRows = [];
-    for (const row of rows.slice(1)) {
-      const lotNo = normalizeCode(row[lotIndex]);
-      const artNo = normalizeArticle(row[artIndex]);
-      const price = Number(row[priceIndex]);
-      if (!lotNo || !artNo || !Number.isFinite(price)) continue;
-      const descriptions = descIndexes.map(index => index >= 0 ? normalizeText(row[index]) : '').filter(Boolean);
-      const desc2 = descIndexes[1] >= 0 ? normalizeText(row[descIndexes[1]]) : '';
-      const product = {
-        lotNo,
-        artNo,
-        price,
-        unit: unitIndex >= 0 ? (normalizeText(row[unitIndex]) || 'PC') : 'PC',
-        descriptions,
-        desc2,
-        rawRow: [...row]
-      };
-      products.set(lotNo, product);
-      validRows.push([...row]);
+$('#excelInput').addEventListener('change',async e=>{
+  const file=e.target.files[0]; if(!file)return;
+  try{
+    const wb=await readWorkbook(file), ws=wb.Sheets[wb.SheetNames[0]];
+    const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+    const hi=findHeader(aoa,['LOTNO','ARTNO','PRICE']);
+    if(hi<0)throw new Error('找不到 LOTNO / ARTNO / PRICE 標題列。');
+    const headers=(aoa[hi]||[]).map(v=>normalizeKey(v));
+    const lotCol=headers.findIndex(x=>x.toUpperCase().replace(/[ .]/g,'')==='LOTNO');
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    const map=new Map(); let invalid=0;
+    for(const row of rows){
+      const lot=normalizeLot(field(row,['LOTNO','LOT NO','LOT.NO.'])); if(!lot)continue;
+      const art=normalizeArticle(field(row,['ARTNO','ART NO','ARTICLE NO']));
+      const price=Number(field(row,['PRICE','U PRICE','UPRICE']));
+      if(!art||!Number.isFinite(price)){invalid++;continue}
+      const rawDescriptions=[]; for(let i=1;i<=6;i++){rawDescriptions.push(normalizeKey(field(row,[`DESC${i}`,`DESCRIPTION${i}`])))}
+      const descriptions=rawDescriptions.filter(Boolean), desc2=rawDescriptions[1]||'';
+      map.set(lot,{lotNo:lot,artNo:art,price,unit:normalizeKey(field(row,['UNIT']))||'PC',desc2,descriptions});
     }
-    if (!products.size) throw new Error('沒有找到有效貨品資料。');
-    state.products = products;
-    state.stockHeader = header;
-    state.stockRows = validRows;
-    state.stockLotIndex = lotIndex;
-    state.stockFileName = file.name;
-    state.items = state.items.filter(item => products.has(item.lotNo));
-    showStatus('#stockStatus', `已匯入 ${file.name}：${products.size} 件貨品。`, 'ok');
-    rebuildImageIndexFromCurrentFolder();
-    renderItems();
-  } catch (error) {
-    showStatus('#stockStatus', `匯入失敗：${error.message}`, 'error');
-  }
+    if(!map.size)throw new Error('找不到有效貨品。');
+    state.products=map; state.stockRows=aoa; state.stockHeaderRow=hi; state.stockLotCol=lotCol; state.stockFileName=file.name;
+    state.soldLots.clear();
+    setStatus('#excelStatus',`已匯入 ${file.name}：${map.size} 件可售貨品${invalid?`；略過 ${invalid} 行無效資料`:''}。`,'ok');
+    rebuildImageIndex(); updateHeader(); persistLight();
+  }catch(err){setStatus('#excelStatus',`匯入失敗：${err.message}`,'error')}
 });
 
-$('#customerInput').addEventListener('change', async event => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  try {
-    const workbook = await readWorkbook(file);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
-    const customers = new Map();
-    for (const row of rows) {
-      const code = normalizeCode(row[0]);
-      const company = normalizeText(row[1]);
-      if (!code || !company || code.includes('CUSTOMER')) continue;
-      const rawRate = row[11];
-      const parsedRate = Number(rawRate);
-      const rate = rawRate === '' || rawRate === null || rawRate === undefined || !Number.isFinite(parsedRate) ? 0.34 : parsedRate;
-      const address = [row[2], row[3], row[4]].map(normalizeText).filter(Boolean).join('\n');
-      customers.set(code, {
-        code,
-        company,
-        address,
-        rate,
-        terms: normalizeText(row[10]),
-        contact: normalizeText(row[9]),
-        phone: normalizeText(row[6]),
-        email: normalizeText(row[8])
-      });
+$('#customerExcelInput').addEventListener('change',async e=>{
+  const file=e.target.files[0];if(!file)return;
+  try{
+    const wb=await readWorkbook(file),ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+    const map=new Map();let started=false;
+    for(const r of rows){
+      const code=normalizeCustomerCode(r[0]), company=normalizeKey(r[1]);
+      if(!started){if(code.includes('CUSTOMER')||company.toUpperCase().includes('COMPANY')){started=true;continue}if(!code||!company)continue;started=true}
+      if(!code||!company)continue;
+      const rawRate=r[11], parsed=Number(rawRate), rate=rawRate===''||rawRate==null||!Number.isFinite(parsed)?0.34:parsed;
+      map.set(code,{code,company,address:[r[2],r[3],r[4]].map(normalizeKey).filter(Boolean).join('\n'),rate,terms:normalizeKey(r[10]),contact:normalizeKey(r[9]),phone:normalizeKey(r[6]),email:normalizeKey(r[8])});
     }
-    if (!customers.size) throw new Error('沒有找到有效客戶資料。');
-    state.customers = customers;
-    showStatus('#customerStatus', `已匯入 ${file.name}：${customers.size} 位客戶。`, 'ok');
-  } catch (error) {
-    showStatus('#customerStatus', `匯入失敗：${error.message}`, 'error');
-  }
+    if(!map.size)throw new Error('找不到有效 Customer Code / Company 資料。');
+    state.customers=map;setStatus('#customerExcelStatus',`已匯入 ${file.name}：${map.size} 位客戶。空白 Sales Rate 已按 0.34 處理。`,'ok');updateHeader();
+  }catch(err){setStatus('#customerExcelStatus',`匯入失敗：${err.message}`,'error')}
 });
 
-function stripDuplicateSuffix(baseName) {
-  const match = baseName.match(/\s*\((\d+)\)\s*$/);
-  if (!match) return { clean: baseName.trim(), rank: 0 };
-  return { clean: baseName.slice(0, match.index).trim(), rank: Number(match[1]) || 1 };
-}
+function searchCustomers(query){const q=normalizeKey(query).toUpperCase(),qc=normalizeCustomerCode(query);if(!q)return[];return [...state.customers.values()].filter(c=>c.code.includes(qc)||c.company.toUpperCase().includes(q)).slice(0,12)}
+function renderCustomerMatches(){const box=$('#customerMatches'),matches=searchCustomers($('#customerSearch').value);box.innerHTML='';if(!matches.length){box.innerHTML='<div class="notice">找不到客戶。</div>';return}matches.forEach(c=>{const b=document.createElement('button');b.className='customer-match';b.innerHTML=`<span><strong>${esc(c.code)} · ${esc(c.company)}</strong><small>${esc(c.address).replace(/\n/g,' · ')}</small></span><span>Rate ${c.rate}</span>`;b.addEventListener('click',()=>selectCustomer(c));box.appendChild(b)})}
+function selectCustomer(c){$('#customerCode').value=c.code;$('#customerName').value=c.company;$('#customerAddress').value=c.address;$('#salesRate').value=c.rate;$('#customerTerms').value=c.terms||'';$('#customerMatches').innerHTML='';$('#customerSearch').value='';repriceItems();renderSelectedCustomer();persistLight()}
+$('#findCustomerBtn').addEventListener('click',renderCustomerMatches);$('#customerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();renderCustomerMatches()}});$('#customerSearch').addEventListener('input',()=>{$('#customerSearch').value.length>=2?renderCustomerMatches():$('#customerMatches').innerHTML=''})
+function renderSelectedCustomer(){$('#selectedCustomerSummary').innerHTML=`<strong>${esc($('#customerCode').value)} · ${esc($('#customerName').value)}</strong><span>Sales Rate ${esc($('#salesRate').value)} · ${esc($('#currency').value)}</span>`}
 
-function parseImageFile(file, artNos) {
-  const extensionMatch = file.name.match(/\.([^.]+)$/);
-  if (!extensionMatch) return null;
-  const extension = extensionMatch[1].toLowerCase();
-  if (!['jpg', 'jpeg', 'png', 'webp'].includes(extension)) return null;
-  const base = file.name.slice(0, -extensionMatch[0].length).replace(/\s+/g, ' ').trim();
-  const { clean, rank } = stripDuplicateSuffix(base);
-  const upper = clean.toUpperCase();
-  const artNo = artNos.find(art => upper === art || upper.startsWith(`${art} `));
-  if (!artNo) return null;
-  const variant = clean.slice(artNo.length).trim() || 'Default';
-  return { artNo, variant, variantKey: normalizeVariant(variant), duplicateRank: rank, file, extension };
+function parseImageName(name){
+  const base=name.replace(/\.[^.]+$/,'').trim();
+  const duplicateMatch=base.match(/\s+\((\d+)\)$/);
+  const duplicateIndex=duplicateMatch?Number(duplicateMatch[1]):0;
+  const clean=duplicateMatch?base.slice(0,duplicateMatch.index).trim():base;
+  const firstSpace=clean.search(/\s/);
+  const art=normalizeArticle(firstSpace<0?clean:clean.slice(0,firstSpace));
+  const variant=firstSpace<0?'Default':clean.slice(firstSpace).trim()||'Default';
+  return {art,variant,duplicateIndex};
 }
-
-function rebuildImageIndexFromCurrentFolder() {
-  const input = $('#pictureFolderInput');
-  const files = [...(input.files || [])];
-  if (!files.length || !state.products.size) return;
-  buildImageIndex(files);
-}
-
-function buildImageIndex(files) {
-  for (const entries of state.imageIndex.values()) {
-    for (const entry of entries) if (entry.url) URL.revokeObjectURL(entry.url);
+$('#imageFolderInput').addEventListener('change',e=>{
+  state.imageFiles=[...e.target.files].filter(f=>f.type.startsWith('image/')||/\.(jpe?g|png|webp|heic)$/i.test(f.name));
+  rebuildImageIndex();
+});
+function rebuildImageIndex(){
+  for(const imgs of state.images.values())for(const x of imgs)URL.revokeObjectURL(x.url);
+  state.images=new Map(); let matched=0,ignored=0;
+  const needed=new Set([...state.products.values()].map(p=>normalizeArticle(p.artNo)));
+  for(const file of state.imageFiles){
+    const {art,variant,duplicateIndex}=parseImageName(file.name); if(!needed.has(art)){ignored++;continue}
+    const arr=state.images.get(art)||[];
+    const variantKey=variant.trim().toUpperCase();
+    const existing=arr.findIndex(x=>x.variantKey===variantKey);
+    if(existing>=0){
+      // 同款同變體：沒有 (1)/(2) 的原檔永遠優先；只有更佳候選才取代。
+      if(duplicateIndex>=arr[existing].duplicateIndex){matched++;continue}
+      URL.revokeObjectURL(arr[existing].url);arr.splice(existing,1);
+    }
+    const url=URL.createObjectURL(file);
+    arr.push({variant,variantKey,duplicateIndex,fileName:file.name,url});
+    arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant,undefined,{numeric:true,sensitivity:'base'}));
+    state.images.set(art,arr);matched++;
   }
-  state.imageIndex.clear();
-  const artNos = [...new Set([...state.products.values()].map(product => product.artNo))].sort((a, b) => b.length - a.length);
-  let matched = 0;
-  for (const file of files) {
-    const parsed = parseImageFile(file, artNos);
-    if (!parsed) continue;
-    parsed.url = URL.createObjectURL(file);
-    const list = state.imageIndex.get(parsed.artNo) || [];
-    list.push(parsed);
-    state.imageIndex.set(parsed.artNo, list);
-    matched += 1;
-  }
-  for (const [artNo, entries] of state.imageIndex) {
-    entries.sort((a, b) => {
-      if (a.variantKey === b.variantKey) return a.duplicateRank - b.duplicateRank;
-      if (a.variantKey === 'DEFAULT') return -1;
-      if (b.variantKey === 'DEFAULT') return 1;
-      return a.variantKey.localeCompare(b.variantKey);
-    });
-    state.imageIndex.set(artNo, entries);
-  }
-  const total = files.filter(file => /\.(jpg|jpeg|png|webp)$/i.test(file.name)).length;
-  const skipped = Math.max(0, total - matched);
-  showStatus('#pictureStatus', `已選擇 Folder：${total} 張圖片；其中 ${matched} 張符合目前倉存，${skipped} 張略過。`, 'ok');
-  for (const item of state.items) {
-    if (!item.imageVariantManual) item.imageVariant = chooseAutomaticVariant(item);
-  }
+  state.items.forEach(item=>{if(!item.imageManual)item.imageVariant=chooseImageVariant(item,getImages(item.artNo))});
+  if(state.imageFiles.length)setStatus('#imageStatus',`已選擇 Folder：${state.imageFiles.length} 張圖片；其中 ${matched} 張符合目前倉存，${ignored} 張略過。圖片沒有複製進 PWA。`,'ok');
   renderItems();
 }
+function renderImageLibrary(){}
+function getImages(art){return state.images.get(normalizeArticle(art))||[]}
+function getSelectedImage(item){const imgs=getImages(item.artNo),wanted=String(item.imageVariant||'').trim().toUpperCase();return imgs.find(x=>x.variantKey===wanted)||imgs.find(x=>x.variant==='Default')||imgs[0]}
+function placeholderSvg(text){return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="#eef2f6"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="18" fill="#64748b">${text}</text></svg>`)}`}
 
-$('#pictureFolderInput').addEventListener('change', event => {
-  const files = [...(event.target.files || [])];
-  if (!files.length) return;
-  if (!state.products.size) {
-    showStatus('#pictureStatus', '請先匯入倉存表，再選擇圖片 Folder。', 'error');
-    return;
+const STONE_IMAGE_MAP={
+  'SKY BT':'SKY BT','GPS':'G.AM','GAM':'G.AM','AMCT':'AMCT','ALEX':'ALEX',
+  'QAM':'AM','LBT':'LBT','BTO':'BT','YCT':'CT','GPD':'PD','RQZ':'RQZ','MG':'MG',
+  'PTQ':'PTR','AQ':'AQ','PAM':'P.AM','MCT':'MCT','RGT':'RGT','TZ':'TZ','IO':'IO',
+  'GTQ':'GTR','GGT':'GGT','GSA':'GSA','WSA':'WSA','ZSA':'ZSA','BSA':'BSA',
+  'PSA':'PSA','OSA':'OSA','YSA':'YSA','SSU':'SSU','RRU':'RRU','GEM':'GEM',
+  'ZSP':'ZSP','DIA':'DIA','SQZ':'SQZ','LQZ':'LQZ','KU':'KU','GT':'GT',
+  'AG':'AG','AMZ':'AMZ','BCH':'BCH','BO':'BO','GMA':'GMA','LAB':'LAB','LAP':'LAP',
+  'MOON':'MOON','OPAL':'OPAL','WPL':'WPL','RCH':'RCH','TE':'TE','TQ':'TQ'
+};
+const STONE_BREAKDOWN_CODES=Object.keys(STONE_IMAGE_MAP).sort((a,b)=>b.length-a.length);
+function normalizeStoneToken(v){return String(v||'').toUpperCase().replace(/[._\s-]+/g,'').replace(/[^A-Z0-9+]/g,'')}
+function extractStoneTargets(desc2){
+  const raw=String(desc2||'').toUpperCase();
+  const core=(raw.split('-')[1]||raw).trim();
+  const parts=core.split('+');
+  const out=[];
+  for(const partRaw of parts){
+    const compact=partRaw.replace(/\s+/g,'');
+    const code=STONE_BREAKDOWN_CODES.find(c=>compact.startsWith(c.replace(/\s+/g,'')));
+    if(code){const mapped=STONE_IMAGE_MAP[code];if(mapped&&!out.includes(mapped))out.push(mapped)}
   }
-  buildImageIndex(files);
-});
+  if(!out.length){
+    const compact=raw.replace(/\s+/g,'');
+    for(const code of STONE_BREAKDOWN_CODES){
+      if(compact.includes(code.replace(/\s+/g,''))){const mapped=STONE_IMAGE_MAP[code];if(mapped&&!out.includes(mapped))out.push(mapped)}
+    }
+  }
+  return out;
+}
+function variantComparable(v){
+  return normalizeStoneToken(String(v||'')
+    .replace(/\s+\(\d+\)$/,'')
+    .replace(/\((18K[RYW]|14K[RYW]|9K[RYW]|10\d{2}|12\d{2}|REG|CK)\)/gi,''));
+}
+function chooseImageVariant(product,imgs){
+  if(!imgs.length)return 'Default';
+  const targets=extractStoneTargets(product.desc2||product.descriptions?.[1]||'');
+  if(targets.length){
+    const ordered=targets.map(normalizeStoneToken).join('+');
+    const targetSet=new Set(targets.map(normalizeStoneToken));
+    let best=null,bestScore=-1;
+    for(const img of imgs){
+      const comp=variantComparable(img.variant);
+      const parts=comp.split('+').filter(Boolean);
+      const partSet=new Set(parts);
+      let score=0;
+      if(comp===ordered)score=100;
+      else if(parts.length===targetSet.size&&[...targetSet].every(x=>partSet.has(x)))score=90;
+      else if([...targetSet].every(x=>comp.includes(x)))score=75;
+      else if(comp===normalizeStoneToken(targets[0]))score=70;
+      else if(comp.includes(normalizeStoneToken(targets[0])))score=55;
+      if(score>bestScore){bestScore=score;best=img}
+    }
+    if(best&&bestScore>0)return best.variant;
+  }
+  return imgs.find(x=>x.variant==='Default')?.variant||imgs[0].variant;
+}
 
-function uniqueVariantsForArt(artNo) {
-  const entries = state.imageIndex.get(artNo) || [];
-  const best = new Map();
-  for (const entry of entries) {
-    const current = best.get(entry.variantKey);
-    if (!current || entry.duplicateRank < current.duplicateRank) best.set(entry.variantKey, entry);
-  }
-  return [...best.values()].sort((a, b) => {
-    if (a.variantKey === 'DEFAULT') return -1;
-    if (b.variantKey === 'DEFAULT') return 1;
-    return a.variant.localeCompare(b.variant);
+$('#addLotBtn').addEventListener('click',()=>addByLot($('#lotInput').value));$('#lotInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addByLot(e.target.value)}});
+function addByLot(raw){
+  const lot=normalizeLot(raw);if(!lot)return setStatus('#addMessage','請輸入 LOTNO。','error');
+  if(state.soldLots.has(lot)){const s=state.soldLots.get(lot);return setStatus('#addMessage',`LOTNO ${lot} 已售出：${s.invoiceNo} / ${s.customerCode}。`,'error')}
+  const product=state.products.get(lot);if(!product)return setStatus('#addMessage',`找不到 LOTNO ${lot}。請檢查 Remaining Stock。`,'error');
+  if(state.items.some(x=>x.lotNo===lot))return setStatus('#addMessage',`LOTNO ${lot} 已經在這張 Invoice。`,'error');
+  const rate=Number($('#salesRate').value)||0,unitPrice=Math.ceil(product.price*rate),imgs=getImages(product.artNo);
+  const item={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random()),sequence:state.nextSequence++,...product,qty:1,unitPrice,imageVariant:chooseImageVariant(product,imgs)};
+  state.insertAt===null?state.items.push(item):state.items.splice(state.insertAt,0,item);state.insertAt=null;$('#lotInput').value='';
+  setStatus('#addMessage',`已加入 ${product.artNo} / LOTNO ${lot} / ${formatCurrency(unitPrice)}`,'ok');renderItems();persistLight();
+}
+function renderItems(){
+  const box=$('#invoiceItems');box.innerHTML='';
+  $('#invoiceListCount').textContent=`共 ${state.items.length} 件`;
+  if(!state.items.length){box.className='invoice-items empty-state';box.textContent='尚未加入貨品。';$('#scrollNewestBtn').classList.add('hidden');updateTotals();return}
+  box.className='invoice-items scrollable-items';
+  $('#scrollNewestBtn').classList.toggle('hidden',state.items.length<=1);
+  const view=[...state.items].map((item,sourceIndex)=>({item,sourceIndex})).reverse();
+  view.forEach(({item,sourceIndex})=>{
+    const node=$('#itemTemplate').content.firstElementChild.cloneNode(true);node.dataset.id=item.id;
+    $('.item-seq',node).textContent=`#${item.sequence||sourceIndex+1}`;
+    $('.item-artno',node).textContent=item.artNo;$('.item-lot',node).textContent=`LOTNO ${item.lotNo}`;$('.item-desc',node).textContent=item.descriptions.join('\n');
+    $('.item-price-note',node).textContent=`${item.price}u × ${Number($('#salesRate').value||0)} → ${formatCurrency(item.unitPrice)}`;
+    $('.item-thumb',node).src=getSelectedImage(item)?.url||placeholderSvg(item.artNo);
+    const sel=$('.variant-select',node),imgs=getImages(item.artNo);
+    if(imgs.length)imgs.forEach(x=>{const o=document.createElement('option');o.value=x.variant;o.textContent=x.variant;o.selected=x.variant===item.imageVariant;sel.appendChild(o)});else{const o=document.createElement('option');o.textContent='No image';sel.appendChild(o);sel.disabled=true}
+    sel.addEventListener('change',()=>{item.imageVariant=sel.value;item.imageManual=true;renderItems();persistLight()});
+    const qty=$('.qty-input',node),price=$('.price-input',node);qty.value=item.qty;price.value=item.unitPrice;
+    qty.addEventListener('change',()=>{item.qty=Math.max(1,Number(qty.value)||1);updateTotals();persistLight()});price.addEventListener('change',()=>{item.unitPrice=Math.max(0,Math.ceil(Number(price.value)||0));updateTotals();persistLight()});
+    $('.insert-above',node).addEventListener('click',()=>{state.insertAt=sourceIndex;$('#lotInput').focus();setStatus('#addMessage',`下一件會插入 #${item.sequence||sourceIndex+1} 之前。`,'ok')});
+    $('.insert-below',node).addEventListener('click',()=>{state.insertAt=sourceIndex+1;$('#lotInput').focus();setStatus('#addMessage',`下一件會插入 #${item.sequence||sourceIndex+1} 之後。`,'ok')});
+    $('.delete-item',node).addEventListener('click',()=>{if(confirm(`刪除 ${item.artNo} / LOTNO ${item.lotNo}？`)){state.items.splice(sourceIndex,1);renderItems();persistLight()}});
+    node.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',String(sourceIndex)));node.addEventListener('dragover',e=>e.preventDefault());node.addEventListener('drop',e=>{e.preventDefault();const from=Number(e.dataTransfer.getData('text/plain'));const [m]=state.items.splice(from,1);const target=sourceIndex>from?sourceIndex-1:sourceIndex;state.items.splice(target,0,m);renderItems();persistLight()});
+    box.appendChild(node);
   });
+  box.scrollTop=0;
+  updateTotals();
 }
+$('#scrollNewestBtn').addEventListener('click',()=>{$('#invoiceItems').scrollTo({top:0,behavior:'smooth'})});
+$('#clearInvoiceBtn').addEventListener('click',()=>{if(state.items.length&&confirm('清空目前 Invoice 草稿？')){state.items=[];state.nextSequence=1;renderItems();persistLight()}});
+$('#salesRate').addEventListener('change',()=>{repriceItems();renderSelectedCustomer();persistLight()});$('#currency').addEventListener('change',()=>{renderItems();renderSelectedCustomer();persistLight()});$('#discountAmount').addEventListener('input',()=>{updateTotals();persistLight()});
+function repriceItems(){const rate=Number($('#salesRate').value)||0;state.items.forEach(x=>x.unitPrice=Math.ceil(x.price*rate));renderItems()}
+function calcTotals(){const qty=state.items.reduce((a,x)=>a+x.qty,0),subtotal=state.items.reduce((a,x)=>a+x.qty*x.unitPrice,0),discount=Math.max(0,Number($('#discountAmount').value)||0);return{qty,subtotal,discount,total:Math.max(0,subtotal-discount)}}
+function updateTotals(){const t=calcTotals();$('#totalQty').textContent=t.qty;$('#subtotal').textContent=formatCurrency(t.subtotal);$('#discountDisplay').textContent=formatCurrency(t.discount);$('#grandTotal').textContent=formatCurrency(t.total);updateHeader()}
+function numberToWords(n){n=Math.floor(n);if(n===0)return'ZERO';const ones=['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'],tens=['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];const under1000=x=>{let s='';if(x>=100){s+=ones[Math.floor(x/100)]+' HUNDRED ';x%=100}if(x>=20){s+=tens[Math.floor(x/10)]+' ';x%=10}if(x>0)s+=ones[x]+' ';return s.trim()};let out=[];for(const[v,name]of [[1e9,'BILLION'],[1e6,'MILLION'],[1e3,'THOUSAND'],[1,'']])if(n>=v){const part=Math.floor(n/v);n%=v;out.push(under1000(part)+(name?' '+name:''))}return out.join(' ')}
+function renderPreview(){const t=calcTotals(),rows=state.items.map((x,i)=>`<tr><td>${i+1}</td><td><strong>Lot.No. : ${esc(x.lotNo)}</strong><br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="num">${x.qty}</td><td>${esc(x.unit)}</td><td class="num">${formatCurrency(x.unitPrice)}</td><td class="num">${formatCurrency(x.qty*x.unitPrice)}</td></tr>`).join('');$('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">Sales Invoice</div><div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>Invoice Date : ${esc($('#invoiceDate').value)}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer Code : ${esc($('#customerCode').value)}<br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Quantity</th><th>Unit</th><th class="num">Unit Price</th><th class="num">Amount</th></tr><tr><th colspan="7">F.O.B. Value</th></tr></thead><tbody>${rows||'<tr><td colspan="7">No items</td></tr>'}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${formatCurrency(t.subtotal)}</strong></div>${t.discount?`<div><span>DISCOUNT AMOUNT</span><strong>(${formatCurrency(t.discount)})</strong></div>`:''}<div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${formatCurrency(t.total)}</strong></div></div><p><strong>Total Amount :</strong> ${esc($('#currency').value)} ${numberToWords(t.total)}</p><p><strong>Remark :</strong> ${esc($('#remark').value)}</p><br><div style="display:flex;justify-content:space-between"><span>Vender Signature : __________________</span><span>Accept By : __________________</span></div><p><strong>UNIVERSE GEMS &amp; JEWELLERY CO.</strong></p></div>`}
+$('#refreshPreviewBtn').addEventListener('click',renderPreview);$('#printBtn').addEventListener('click',()=>{renderPreview();window.print()});
 
-function extractStoneVariants(desc2) {
-  const text = normalizeText(desc2).toUpperCase().replace(/SKY\s+BTO/g, 'SKY BTO');
-  const found = [];
-  for (const alias of STONE_ALIASES) {
-    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-    const regex = new RegExp(`(?:^|[-+\\s])${escaped}(?=[A-Z0-9.(]|$)`, 'g');
-    if (regex.test(text)) found.push(STONE_MAP[alias]);
+function sanitizeFileName(s){return String(s||'').replace(/[^a-zA-Z0-9._-]+/g,'_')}
+function exportRemainingStock(invoiceNo){
+  if(!state.stockRows||state.stockHeaderRow<0||state.stockLotCol<0)throw new Error('請先匯入真實倉存 Excel。');
+  const output=[];
+  for(let i=0;i<state.stockRows.length;i++){
+    const row=state.stockRows[i]||[];
+    if(i<=state.stockHeaderRow){output.push(row);continue}
+    const lot=normalizeLot(row[state.stockLotCol]);
+    if(!lot||state.products.has(lot))output.push(row);
   }
-  return [...new Set(found)];
+  const ws=XLSX.utils.aoa_to_sheet(output),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Remaining Stock');
+  const stamp=new Date().toISOString().replace(/[-:T]/g,'').slice(0,12);
+  const fn=`Remaining_Stock_${sanitizeFileName(invoiceNo)}_${state.products.size}pcs_${stamp}.xlsx`;
+  XLSX.writeFile(wb,fn,{compression:true});
+  return fn;
 }
-
-function chooseAutomaticVariant(item) {
-  const variants = uniqueVariantsForArt(item.artNo);
-  if (!variants.length) return 'Default';
-  const stones = extractStoneVariants(item.desc2);
-  const candidates = [];
-  if (stones.length) {
-    candidates.push(stones.join('+'));
-    candidates.push(...stones);
-  }
-  candidates.push('Default');
-  const normalizedCandidates = candidates.map(normalizeVariant);
-  for (const candidate of normalizedCandidates) {
-    const exact = variants.find(entry => entry.variantKey === candidate);
-    if (exact) return exact.variant;
-  }
-  for (const candidate of normalizedCandidates) {
-    const partial = variants.find(entry => entry.variantKey.includes(candidate) || candidate.includes(entry.variantKey));
-    if (partial) return partial.variant;
-  }
-  return variants[0].variant;
-}
-
-function getImageEntry(item) {
-  const variants = uniqueVariantsForArt(item.artNo);
-  if (!variants.length) return null;
-  const key = normalizeVariant(item.imageVariant || chooseAutomaticVariant(item));
-  return variants.find(entry => entry.variantKey === key) || variants[0];
-}
-
-function placeholderDataUrl(text) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><rect width="100%" height="100%" fill="#f1f5f9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="18" fill="#64748b">${escapeHtml(text)}</text></svg>`;
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-}
-
-function searchCustomers(query) {
-  const raw = normalizeText(query).toUpperCase();
-  const code = normalizeCode(query);
-  if (!raw) return [];
-  return [...state.customers.values()].filter(customer => customer.code.includes(code) || customer.company.toUpperCase().includes(raw)).slice(0, 15);
-}
-
-function renderCustomerResults() {
-  const container = $('#customerResults');
-  const matches = searchCustomers($('#customerSearch').value);
-  container.innerHTML = '';
-  if (!matches.length) {
-    container.innerHTML = '<div class="status">找不到客戶。</div>';
-    return;
-  }
-  for (const customer of matches) {
-    const button = document.createElement('button');
-    button.className = 'customer-result';
-    button.innerHTML = `<span><strong>${escapeHtml(customer.code)} · ${escapeHtml(customer.company)}</strong><small>${escapeHtml(customer.address).replace(/\n/g, ' · ')}</small></span><span>${customer.rate}</span>`;
-    button.addEventListener('click', () => selectCustomer(customer));
-    container.appendChild(button);
-  }
-}
-
-function selectCustomer(customer) {
-  $('#customerCode').value = customer.code;
-  $('#customerName').value = customer.company;
-  $('#customerAddress').value = customer.address;
-  $('#salesRate').value = customer.rate;
-  $('#terms').value = customer.terms || '';
-  $('#customerSearch').value = '';
-  $('#customerResults').innerHTML = '';
-  repriceAllItems();
-  renderCustomerSummary();
-  saveDraft();
-}
-
-$('#customerSearchBtn').addEventListener('click', renderCustomerResults);
-$('#customerSearch').addEventListener('input', event => {
-  if (event.target.value.length >= 2) renderCustomerResults();
-  else $('#customerResults').innerHTML = '';
-});
-$('#customerSearch').addEventListener('keydown', event => {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    renderCustomerResults();
+$('#confirmInvoiceBtn').addEventListener('click',()=>{
+  if(!state.items.length)return alert('Invoice 沒有貨品。');
+  const invoiceNo=normalizeKey($('#invoiceNo').value)||'Invoice';
+  if(!confirm(`Confirm ${invoiceNo}？\n\n完成後會把 ${state.items.length} 個 LOTNO 從目前倉存移除，並匯出新的 Remaining Stock Excel。`))return;
+  const snapshot=[...state.items];
+  for(const item of snapshot){state.products.delete(item.lotNo);state.soldLots.set(item.lotNo,{invoiceNo,customerCode:normalizeCustomerCode($('#customerCode').value),date:$('#invoiceDate').value})}
+  try{
+    const fileName=exportRemainingStock(invoiceNo);
+    state.items=[];state.nextSequence=1;$('#discountAmount').value='0';renderItems();rebuildImageIndex();persistLight();renderPreview();
+    alert(`Invoice 已 Confirm。\n已匯出：${fileName}\n目前剩餘 ${state.products.size} 件貨。`);
+  }catch(err){
+    for(const item of snapshot){state.products.set(item.lotNo,{lotNo:item.lotNo,artNo:item.artNo,price:item.price,unit:item.unit,descriptions:item.descriptions});state.soldLots.delete(item.lotNo)}
+    alert(`未能匯出 Remaining Stock：${err.message}`);
   }
 });
 
-function renderCustomerSummary() {
-  const code = normalizeText($('#customerCode').value);
-  const name = normalizeText($('#customerName').value);
-  const rate = normalizeText($('#salesRate').value);
-  if (!code && !name) {
-    $('#customerSummary').textContent = '尚未選擇客戶。';
-    return;
-  }
-  $('#customerSummary').innerHTML = `<strong>${escapeHtml(code)} · ${escapeHtml(name)}</strong><br><span>${escapeHtml($('#customerAddress').value).replace(/\n/g, '<br>')}</span><br><small>Sales Rate ${escapeHtml(rate)} · ${escapeHtml($('#currency').value)}</small>`;
+$('#scanBtn').addEventListener('click',startScanner);$('#closeScannerBtn').addEventListener('click',stopScanner);$('#pauseScannerBtn').addEventListener('click',toggleScannerPause);$('#torchBtn').addEventListener('click',toggleTorch);
+for(const z of [1,2,3,4])$(`#zoom${z}Btn`).addEventListener('click',()=>setZoom(z));
+function cleanScannedLot(value){return normalizeLot(value)}function vibrateSuccess(){try{navigator.vibrate?.([80,40,80])}catch{}}
+function setScannerControlsDisabled(disabled){['#scanBtn','#pauseScannerBtn','#torchBtn','#zoom1Btn','#zoom2Btn','#zoom3Btn','#zoom4Btn'].forEach(x=>$(x).disabled=disabled);$('#closeScannerBtn').disabled=false}
+async function startScanner(){
+  if(state.scannerTransitioning||state.scannerRunning)return;
+  state.scannerTransitioning=true;state.scannerCancelRequested=false;setScannerControlsDisabled(true);
+  const dlg=$('#scannerDialog');if(!dlg.open)dlg.showModal();$('#scannerStatus').textContent='正在啟動後置相機…';
+  if(typeof Html5Qrcode==='undefined'){state.scannerTransitioning=false;setScannerControlsDisabled(false);return $('#scannerStatus').textContent='掃描程式未載入。請連接網絡並重新開啟。'}
+  try{
+    if(state.scanner){try{await state.scanner.clear()}catch{}}
+    $('#reader').innerHTML='';
+    const formats=[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,Html5QrcodeSupportedFormats.ITF];
+    state.scanner=new Html5Qrcode('reader',{verbose:false,formatsToSupport:formats});
+    // iOS Safari / html5-qrcode 對 facingMode constraints 的處理並不一致。
+    // 先列出相機，再用 cameraId 啟動，可避免 facingMode 參數格式錯誤。
+    const cameras=await Html5Qrcode.getCameras();
+    if(!cameras?.length)throw new Error('找不到可使用的相機。請到 iPhone 設定允許 Safari 使用相機。');
+    const rearPattern=/(back|rear|environment|後置|背面|traseira|arrière|rück)/i;
+    const selectedCamera=cameras.find(c=>rearPattern.test(c.label||''))||cameras[cameras.length-1]||cameras[0];
+    await state.scanner.start(selectedCamera.id,{fps:20,qrbox:(w,h)=>({width:Math.floor(w*.76),height:Math.max(52,Math.min(80,Math.floor(h*.11)))}),aspectRatio:1.7778,disableFlip:true,experimentalFeatures:{useBarCodeDetectorIfSupported:true}},onBarcodeSuccess,()=>{});
+    if(state.scannerCancelRequested){try{await state.scanner.stop();await state.scanner.clear()}catch{}state.scanner=null;state.scannerRunning=false;return}
+    state.scannerRunning=true;state.scannerPaused=false;$('#scannerStatus').textContent='請把小條碼橫向填滿中央細長框。';
+    setScannerControlsDisabled(false);$('#pauseScannerBtn').disabled=false;
+    const caps=state.scanner.getRunningTrackCapabilities?.();
+    if(!caps?.torch)$('#torchBtn').disabled=true;
+    if(caps?.zoom){
+      for(const z of [1,2,3,4])$(`#zoom${z}Btn`).disabled=z>(caps.zoom.max||1);
+      await setZoom(Math.min(4,caps.zoom.max||1));
+    }else for(const z of [1,2,3,4])$(`#zoom${z}Btn`).disabled=true;
+    try{await state.scanner.applyVideoConstraints({advanced:[{focusMode:'continuous',exposureMode:'continuous'}]})}catch{}
+  }catch(err){
+    state.scannerRunning=false;setScannerControlsDisabled(false);$('#closeScannerBtn').disabled=false;
+    $('#scannerStatus').textContent=`相機無法啟動：${err?.message||err}`;
+  }finally{state.scannerTransitioning=false}
 }
-
-function nextSequence() {
-  return state.items.reduce((max, item) => Math.max(max, item.seq || 0), 0) + 1;
+async function onBarcodeSuccess(decodedText){const value=cleanScannedLot(decodedText),now=Date.now();if(!value)return;if(state.lastScan.value===value&&now-state.lastScan.time<1800)return;state.lastScan={value,time:now};$('#lotInput').value=value;const before=state.items.length;addByLot(value);if(state.items.length>before){vibrateSuccess();$('#scannerStatus').textContent=`✓ 已加入 LOTNO ${value}，可繼續掃下一件。`}else $('#scannerStatus').textContent=$('#addMessage').textContent}
+async function setZoom(value){if(!state.scannerRunning||state.scannerTransitioning)return;try{await state.scanner.applyVideoConstraints({advanced:[{zoom:value}]});for(const z of [1,2,3,4])$(`#zoom${z}Btn`).classList.toggle('active',z===value);$('#scannerStatus').textContent=`已切換 ${value}×。請等相機清晰對焦。`}catch{$('#scannerStatus').textContent=`此裝置不支援 ${value}× 網頁相機變焦。`}}
+async function toggleScannerPause(){if(!state.scannerRunning||!state.scanner||state.scannerTransitioning)return;try{if(state.scannerPaused){state.scanner.resume();state.scannerPaused=false;$('#pauseScannerBtn').textContent='暫停'}else{state.scanner.pause(true);state.scannerPaused=true;$('#pauseScannerBtn').textContent='繼續'}}catch{}}
+async function toggleTorch(){if(state.scannerTransitioning)return;try{const current=$('#torchBtn').dataset.on==='1';await state.scanner.applyVideoConstraints({advanced:[{torch:!current}]});$('#torchBtn').dataset.on=current?'0':'1';$('#torchBtn').textContent=current?'🔦 手電筒':'🔦 關燈'}catch{$('#scannerStatus').textContent='此裝置不支援網頁控制手電筒。'}}
+async function stopScanner(){
+  state.scannerCancelRequested=true;
+  if($('#scannerDialog').open)$('#scannerDialog').close();
+  if(state.scannerTransitioning)return;
+  state.scannerTransitioning=true;setScannerControlsDisabled(true);
+  try{if(state.scannerRunning&&state.scanner)await state.scanner.stop();if(state.scanner)await state.scanner.clear()}catch{}
+  state.scanner=null;state.scannerRunning=false;state.scannerPaused=false;$('#reader').innerHTML='';
+  state.scannerTransitioning=false;setScannerControlsDisabled(false);
 }
-
-function addByLot(rawValue, source = 'manual') {
-  const lotNo = normalizeCode(rawValue).replace(/[^0-9A-Z]/g, '');
-  if (!lotNo) return { status: 'error', lotNo: '', text: '請輸入 LOTNO' };
-  if (state.items.some(item => item.lotNo === lotNo)) return { status: 'duplicate', lotNo, text: '已加入' };
-  if (state.soldHistory.has(lotNo)) return { status: 'duplicate', lotNo, text: `已售 ${state.soldHistory.get(lotNo).invoiceNo}` };
-  const product = state.products.get(lotNo);
-  if (!product) return { status: 'error', lotNo, text: '找不到' };
-  const rate = Number($('#salesRate').value);
-  if (!Number.isFinite(rate) || rate <= 0) return { status: 'error', lotNo, text: '未選客戶' };
-  const item = {
-    id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
-    seq: nextSequence(),
-    lotNo: product.lotNo,
-    artNo: product.artNo,
-    price: product.price,
-    unit: product.unit,
-    descriptions: [...product.descriptions],
-    desc2: product.desc2,
-    qty: 1,
-    unitPrice: Math.ceil(product.price * rate),
-    imageVariant: 'Default',
-    imageVariantManual: false,
-    addedAt: Date.now()
-  };
-  item.imageVariant = chooseAutomaticVariant(item);
-  if (state.insertIndex === null) state.items.push(item);
-  else {
-    state.items.splice(state.insertIndex, 0, item);
-    state.insertIndex = null;
-  }
-  $('#lotInput').value = '';
-  renderItems(item.id);
-  saveDraft();
-  if (source !== 'scan') showGlobalFeedback(lotNo, '', 'success', 1000);
-  return { status: 'success', lotNo, text: '' };
-}
-
-$('#addLotBtn').addEventListener('click', () => {
-  const result = addByLot($('#lotInput').value);
-  showAddResult(result);
-});
-$('#lotInput').addEventListener('keydown', event => {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    const result = addByLot(event.target.value);
-    showAddResult(result);
-  }
-});
-function showAddResult(result) {
-  if (result.status === 'success') showStatus('#addStatus', `已加入 LOTNO ${result.lotNo}。`, 'ok');
-  else showStatus('#addStatus', `${result.lotNo ? `${result.lotNo}：` : ''}${result.text}`, 'error');
-  if (result.status !== 'success') showGlobalFeedback(result.lotNo || '—', result.text, result.status, result.status === 'error' ? 1800 : 1200);
-}
-
-$('#manualModeBtn').addEventListener('click', () => {
-  $('#manualPanel').classList.remove('hidden');
-  $('#lotInput').focus();
+$('#photoScanBtn').addEventListener('click',()=>$('#photoScanInput').click());
+$('#photoScanInput').addEventListener('change',async e=>{
+  const file=e.target.files[0];if(!file)return;
+  if(typeof Html5Qrcode==='undefined')return setStatus('#addMessage','掃描程式未載入。','error');
+  let scanner;
+  try{
+    $('#photoReader').innerHTML='';
+    scanner=new Html5Qrcode('photoReader',{verbose:false});
+    const result=await scanner.scanFile(file,true);
+    const lot=cleanScannedLot(result);$('#lotInput').value=lot;addByLot(lot);
+  }catch{setStatus('#addMessage','照片內未能解讀 Barcode。可先在相片 App 裁切／放大條碼後再選取。','error')}
+  finally{e.target.value='';try{await scanner?.clear()}catch{}$('#photoReader').innerHTML=''}
 });
 
-$('#voiceBtn').addEventListener('click', () => {
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Recognition) {
-    $('#manualPanel').classList.remove('hidden');
+function spokenToDigits(text){
+  const direct=String(text||'').replace(/\D/g,'');if(direct)return direct;
+  const map={'零':'0','〇':'0','洞':'0','一':'1','壹':'1','幺':'1','二':'2','兩':'2','贰':'2','三':'3','參':'3','四':'4','肆':'4','五':'5','伍':'5','六':'6','陸':'6','七':'7','柒':'7','八':'8','捌':'8','九':'9','玖':'9'};
+  return [...String(text||'')].map(c=>map[c]||'').join('');
+}
+$('#voiceLotBtn').addEventListener('click',()=>{
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){
     $('#lotInput').focus();
-    showStatus('#addStatus', '請使用 iPhone 鍵盤的咪高峰輸入 LOTNO。');
+    setStatus('#addMessage','此 iPhone 網頁未提供直接語音辨識。已開啟文字鍵盤，請按鍵盤上的咪高峰說出 LOTNO。','ok');
     return;
   }
-  try {
-    const recognition = new Recognition();
-    recognition.lang = 'zh-HK';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    showStatus('#addStatus', '請讀出 LOTNO。');
-    recognition.onresult = event => {
-      const transcript = event.results[0][0].transcript;
-      const digits = transcript.replace(/[^0-9]/g, '');
-      $('#lotInput').value = digits;
-      const result = addByLot(digits, 'voice');
-      showAddResult(result);
-    };
-    recognition.onerror = () => showStatus('#addStatus', '語音未能辨識，請再試或手動輸入。', 'error');
-    recognition.start();
-  } catch {
-    $('#lotInput').focus();
-  }
+  const rec=new SR();rec.lang='zh-HK';rec.interimResults=false;rec.maxAlternatives=1;
+  $('#voiceLotBtn').disabled=true;setStatus('#addMessage','正在聆聽 LOTNO…請逐個數字讀出。','ok');
+  rec.onresult=e=>{const raw=e.results?.[0]?.[0]?.transcript||'';const lot=spokenToDigits(raw);$('#lotInput').value=lot;if(lot)setStatus('#addMessage',`已辨識 LOTNO ${lot}，請按「加入」確認。`,'ok');else setStatus('#addMessage',`未能從「${raw}」取得數字，請再試。`,'error')};
+  rec.onerror=()=>setStatus('#addMessage','語音輸入失敗，請使用鍵盤咪高峰或手動輸入。','error');
+  rec.onend=()=>{$('#voiceLotBtn').disabled=false};
+  try{rec.start()}catch{$('#voiceLotBtn').disabled=false}
 });
 
-function calcTotals() {
-  const qty = state.items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
-  const subtotal = state.items.reduce((sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0), 0);
-  const discount = Math.max(0, Number($('#discountAmount').value) || 0);
-  return { qty, subtotal, discount, total: Math.max(0, subtotal - discount) };
-}
-
-function updateSummary() {
-  const totals = calcTotals();
-  $('#totalQty').textContent = totals.qty;
-  $('#subtotal').textContent = formatMoney(totals.subtotal);
-  $('#discountDisplay').textContent = formatMoney(totals.discount);
-  $('#grandTotal').textContent = formatMoney(totals.total);
-  $('#itemCountLabel').textContent = `共 ${state.items.length} 件`;
-  $('#scannerItemCount').textContent = state.items.length;
-}
-
-function renderItems(latestId = null) {
-  const container = $('#invoiceItems');
-  container.innerHTML = '';
-  if (!state.items.length) {
-    container.className = 'invoice-items empty';
-    container.textContent = '尚未加入貨品。';
-    updateSummary();
-    return;
-  }
-  container.className = 'invoice-items';
-  const displayItems = [...state.items].sort((a, b) => (b.seq || 0) - (a.seq || 0));
-  for (const item of displayItems) {
-    const template = $('#itemTemplate').content.firstElementChild.cloneNode(true);
-    if (item.id === latestId) template.classList.add('latest');
-    $('.item-number', template).textContent = `${item.seq}.`;
-    $('.item-artno', template).textContent = item.artNo;
-    $('.item-lot', template).textContent = `LOTNO ${item.lotNo}`;
-    $('.item-description', template).textContent = item.descriptions.join('\n');
-    const imageEntry = getImageEntry(item);
-    $('.item-image', template).src = imageEntry?.url || placeholderDataUrl(item.artNo);
-    const variantSelect = $('.variant-select', template);
-    const variants = uniqueVariantsForArt(item.artNo);
-    if (!variants.length) {
-      variantSelect.innerHTML = '<option>沒有圖片</option>';
-      variantSelect.disabled = true;
-    } else {
-      for (const entry of variants) {
-        const option = document.createElement('option');
-        option.value = entry.variant;
-        option.textContent = entry.variant;
-        option.selected = normalizeVariant(entry.variant) === normalizeVariant(item.imageVariant);
-        variantSelect.appendChild(option);
-      }
-    }
-    $('.qty-input', template).value = item.qty;
-    $('.price-input', template).value = item.unitPrice;
-    variantSelect.addEventListener('change', event => {
-      item.imageVariant = event.target.value;
-      item.imageVariantManual = true;
-      renderItems();
-      saveDraft();
-    });
-    $('.qty-input', template).addEventListener('change', event => {
-      item.qty = Math.max(1, Number(event.target.value) || 1);
-      updateSummary();
-      saveDraft();
-    });
-    $('.price-input', template).addEventListener('change', event => {
-      item.unitPrice = Math.max(0, Math.ceil(Number(event.target.value) || 0));
-      updateSummary();
-      saveDraft();
-    });
-    $('.insert-before', template).addEventListener('click', () => prepareInsert(item, false));
-    $('.insert-after', template).addEventListener('click', () => prepareInsert(item, true));
-    $('.delete-item', template).addEventListener('click', () => deleteItem(item));
-    $('.image-button', template).addEventListener('click', () => {
-      if (!imageEntry) return;
-      window.open(imageEntry.url, '_blank');
-    });
-    container.appendChild(template);
-  }
-  updateSummary();
-  if (latestId) $('#itemViewport').scrollTop = 0;
-}
-
-function prepareInsert(item, after) {
-  const index = state.items.findIndex(candidate => candidate.id === item.id);
-  state.insertIndex = Math.max(0, index + (after ? 1 : 0));
-  $('#lotInput').focus();
-  showStatus('#addStatus', `下一件貨會插入 ${item.seq} 號貨品${after ? '下方' : '上方'}。`);
-}
-
-function deleteItem(item) {
-  const index = state.items.findIndex(candidate => candidate.id === item.id);
-  if (index < 0) return;
-  state.deletedItem = { item, index };
-  state.items.splice(index, 1);
-  renderItems();
-  $('#undoText').textContent = `已刪除 ${item.artNo} / ${item.lotNo}`;
-  $('#undoBar').classList.remove('hidden');
-  clearTimeout(state.deletedTimer);
-  state.deletedTimer = setTimeout(() => {
-    state.deletedItem = null;
-    $('#undoBar').classList.add('hidden');
-  }, 6000);
-  saveDraft();
-}
-
-$('#undoBtn').addEventListener('click', () => {
-  if (!state.deletedItem) return;
-  state.items.splice(state.deletedItem.index, 0, state.deletedItem.item);
-  const restoredId = state.deletedItem.item.id;
-  state.deletedItem = null;
-  clearTimeout(state.deletedTimer);
-  $('#undoBar').classList.add('hidden');
-  renderItems(restoredId);
-  saveDraft();
-});
-
-$('#scrollLatestBtn').addEventListener('click', () => { $('#itemViewport').scrollTop = 0; });
-$('#clearDraftBtn').addEventListener('click', () => {
-  if (!state.items.length || confirm('確定清空目前 Invoice 草稿？')) {
-    state.items = [];
-    renderItems();
-    saveDraft();
-  }
-});
-
-function repriceAllItems() {
-  const rate = Number($('#salesRate').value);
-  if (!Number.isFinite(rate) || rate <= 0) return;
-  for (const item of state.items) item.unitPrice = Math.ceil(item.price * rate);
-  renderItems();
-}
-
-$('#salesRate').addEventListener('change', () => { repriceAllItems(); renderCustomerSummary(); saveDraft(); });
-$('#currency').addEventListener('change', () => { renderCustomerSummary(); updateSummary(); saveDraft(); });
-$('#discountAmount').addEventListener('input', () => { updateSummary(); saveDraft(); });
-['#customerCode', '#customerName', '#customerAddress', '#terms', '#shipmentMethod', '#invoiceNo', '#invoiceDate', '#remark'].forEach(selector => {
-  $(selector).addEventListener('change', () => { renderCustomerSummary(); saveDraft(); });
-});
-
-function showGlobalFeedback(lotNo, text, type, duration) {
-  const box = $('#globalFeedback');
-  box.className = `global-feedback${type === 'duplicate' ? ' duplicate' : type === 'error' ? ' error' : ''}`;
-  $('#globalFeedbackLot').textContent = lotNo;
-  $('#globalFeedbackText').textContent = text;
-  clearTimeout(state.feedbackTimer);
-  state.feedbackTimer = setTimeout(() => box.classList.add('hidden'), duration);
-}
-
-function showScannerFeedback(lotNo, text, type, duration) {
-  const box = $('#scanFeedback');
-  box.className = `scan-feedback${type === 'duplicate' ? ' duplicate' : type === 'error' ? ' error' : ''}`;
-  $('#scanFeedbackLot').textContent = lotNo;
-  $('#scanFeedbackText').textContent = text;
-  clearTimeout(state.feedbackTimer);
-  state.feedbackTimer = setTimeout(() => box.classList.add('hidden'), duration);
-}
-
-function initAudio() {
-  try {
-    state.audioContext = state.audioContext || new (window.AudioContext || window.webkitAudioContext)();
-    state.audioContext.resume?.();
-  } catch {}
-}
-function successBeep() {
-  try {
-    if (!state.audioContext) return;
-    const oscillator = state.audioContext.createOscillator();
-    const gain = state.audioContext.createGain();
-    oscillator.frequency.value = 880;
-    gain.gain.setValueAtTime(0.0001, state.audioContext.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.18, state.audioContext.currentTime + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, state.audioContext.currentTime + 0.12);
-    oscillator.connect(gain).connect(state.audioContext.destination);
-    oscillator.start();
-    oscillator.stop(state.audioContext.currentTime + 0.13);
-  } catch {}
-}
-
-$('#scanBtn').addEventListener('click', () => {
-  initAudio();
-  startScanner();
-});
-$('#closeScannerBtn').addEventListener('click', stopScanner);
-$('#restartCameraBtn').addEventListener('click', startScanner);
-$$('.zoom-btn').forEach(button => button.addEventListener('click', () => setZoom(Number(button.dataset.zoom))));
-$('#torchBtn').addEventListener('click', toggleTorch);
-
-async function chooseRearCamera() {
-  const cameras = await Html5Qrcode.getCameras();
-  if (!cameras?.length) throw new Error('找不到相機。');
-  return cameras.find(camera => /back|rear|environment/i.test(camera.label)) || cameras[cameras.length - 1];
-}
-
-async function startScanner() {
-  if (state.scannerBusy) return;
-  state.scannerBusy = true;
-  $('#restartCameraBtn').classList.add('hidden');
-  $('#scannerDebug').textContent = '';
-  const dialog = $('#scannerDialog');
-  if (!dialog.open) dialog.showModal();
-  try {
-    if (!window.Html5Qrcode) throw new Error('掃描程式未載入，請連接網絡後重新開啟。');
-    if (state.scannerStarted && state.scanner) {
-      try { await state.scanner.stop(); } catch {}
-      try { await state.scanner.clear(); } catch {}
-      state.scannerStarted = false;
-    }
-    $('#reader').innerHTML = '';
-    state.scanner = new Html5Qrcode('reader', { verbose: false });
-    const camera = await chooseRearCamera();
-    await state.scanner.start(
-      camera.id,
-      {
-        fps: 18,
-        qrbox: (width, height) => ({ width: Math.floor(width * 0.86), height: Math.max(72, Math.floor(height * 0.16)) }),
-        aspectRatio: 1.7778,
-        disableFlip: true,
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.ITF
-        ]
-      },
-      onScanSuccess,
-      () => {}
-    );
-    state.scannerStarted = true;
-    await setZoom(3, true);
-  } catch (error) {
-    $('#scannerDebug').textContent = `相機無法啟動：${error.message || error}`;
-    $('#restartCameraBtn').classList.remove('hidden');
-  } finally {
-    state.scannerBusy = false;
-  }
-}
-
-async function stopScanner() {
-  if (state.scannerBusy) return;
-  state.scannerBusy = true;
-  try {
-    if (state.scannerStarted && state.scanner) await state.scanner.stop();
-  } catch {}
-  try { await state.scanner?.clear(); } catch {}
-  state.scannerStarted = false;
-  state.scanner = null;
-  state.scannerBusy = false;
-  if ($('#scannerDialog').open) $('#scannerDialog').close();
-  $('#reader').innerHTML = '';
-}
-
-async function setZoom(value, silent = false) {
-  state.currentZoom = value;
-  $$('.zoom-btn').forEach(button => button.classList.toggle('active', Number(button.dataset.zoom) === value));
-  if (!state.scannerStarted || !state.scanner) return;
-  try {
-    const capabilities = state.scanner.getRunningTrackCapabilities?.() || {};
-    const max = Number(capabilities.zoom?.max ?? capabilities.zoom ?? value);
-    const min = Number(capabilities.zoom?.min ?? 1);
-    const target = Math.max(min, Math.min(value, max || value));
-    await state.scanner.applyVideoConstraints({ advanced: [{ zoom: target }] });
-    if (!silent && target !== value) $('#scannerDebug').textContent = `裝置最高支援 ${target}×。`;
-    else if (!silent) $('#scannerDebug').textContent = '';
-  } catch {
-    if (!silent) $('#scannerDebug').textContent = '此裝置未提供網頁相機倍率控制。';
-  }
-}
-
-async function toggleTorch() {
-  if (!state.scannerStarted || !state.scanner) return;
-  try {
-    state.torchOn = !state.torchOn;
-    await state.scanner.applyVideoConstraints({ advanced: [{ torch: state.torchOn }] });
-    $('#torchBtn').classList.toggle('active', state.torchOn);
-  } catch {
-    $('#scannerDebug').textContent = '此裝置未提供網頁手電筒控制。';
-  }
-}
-
-function onScanSuccess(decodedText) {
-  const lotNo = normalizeCode(decodedText).replace(/[^0-9A-Z]/g, '');
-  const now = Date.now();
-  if (!lotNo || (state.lastScan.value === lotNo && now - state.lastScan.time < 1800)) return;
-  state.lastScan = { value: lotNo, time: now };
-  const result = addByLot(lotNo, 'scan');
-  if (result.status === 'success') {
-    successBeep();
-    showScannerFeedback(lotNo, '', 'success', 1000);
-  } else if (result.status === 'duplicate') {
-    showScannerFeedback(lotNo, result.text, 'duplicate', 1200);
-  } else {
-    showScannerFeedback(lotNo, result.text, 'error', 2000);
-  }
-}
-
-function numberToWords(number) {
-  number = Math.floor(Number(number) || 0);
-  if (number === 0) return 'ZERO';
-  const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
-  const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
-  const chunk = n => {
-    const parts = [];
-    if (n >= 100) { parts.push(`${ones[Math.floor(n / 100)]} HUNDRED`); n %= 100; }
-    if (n >= 20) { parts.push(tens[Math.floor(n / 10)]); n %= 10; }
-    if (n > 0) parts.push(ones[n]);
-    return parts.join(' ');
-  };
-  const scales = [[1_000_000_000, 'BILLION'], [1_000_000, 'MILLION'], [1_000, 'THOUSAND'], [1, '']];
-  const output = [];
-  for (const [value, label] of scales) {
-    if (number >= value) {
-      const part = Math.floor(number / value);
-      number %= value;
-      output.push(`${chunk(part)}${label ? ` ${label}` : ''}`);
-    }
-  }
-  return output.join(' ');
-}
-
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-async function exportInvoiceXlsx() {
-  if (!window.ExcelJS) throw new Error('XLSX 輸出程式未載入，請連接網絡後重新開啟。');
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Universe Invoice PWA';
-  workbook.created = new Date();
-  const sheet = workbook.addWorksheet('Sales Invoice', {
-    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.25, right: 0.25, top: 0.25, bottom: 0.35, header: 0.1, footer: 0.1 } }
-  });
-  sheet.views = [{ showGridLines: false }];
-  const widths = [5, 18, 16, 16, 17, 8, 8, 13, 13];
-  widths.forEach((width, index) => { sheet.getColumn(index + 1).width = width; });
-  const thin = { style: 'thin', color: { argb: 'FFBFC7D1' } };
-  const headerFont = { name: 'Arial', size: 9, bold: true };
-  const bodyFont = { name: 'Arial', size: 9 };
-  const items = [...state.items];
-  const pages = [];
-  for (let i = 0; i < items.length; i += 8) pages.push(items.slice(i, i + 8));
-  if (!pages.length) pages.push([]);
-  const totals = calcTotals();
-  let row = 1;
-  for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
-    const pageItems = pages[pageIndex];
-    sheet.mergeCells(row, 1, row, 9);
-    const companyCell = sheet.getCell(row, 1);
-    companyCell.value = 'UNIVERSE GEMS & JEWELLERY CO.';
-    companyCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FF164478' } };
-    companyCell.alignment = { horizontal: 'center' };
-    row += 1;
-    sheet.mergeCells(row, 1, row + 1, 9);
-    const addressCell = sheet.getCell(row, 1);
-    addressCell.value = 'UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,\nHUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343';
-    addressCell.font = { name: 'Arial', size: 8 };
-    addressCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    row += 2;
-    sheet.mergeCells(row, 1, row, 4);
-    sheet.getCell(row, 1).value = 'Sales Invoice';
-    sheet.getCell(row, 1).font = { name: 'Arial', size: 14, bold: true };
-    sheet.mergeCells(row, 5, row, 9);
-    sheet.getCell(row, 5).value = "Vender's Banker";
-    sheet.getCell(row, 5).font = headerFont;
-    row += 1;
-    const leftLines = [
-      `No. : ${normalizeText($('#invoiceNo').value)}`,
-      `Invoice Date : ${normalizeText($('#invoiceDate').value)}`,
-      `Shipment Method : ${normalizeText($('#shipmentMethod').value)}`,
-      `Currency : ${normalizeText($('#currency').value)}`,
-      `Customer : ${normalizeText($('#customerName').value)}`,
-      normalizeText($('#customerAddress').value)
-    ].filter(Boolean).join('\n');
-    const rightLines = [
-      'The Hong Kong & Shanghai Banking Corporation Ltd.',
-      'Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong',
-      'A/C # : 012-593570-001',
-      'A/C Name : Universe Gems & Jewellery Co.'
-    ].join('\n');
-    sheet.mergeCells(row, 1, row + 5, 4);
-    sheet.getCell(row, 1).value = leftLines;
-    sheet.getCell(row, 1).font = bodyFont;
-    sheet.getCell(row, 1).alignment = { vertical: 'top', wrapText: true };
-    sheet.mergeCells(row, 5, row + 5, 9);
-    sheet.getCell(row, 5).value = rightLines;
-    sheet.getCell(row, 5).font = bodyFont;
-    sheet.getCell(row, 5).alignment = { vertical: 'top', wrapText: true };
-    row += 6;
-    const tableHeaderRow = row;
-    ['No.', 'Article No.', 'Description', '', 'Picture', 'Quantity', 'Unit', 'Unit Price', 'Amount'].forEach((value, index) => {
-      const cell = sheet.getCell(row, index + 1);
-      cell.value = value;
-      cell.font = headerFont;
-      cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.border = { top: thin, bottom: thin };
-    });
-    sheet.mergeCells(row, 3, row, 4);
-    row += 1;
-    sheet.mergeCells(row, 1, row, 9);
-    sheet.getCell(row, 1).value = 'F.O.B. Value';
-    sheet.getCell(row, 1).font = headerFont;
-    sheet.getCell(row, 1).border = { bottom: thin };
-    row += 1;
-
-    for (const item of pageItems) {
-      const startRow = row;
-      const lines = Math.max(3, item.descriptions.length + 1);
-      const endRow = row + Math.max(3, Math.ceil(lines / 2));
-      sheet.mergeCells(startRow, 1, endRow, 1);
-      sheet.mergeCells(startRow, 2, endRow, 2);
-      sheet.mergeCells(startRow, 3, endRow, 4);
-      sheet.mergeCells(startRow, 5, endRow, 5);
-      sheet.mergeCells(startRow, 6, endRow, 6);
-      sheet.mergeCells(startRow, 7, endRow, 7);
-      sheet.mergeCells(startRow, 8, endRow, 8);
-      sheet.mergeCells(startRow, 9, endRow, 9);
-      sheet.getCell(startRow, 1).value = item.seq;
-      sheet.getCell(startRow, 2).value = `Lot.No. : ${item.lotNo}\n${item.artNo}`;
-      sheet.getCell(startRow, 3).value = item.descriptions.join('\n');
-      sheet.getCell(startRow, 6).value = item.qty;
-      sheet.getCell(startRow, 7).value = item.unit;
-      sheet.getCell(startRow, 8).value = item.unitPrice;
-      sheet.getCell(startRow, 9).value = item.qty * item.unitPrice;
-      for (let col = 1; col <= 9; col += 1) {
-        const cell = sheet.getCell(startRow, col);
-        cell.font = bodyFont;
-        cell.alignment = { vertical: 'top', horizontal: col >= 6 ? 'center' : 'left', wrapText: true };
-        cell.border = { bottom: thin };
-      }
-      sheet.getCell(startRow, 8).numFmt = '$#,##0.00';
-      sheet.getCell(startRow, 9).numFmt = '$#,##0.00';
-      const imageEntry = getImageEntry(item);
-      if (imageEntry?.file) {
-        try {
-          const dataUrl = await fileToDataUrl(imageEntry.file);
-          const extension = imageEntry.extension === 'jpg' ? 'jpeg' : imageEntry.extension;
-          const imageId = workbook.addImage({ base64: dataUrl, extension });
-          sheet.addImage(imageId, { tl: { col: 4.12, row: startRow - 0.88 }, ext: { width: 92, height: Math.max(72, (endRow - startRow + 1) * 20 - 6) }, editAs: 'oneCell' });
-        } catch {}
-      }
-      for (let r = startRow; r <= endRow; r += 1) sheet.getRow(r).height = 20;
-      row = endRow + 1;
-    }
-
-    if (pageIndex === pages.length - 1) {
-      row += 1;
-      sheet.mergeCells(row, 1, row, 5);
-      sheet.getCell(row, 1).value = `Total Quantity : ${totals.qty}`;
-      sheet.getCell(row, 1).font = headerFont;
-      sheet.mergeCells(row, 6, row, 8);
-      sheet.getCell(row, 6).value = 'Sub Total:';
-      sheet.getCell(row, 9).value = totals.subtotal;
-      sheet.getCell(row, 9).numFmt = '$#,##0.00';
-      row += 1;
-      if (totals.discount > 0) {
-        sheet.mergeCells(row, 6, row, 8);
-        sheet.getCell(row, 6).value = 'DISCOUNT AMOUNT';
-        sheet.getCell(row, 9).value = -totals.discount;
-        sheet.getCell(row, 9).numFmt = '($#,##0.00)';
-        row += 1;
-      }
-      sheet.mergeCells(row, 6, row, 8);
-      sheet.getCell(row, 6).value = `Total : (${normalizeText($('#currency').value)})`;
-      sheet.getCell(row, 6).font = headerFont;
-      sheet.getCell(row, 9).value = totals.total;
-      sheet.getCell(row, 9).numFmt = '$#,##0.00';
-      sheet.getCell(row, 9).font = headerFont;
-      row += 2;
-      sheet.mergeCells(row, 1, row + 1, 9);
-      sheet.getCell(row, 1).value = `Total Amount : ${normalizeText($('#currency').value)} ${numberToWords(totals.total)}`;
-      sheet.getCell(row, 1).alignment = { wrapText: true };
-      sheet.getCell(row, 1).font = bodyFont;
-      row += 2;
-      sheet.mergeCells(row, 1, row, 9);
-      sheet.getCell(row, 1).value = `Remark : ${normalizeText($('#remark').value)}`;
-      row += 2;
-      sheet.mergeCells(row, 1, row, 4);
-      sheet.getCell(row, 1).value = 'Vender Signature : __________________';
-      sheet.mergeCells(row, 6, row, 9);
-      sheet.getCell(row, 6).value = 'Accept By : __________________';
-      row += 2;
-      sheet.mergeCells(row, 1, row, 5);
-      sheet.getCell(row, 1).value = 'UNIVERSE GEMS & JEWELLERY CO.';
-      sheet.getCell(row, 1).font = headerFont;
-    }
-    sheet.mergeCells(row + 1, 7, row + 1, 9);
-    sheet.getCell(row + 1, 7).value = `Page ${pageIndex + 1} of ${pages.length}`;
-    sheet.getCell(row + 1, 7).alignment = { horizontal: 'right' };
-    sheet.getCell(row + 1, 7).font = { name: 'Arial', size: 8 };
-    if (pageIndex < pages.length - 1) {
-      sheet.getRow(row + 1).addPageBreak();
-      row += 3;
-    } else row += 2;
-  }
-  sheet.pageSetup.printArea = `A1:I${row}`;
-  const buffer = await workbook.xlsx.writeBuffer();
-  downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${safeFileName($('#invoiceNo').value)}.xlsx`);
-}
-
-function exportRemainingStockXlsx() {
-  if (!window.XLSX) throw new Error('Excel 程式未載入。');
-  const soldLots = new Set(state.items.map(item => item.lotNo));
-  const remainingRows = state.stockRows.filter(row => !soldLots.has(normalizeCode(row[state.stockLotIndex])));
-  const sheet = XLSX.utils.aoa_to_sheet([state.stockHeader, ...remainingRows]);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, 'Remaining Stock');
-  const invoiceNo = safeFileName($('#invoiceNo').value);
-  XLSX.writeFile(workbook, `Remaining_Stock_${invoiceNo}_${remainingRows.length}pcs.xlsx`);
-}
-
-function downloadBlob(blob, fileName) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 3000);
-}
-
-$('#confirmBtn').addEventListener('click', async () => {
-  if (!state.items.length) {
-    showGlobalFeedback('—', '沒有貨品', 'error', 1800);
-    return;
-  }
-  if (!normalizeText($('#customerName').value)) {
-    showGlobalFeedback('—', '未選客戶', 'error', 1800);
-    return;
-  }
-  const button = $('#confirmBtn');
-  button.disabled = true;
-  button.textContent = '正在輸出…';
-  try {
-    await exportInvoiceXlsx();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    exportRemainingStockXlsx();
-    const invoiceNo = normalizeText($('#invoiceNo').value);
-    for (const item of state.items) {
-      state.soldHistory.set(item.lotNo, { invoiceNo, customerCode: normalizeText($('#customerCode').value), date: todayIso() });
-      state.products.delete(item.lotNo);
-    }
-    state.stockRows = state.stockRows.filter(row => !state.items.some(item => item.lotNo === normalizeCode(row[state.stockLotIndex])));
-    state.items = [];
-    renderItems();
-    saveDraft();
-    showGlobalFeedback(invoiceNo, '已輸出', 'success', 1500);
-  } catch (error) {
-    showGlobalFeedback('—', error.message || '輸出失敗', 'error', 2200);
-  } finally {
-    button.disabled = false;
-    button.textContent = 'Confirm Invoice 並輸出 Excel';
-  }
-});
-
-function saveDraft() {
-  try {
-    localStorage.setItem('universe-invoice-v07-draft', JSON.stringify({
-      customerCode: $('#customerCode').value,
-      customerName: $('#customerName').value,
-      customerAddress: $('#customerAddress').value,
-      salesRate: $('#salesRate').value,
-      currency: $('#currency').value,
-      terms: $('#terms').value,
-      shipmentMethod: $('#shipmentMethod').value,
-      invoiceNo: $('#invoiceNo').value,
-      invoiceDate: $('#invoiceDate').value,
-      discountAmount: $('#discountAmount').value,
-      remark: $('#remark').value,
-      items: state.items
-    }));
-  } catch {}
-}
-
-function restoreDraft() {
-  try {
-    const draft = JSON.parse(localStorage.getItem('universe-invoice-v07-draft') || 'null');
-    if (!draft) return;
-    const fields = ['customerCode', 'customerName', 'customerAddress', 'salesRate', 'currency', 'terms', 'shipmentMethod', 'invoiceNo', 'invoiceDate', 'discountAmount', 'remark'];
-    for (const field of fields) if (draft[field] !== undefined && $(`#${field}`)) $(`#${field}`).value = draft[field];
-    if (Array.isArray(draft.items)) state.items = draft.items;
-  } catch {}
-}
-
-restoreDraft();
-renderCustomerSummary();
-renderItems();
-updateSummary();
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+function persistLight(){try{localStorage.setItem('ui-v06',JSON.stringify({customerCode:$('#customerCode').value,customerName:$('#customerName').value,customerAddress:$('#customerAddress').value,salesRate:$('#salesRate').value,currency:$('#currency').value,shipmentMethod:$('#shipmentMethod').value,customerTerms:$('#customerTerms').value,invoiceNo:$('#invoiceNo').value,invoiceDate:$('#invoiceDate').value,discount:$('#discountAmount').value,remark:$('#remark').value,items:state.items,soldLots:[...state.soldLots.entries()]}))}catch{}}
+function restoreLight(){try{const d=JSON.parse(localStorage.getItem('ui-v06')||'null');if(!d)return;for(const[id,key]of[['#customerCode','customerCode'],['#customerName','customerName'],['#customerAddress','customerAddress'],['#salesRate','salesRate'],['#currency','currency'],['#shipmentMethod','shipmentMethod'],['#customerTerms','customerTerms'],['#invoiceNo','invoiceNo'],['#invoiceDate','invoiceDate'],['#discountAmount','discount'],['#remark','remark']])if(d[key]!==undefined)$(id).value=d[key];if(Array.isArray(d.items)){state.items=d.items;let max=0;state.items.forEach((x,i)=>{if(!x.sequence)x.sequence=i+1;max=Math.max(max,x.sequence||0)});state.nextSequence=max+1}if(Array.isArray(d.soldLots))state.soldLots=new Map(d.soldLots)}catch{}}
+['#customerCode','#customerName','#customerAddress','#shipmentMethod','#customerTerms','#invoiceNo','#invoiceDate','#remark'].forEach(id=>$(id).addEventListener('change',persistLight));
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();state.installPrompt=e;$('#installBtn').classList.remove('hidden')});$('#installBtn').addEventListener('click',async()=>{if(state.installPrompt){state.installPrompt.prompt();state.installPrompt=null;$('#installBtn').classList.add('hidden')}});if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+restoreLight();renderSelectedCustomer();renderItems();updateHeader();
