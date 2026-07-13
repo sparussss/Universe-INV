@@ -1,154 +1,187 @@
 <!doctype html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#111827" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Universe Invoice" />
-  <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" href="icon.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Universe Invoice">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
   <title>Universe Invoice</title>
 </head>
 <body>
-<header class="topbar">
-  <div><div class="eyebrow">Jewellery Exhibition PWA · v0.9</div><h1>Universe Invoice</h1></div>
-  <button id="installBtn" class="ghost hidden">安裝 App</button>
-</header>
-<main>
-  <section class="card hero">
-    <div class="status-grid">
-      <div><span>產品</span><strong id="productCount">0</strong></div>
-      <div><span>客戶</span><strong id="customerCount">0</strong></div>
-      <div><span>Invoice 款數</span><strong id="invoiceCount">0</strong></div>
-      <div><span>總額</span><strong id="headerTotal">$0.00</strong></div>
+  <header class="topbar">
+    <div>
+      <div class="version">JEWELLERY EXHIBITION PWA · V0.7</div>
+      <h1>Universe Invoice</h1>
     </div>
-  </section>
+  </header>
 
-  <nav class="tabs" aria-label="功能">
-    <button class="tab active" data-tab="setup">資料匯入</button>
-    <button class="tab" data-tab="invoice">建立 Invoice</button>
-    <button class="tab" data-tab="preview">Invoice 預覽</button>
-  </nav>
+  <main>
+    <nav class="tabs">
+      <button class="tab active" data-tab="setup">資料匯入</button>
+      <button class="tab" data-tab="invoice">建立 Invoice</button>
+    </nav>
 
-  <section id="setup" class="tab-panel active">
-    <div class="two-col">
+    <section id="setup" class="tab-panel active">
       <article class="card">
-        <h3>1. 匯入倉存 Excel</h3>
-        <label>展覽名稱<input id="exhibitionName" placeholder="例如：Jewellery Show" /></label>
-        <label class="file-picker">在「檔案」App 選擇倉存表 (.xls / .xlsx)<input id="excelInput" type="file" accept=".xls,.xlsx" /></label>
-        <div id="excelStatus" class="notice">尚未匯入倉存表。</div>
+        <h2>資料匯入</h2>
+        <div class="setup-grid">
+          <div class="setup-block">
+            <h3>1. 倉存表</h3>
+            <label class="file-button">選擇倉存 Excel
+              <input id="stockInput" type="file" accept=".xls,.xlsx">
+            </label>
+            <p id="stockStatus" class="status">尚未選擇倉存表。</p>
+          </div>
+          <div class="setup-block">
+            <h3>2. 客戶表</h3>
+            <label class="file-button">選擇客戶 Excel
+              <input id="customerInput" type="file" accept=".xls,.xlsx">
+            </label>
+            <p id="customerStatus" class="status">尚未選擇客戶表。</p>
+          </div>
+          <div class="setup-block">
+            <h3>3. 圖片 Folder</h3>
+            <label class="file-button">選擇 Pictures Folder
+              <input id="pictureFolderInput" type="file" accept="image/*" webkitdirectory multiple>
+            </label>
+            <p id="pictureStatus" class="status">尚未選擇圖片 Folder。</p>
+          </div>
+        </div>
       </article>
+
       <article class="card">
-        <h3>2. 匯入客戶 Excel</h3>
-        <label class="file-picker">在「檔案」App 選擇客戶表 (.xls / .xlsx)<input id="customerExcelInput" type="file" accept=".xls,.xlsx" /></label>
-        <div id="customerExcelStatus" class="notice">尚未匯入客戶表。</div>
+        <h2>4. 選擇客戶</h2>
+        <div class="search-row">
+          <input id="customerSearch" placeholder="Customer Code / Company" autocomplete="off">
+          <button id="customerSearchBtn">搜尋</button>
+        </div>
+        <div id="customerResults" class="customer-results"></div>
+        <div class="form-grid">
+          <label>Customer Code<input id="customerCode"></label>
+          <label>Company<input id="customerName"></label>
+          <label>Sales Rate<input id="salesRate" type="number" step="0.001"></label>
+          <label>Currency
+            <select id="currency"><option>USD</option><option>EUR</option><option>JPY</option><option>HKD</option></select>
+          </label>
+          <label>Terms<input id="terms"></label>
+          <label>Shipment Method<input id="shipmentMethod"></label>
+          <label class="span-2">Address<textarea id="customerAddress" rows="3"></textarea></label>
+        </div>
+        <button id="goInvoiceBtn" class="primary wide-action">開始 Invoice</button>
       </article>
+    </section>
+
+    <section id="invoice" class="tab-panel">
+      <article class="card invoice-info-card">
+        <div class="customer-summary" id="customerSummary">尚未選擇客戶。</div>
+        <div class="form-grid compact">
+          <label>Invoice No.<input id="invoiceNo" value="INV260013"></label>
+          <label>Invoice Date<input id="invoiceDate" type="date"></label>
+          <label>Discount Amount<input id="discountAmount" type="number" min="0" step="1" value="0"></label>
+          <label>Remark<input id="remark"></label>
+        </div>
+        <div class="summary-grid">
+          <div><span>Total Quantity</span><strong id="totalQty">0</strong></div>
+          <div><span>Sub Total</span><strong id="subtotal">$0.00</strong></div>
+          <div><span>Discount</span><strong id="discountDisplay">$0.00</strong></div>
+          <div class="summary-total"><span>Total</span><strong id="grandTotal">$0.00</strong></div>
+        </div>
+      </article>
+
+      <article class="card add-card">
+        <h2>加入貨品</h2>
+        <div class="mode-row">
+          <button id="manualModeBtn" class="mode active" aria-label="手動輸入"><span>⌨️</span><small>手動</small></button>
+          <button id="voiceBtn" class="mode" aria-label="語音輸入"><span>🎤</span><small>語音</small></button>
+          <button id="scanBtn" class="mode" aria-label="掃描 Barcode"><span>📷</span><small>掃描</small></button>
+        </div>
+        <div id="manualPanel" class="manual-panel">
+          <input id="lotInput" inputmode="numeric" pattern="[0-9]*" placeholder="輸入 LOTNO">
+          <button id="addLotBtn" class="primary">加入</button>
+        </div>
+        <p id="addStatus" class="status">請掃描、語音或手動輸入 LOTNO。</p>
+      </article>
+
+      <article class="card item-section">
+        <div class="item-section-head">
+          <div><h2>Invoice 貨品</h2><span id="itemCountLabel">共 0 件</span></div>
+          <div class="item-head-actions">
+            <button id="scrollLatestBtn">回到最新</button>
+            <button id="clearDraftBtn" class="danger">清空</button>
+          </div>
+        </div>
+        <div id="itemViewport" class="item-viewport">
+          <div id="invoiceItems" class="invoice-items empty">尚未加入貨品。</div>
+        </div>
+        <div id="undoBar" class="undo-bar hidden"><span id="undoText"></span><button id="undoBtn">復原</button></div>
+      </article>
+
+      <article class="card confirm-card">
+        <button id="confirmBtn" class="primary confirm-button">Confirm Invoice 並輸出 Excel</button>
+        <p class="status">將輸出可編輯的 Invoice XLSX 及最新 Remaining Stock XLSX。</p>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="scannerDialog">
+    <div class="scanner-shell">
+      <div class="scanner-top">
+        <div>Items: <strong id="scannerItemCount">0</strong></div>
+        <button id="closeScannerBtn">關閉</button>
+      </div>
+      <div id="reader" class="reader"></div>
+      <div class="scan-mask" aria-hidden="true"><div class="scan-window"></div></div>
+      <div id="scanFeedback" class="scan-feedback hidden">
+        <div id="scanFeedbackLot" class="scan-feedback-lot"></div>
+        <div id="scanFeedbackText" class="scan-feedback-text"></div>
+      </div>
+      <div class="scanner-controls">
+        <button class="zoom-btn" data-zoom="1">1×</button>
+        <button class="zoom-btn" data-zoom="2">2×</button>
+        <button class="zoom-btn active" data-zoom="3">3×</button>
+        <button class="zoom-btn" data-zoom="4">4×</button>
+        <button id="torchBtn">🔦</button>
+      </div>
+      <button id="restartCameraBtn" class="hidden">重新啟動相機</button>
+      <p id="scannerDebug" class="scanner-debug"></p>
     </div>
+  </dialog>
 
-    <article class="card">
-      <h3>3. 選擇手機圖片 Folder</h3>
-      <label class="file-picker">選擇 Pictures Folder<input id="imageFolderInput" type="file" accept="image/*" webkitdirectory multiple /></label>
-      <div id="imageStatus" class="notice">尚未選擇圖片 Folder。</div>
-    </article>
-
-    <article class="card">
-      <h3>4. 選擇客戶</h3>
-      <div class="customer-search-row"><input id="customerSearch" placeholder="Customer Code 或公司名稱" autocomplete="off" /><button id="findCustomerBtn">搜尋</button></div>
-      <div id="customerMatches" class="customer-matches"></div>
-      <div class="form-grid customer-form">
-        <label>Customer Code<input id="customerCode" /></label>
-        <label>客戶名稱<input id="customerName" /></label>
-        <label>Currency<select id="currency"><option value=""></option><option>USD</option><option>EUR</option><option>JPY</option><option>HKD</option></select></label>
-        <label>Sales Rate<input id="salesRate" type="number" step="0.001" /></label>
-        <label>Shipment Method<input id="shipmentMethod" /></label>
-        <label>Terms<input id="customerTerms" /></label>
-        <label class="wide">地址<textarea id="customerAddress" rows="3"></textarea></label>
-      </div>
-    </article>
-  </section>
-
-  <section id="invoice" class="tab-panel">
-    <article class="card invoice-header-card">
-      <div class="selected-customer" id="selectedCustomerSummary">尚未選擇客戶。</div>
-      <div class="form-grid">
-        <label>Invoice No.<input id="invoiceNo" value="INV260013" /></label>
-        <label>Invoice Date<input id="invoiceDate" type="date" /></label>
-        <label>Discount Amount<input id="discountAmount" type="number" min="0" step="1" value="0" /></label>
-        <label>Remark<input id="remark" /></label>
-      </div>
-      <div class="summary-block">
-        <div><span>Total Quantity</span><strong id="totalQty">0</strong></div>
-        <div><span>Sub Total</span><strong id="subtotal">$0.00</strong></div>
-        <div><span>Discount</span><strong id="discountDisplay">$0.00</strong></div>
-        <div class="grand"><span>Total</span><strong id="grandTotal">$0.00</strong></div>
-      </div>
-    </article>
-
-    <article class="card add-card">
-      <h3>加入貨品</h3>
-      <div class="mode-row">
-        <button id="manualModeBtn" class="mode-btn" type="button"><span>⌨️</span><small>手動</small></button>
-        <button id="voiceLotBtn" class="mode-btn" type="button"><span>🎤</span><small>語音</small></button>
-        <button id="scanBtn" class="mode-btn primary" type="button"><span>📷</span><small>掃描</small></button>
-      </div>
-      <div id="manualEntry" class="lot-entry">
-        <input id="lotInput" inputmode="numeric" enterkeyhint="done" autocomplete="off" placeholder="輸入 LOTNO" />
-        <button id="addLotBtn">加入</button>
-      </div>
-      <div id="addMessage" class="notice hidden"></div>
-    </article>
-
-    <article class="card invoice-list-card">
-      <div class="section-title-row"><h3>Invoice 貨品</h3><button id="clearInvoiceBtn" class="danger ghost">清空草稿</button></div>
-      <div class="invoice-list-meta"><span id="invoiceListCount">共 0 件</span><button id="scrollNewestBtn" class="ghost hidden" type="button">回到最新 ↑</button></div>
-      <div id="invoiceItems" class="invoice-items empty-state">尚未加入貨品。</div>
-    </article>
-  </section>
-
-  <section id="preview" class="tab-panel">
-    <article class="card preview-actions no-print">
-      <button id="refreshPreviewBtn">更新預覽</button>
-      <button id="exportInvoiceBtn" class="primary">輸出 Invoice Excel</button>
-      <button id="confirmInvoiceBtn">Confirm ＋ Invoice Excel ＋ Remaining Stock</button>
-    </article>
-    <article id="invoiceDocument" class="invoice-document"></article>
-  </section>
-</main>
-
-<dialog id="scannerDialog">
-  <div class="dialog-head"><h3>掃 Barcode</h3><div class="scanner-count">Items <strong id="scannerItemCount">0</strong></div><button id="closeScannerBtn" class="ghost">關閉</button></div>
-  <div class="scanner-stage"><div id="reader"></div><div class="scan-guide" aria-hidden="true"><span></span></div><div id="scannerFeedback" class="scanner-feedback hidden"><strong></strong><span></span></div></div>
-  <div id="scannerError" class="notice error hidden"></div>
-  <div class="zoom-row">
-    <button id="zoom1Btn" class="ghost" disabled>1×</button><button id="zoom2Btn" class="ghost" disabled>2×</button><button id="zoom3Btn" class="ghost" disabled>3×</button><button id="zoom4Btn" class="ghost" disabled>4×</button>
-    <button id="torchBtn" class="ghost" disabled>🔦</button><button id="pauseScannerBtn" class="ghost" disabled>暫停</button>
+  <div id="globalFeedback" class="global-feedback hidden">
+    <div id="globalFeedbackLot"></div>
+    <small id="globalFeedbackText"></small>
   </div>
-</dialog>
 
-<template id="itemTemplate">
-  <div class="invoice-item" draggable="true">
-    <div class="drag-handle">☰</div>
-    <img class="item-thumb" alt="產品圖片" />
-    <div class="item-main">
-      <div class="item-title-row"><span><strong class="item-seq"></strong> <strong class="item-artno"></strong></span><span class="item-lot"></span></div>
-      <div class="item-desc"></div>
-    </div>
-    <div class="item-controls">
-      <label class="variant-label">圖片<select class="variant-select"></select></label>
-      <label>Qty<input class="qty-input" type="number" min="1" step="1" /></label>
-      <label>Unit Price<input class="price-input" type="number" min="0" step="1" /></label>
-      <div class="item-actions"><button class="insert-above">上方插入</button><button class="insert-below">下方插入</button><button class="delete-item danger">刪除</button></div>
-    </div>
-  </div>
-</template>
+  <template id="itemTemplate">
+    <article class="invoice-item">
+      <div class="item-number"></div>
+      <button class="image-button" type="button"><img class="item-image" alt="產品圖片"></button>
+      <div class="item-content">
+        <div class="item-title"><strong class="item-artno"></strong><span class="item-lot"></span></div>
+        <div class="item-description"></div>
+        <div class="item-fields">
+          <label>圖片<select class="variant-select"></select></label>
+          <label>Qty<input class="qty-input" type="number" min="1" step="1"></label>
+          <label>Unit Price<input class="price-input" type="number" min="0" step="1"></label>
+        </div>
+        <div class="item-actions">
+          <button class="insert-before">上方插入</button>
+          <button class="insert-after">下方插入</button>
+          <button class="delete-item danger">刪除</button>
+        </div>
+      </div>
+    </article>
+  </template>
 
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="app.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
