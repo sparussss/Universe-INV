@@ -16,7 +16,7 @@
 <body>
   <header class="topbar">
     <div>
-      <div class="eyebrow">Jewellery Exhibition PWA · v0.3</div>
+      <div class="eyebrow">Jewellery Exhibition PWA · v0.4</div>
       <h1>Universe Invoice</h1>
     </div>
     <button id="installBtn" class="ghost hidden">安裝 App</button>
@@ -73,12 +73,12 @@
       </div>
 
       <article class="card">
-        <h3>3. 共用款號圖片庫</h3>
-        <label class="file-picker">批量選擇圖片
-          <input id="imageInput" type="file" accept="image/*" multiple />
+        <h3>3. 選擇手機圖片 Folder</h3>
+        <label class="file-picker">選擇 Pictures Folder（圖片不會複製進 PWA）
+          <input id="imageFolderInput" type="file" accept="image/*" webkitdirectory multiple />
         </label>
-        <p class="muted">檔名例：PT-37499.jpg（預設）、PT-37499 AM.jpg、PT-37499 CT.jpg。</p>
-        <div id="imageStatus" class="notice">尚未匯入圖片；不影響 Excel、客戶及計價測試。</div>
+        <p class="muted">PWA 只在本次開啟期間建立檔名索引。檔名第一段視為 ARTNO，例如 BG-34686 MG.JPG、BL-34686.A AQ(3A).JPG。</p>
+        <div id="imageStatus" class="notice">尚未選擇圖片 Folder；圖片功能暫不可用。</div>
         <div id="imageLibrary" class="image-library"></div>
       </article>
 
@@ -166,7 +166,8 @@
     <section id="preview" class="tab-panel">
       <article class="card preview-actions no-print">
         <button id="refreshPreviewBtn">更新預覽</button>
-        <button id="printBtn" class="primary">列印 / 儲存 PDF</button>
+        <button id="printBtn">列印 / 儲存 PDF</button>
+        <button id="confirmInvoiceBtn" class="primary">Confirm Invoice ＋ 匯出 Remaining Stock</button>
       </article>
       <article id="invoiceDocument" class="invoice-document"></article>
     </section>
@@ -179,10 +180,12 @@
     <div class="zoom-row">
       <button id="zoom1Btn" class="ghost" disabled>1×</button>
       <button id="zoom2Btn" class="ghost" disabled>2×</button>
+      <button id="zoom3Btn" class="ghost" disabled>3×</button>
+      <button id="zoom4Btn" class="ghost" disabled>4×</button>
       <button id="torchBtn" class="ghost" disabled>🔦 手電筒</button>
       <button id="pauseScannerBtn" class="ghost" disabled>暫停</button>
     </div>
-    <p class="muted">17 × 5.5 mm 小條碼：保持約 15–25 cm，先讓條碼填滿中央細長框。若即時掃不到，可用「拍照／選照片掃碼」。</p>
+    <p class="muted">17 × 5.5 mm 小條碼：可依裝置支援切換 2×／3×／4×，保持條碼清晰並填滿中央細長框。若即時掃不到，可用「拍照／選照片掃碼」。</p>
   </dialog>
 
   <template id="itemTemplate">

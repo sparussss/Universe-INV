@@ -1,29 +1,26 @@
-# Universe Invoice PWA v0.3
+# Universe Invoice PWA v0.4
 
-本測試版新增：
+本版重點：
 
-- 手機「檔案」App 選擇倉存 Excel
-- 手機「檔案」App 選擇客戶 Excel
-- Customer Code 自動移除所有空格
-- Column L 空白時 Sales Rate = 0.34
-- 依 Customer Code／公司名稱搜尋及選擇客戶
-- Barcode 即時掃描、1×／2×（裝置支援時）、手電筒
-- 拍照／選照片解碼 Barcode
-- 手動輸入 LOTNO
-- DESC1–DESC6 作 Invoice Description
-- PRICE × Sales Rate 後永遠向上取整
-- 共用款號圖片及 Default / AM / CT 切換
-- 新增、插入、刪除、拖拉排序、PDF 預覽
+- 手機選擇倉存 Excel
+- 手機選擇客戶 Excel
+- 選擇整個 Pictures Folder；圖片不複製進 PWA，只建立本次檔名索引
+- 圖片檔名第一段配對 ARTNO，例如 `BG-34686 MG.JPG`
+- 支援圖片變體及移除檔名末尾重複標記 `(1)`
+- Barcode 掃描加入 1× / 2× / 3× / 4×（按裝置實際支援）
+- Confirm Invoice 後，移除本次 LOTNO 並自動匯出 `Remaining_Stock_...xlsx`
+- 已 Confirm 的 LOTNO 在同一工作階段再次掃描會顯示已售 Invoice
 
-## 上傳 GitHub Pages
+## GitHub Pages 更新
 
-把此資料夾內所有檔案直接放到 Repository 根目錄，不要多包一層資料夾。
+將本資料夾內所有檔案上傳到 Repository 根目錄，覆蓋舊版本。不要多包一層資料夾。
 
-更新後如仍見舊版：
+若仍看到舊版：
 
-1. 在 Safari 開網站並重新載入。
-2. 刪除舊主畫面圖示。
-3. Safari「分享」→「加入主畫面」。
-4. 必要時到 iPhone「設定 → Safari → 進階 → 網站資料」刪除該 GitHub Pages 網站資料後再試。
+1. 在 Safari 開啟網站並重新整理。
+2. 刪除主畫面的舊 PWA 圖示。
+3. 再由 Safari「加入主畫面」。
 
-相機必須使用 HTTPS 網址。GitHub Pages 符合要求。
+## 圖片 Folder
+
+圖片必須已經下載在「我的 iPhone／我的 iPad」或可離線讀取的位置。重新開啟 PWA 後，iOS 可能要求再次選擇 Pictures Folder。
