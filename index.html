@@ -16,7 +16,7 @@
 <body>
   <header class="topbar">
     <div>
-      <div class="eyebrow">Jewellery Exhibition PWA · v0.4</div>
+      <div class="eyebrow">Jewellery Exhibition PWA · v0.5</div>
       <h1>Universe Invoice</h1>
     </div>
     <button id="installBtn" class="ghost hidden">安裝 App</button>
@@ -79,7 +79,7 @@
         </label>
         <p class="muted">PWA 只在本次開啟期間建立檔名索引。檔名第一段視為 ARTNO，例如 BG-34686 MG.JPG、BL-34686.A AQ(3A).JPG。</p>
         <div id="imageStatus" class="notice">尚未選擇圖片 Folder；圖片功能暫不可用。</div>
-        <div id="imageLibrary" class="image-library"></div>
+        
       </article>
 
       <article class="card">
@@ -142,7 +142,8 @@
           <input id="photoScanInput" class="hidden" type="file" accept="image/*" capture="environment" />
         </div>
         <div class="lot-entry standalone">
-          <input id="lotInput" inputmode="numeric" placeholder="手動輸入 LOTNO" />
+          <input id="lotInput" inputmode="text" enterkeyhint="done" autocomplete="off" placeholder="手動或語音輸入 LOTNO" />
+          <button id="voiceLotBtn" type="button" title="語音輸入 LOTNO">🎤</button>
           <button id="addLotBtn">加入</button>
         </div>
         <div id="addMessage" class="notice">可先輸入示範 LOTNO：133685</div>
@@ -153,6 +154,7 @@
           <h3>Invoice 貨品</h3>
           <button id="clearInvoiceBtn" class="danger ghost">清空草稿</button>
         </div>
+        <div class="invoice-list-meta"><span id="invoiceListCount">共 0 件</span><button id="scrollNewestBtn" class="ghost hidden" type="button">回到最新 ↑</button></div>
         <div id="invoiceItems" class="invoice-items empty-state">尚未加入貨品。</div>
         <div class="totals">
           <div><span>Total Quantity</span><strong id="totalQty">0</strong></div>
@@ -176,6 +178,7 @@
   <dialog id="scannerDialog">
     <div class="dialog-head"><h3>掃 Barcode</h3><button id="closeScannerBtn" class="ghost">關閉</button></div>
     <div id="reader"></div>
+    <div id="photoReader" class="hidden"></div>
     <p id="scannerStatus" class="muted">正在啟動相機…</p>
     <div class="zoom-row">
       <button id="zoom1Btn" class="ghost" disabled>1×</button>
@@ -193,7 +196,7 @@
       <div class="drag-handle">☰</div>
       <img class="item-thumb" alt="產品圖片" />
       <div class="item-main">
-        <div class="item-title-row"><strong class="item-artno"></strong><span class="item-lot"></span></div>
+        <div class="item-title-row"><span><strong class="item-seq"></strong> <strong class="item-artno"></strong></span><span class="item-lot"></span></div>
         <div class="item-desc"></div>
         <div class="item-price-note"></div>
       </div>

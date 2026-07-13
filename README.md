@@ -1,26 +1,15 @@
-# Universe Invoice PWA v0.4
+# Universe Invoice PWA v0.5
 
-本版重點：
+功能測試版，主要修正：
 
-- 手機選擇倉存 Excel
-- 手機選擇客戶 Excel
-- 選擇整個 Pictures Folder；圖片不複製進 PWA，只建立本次檔名索引
-- 圖片檔名第一段配對 ARTNO，例如 `BG-34686 MG.JPG`
-- 支援圖片變體及移除檔名末尾重複標記 `(1)`
-- Barcode 掃描加入 1× / 2× / 3× / 4×（按裝置實際支援）
-- Confirm Invoice 後，移除本次 LOTNO 並自動匯出 `Remaining_Stock_...xlsx`
-- 已 Confirm 的 LOTNO 在同一工作階段再次掃描會顯示已售 Invoice
+- 選擇 Pictures Folder 後只顯示統計，不列出圖片清單。
+- 修正相機重複啟動造成 `already under transition` 的問題。
+- 圖片自動選擇會依據倉存表 `DESC2`，使用 `Stone List & Shape & Cutting.xlsx` 的 Breakdown → Quotation 代碼規則配對。
+- 新加入貨品顯示在清單最上方，編號保留加入次序，例如 3、2、1。
+- Invoice 貨品區為固定高度，可在區內上下捲動，適合超過 100 件貨。
+- LOTNO 支援語音輸入；如瀏覽器不支援直接語音辨識，會開啟文字鍵盤供使用 iPhone 系統聽寫。
+- Confirm Invoice 後匯出 Remaining Stock Excel。
 
 ## GitHub Pages 更新
 
-將本資料夾內所有檔案上傳到 Repository 根目錄，覆蓋舊版本。不要多包一層資料夾。
-
-若仍看到舊版：
-
-1. 在 Safari 開啟網站並重新整理。
-2. 刪除主畫面的舊 PWA 圖示。
-3. 再由 Safari「加入主畫面」。
-
-## 圖片 Folder
-
-圖片必須已經下載在「我的 iPhone／我的 iPad」或可離線讀取的位置。重新開啟 PWA 後，iOS 可能要求再次選擇 Pictures Folder。
+把 ZIP 解壓後的所有檔案直接上傳到 Repository 根目錄，覆蓋舊版。若仍顯示舊版本，刪除主畫面舊 PWA，再由 Safari 重新加入主畫面。
