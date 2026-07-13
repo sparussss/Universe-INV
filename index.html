@@ -15,7 +15,7 @@
 </head>
 <body>
 <header class="topbar">
-  <div><div class="eyebrow">Jewellery Exhibition PWA · v0.7</div><h1>Universe Invoice</h1></div>
+  <div><div class="eyebrow">Jewellery Exhibition PWA · v0.9</div><h1>Universe Invoice</h1></div>
   <button id="installBtn" class="ghost hidden">安裝 App</button>
 </header>
 <main>
@@ -38,7 +38,7 @@
     <div class="two-col">
       <article class="card">
         <h3>1. 匯入倉存 Excel</h3>
-        <label>展覽名稱<input id="exhibitionName" placeholder="例如 Tokyo Jewellery Show 2026" /></label>
+        <label>展覽名稱<input id="exhibitionName" placeholder="例如：Jewellery Show" /></label>
         <label class="file-picker">在「檔案」App 選擇倉存表 (.xls / .xlsx)<input id="excelInput" type="file" accept=".xls,.xlsx" /></label>
         <div id="excelStatus" class="notice">尚未匯入倉存表。</div>
       </article>
@@ -121,7 +121,7 @@
 
 <dialog id="scannerDialog">
   <div class="dialog-head"><h3>掃 Barcode</h3><div class="scanner-count">Items <strong id="scannerItemCount">0</strong></div><button id="closeScannerBtn" class="ghost">關閉</button></div>
-  <div class="scanner-stage"><div id="reader"></div><div id="scannerFeedback" class="scanner-feedback hidden"><strong></strong><span></span></div></div>
+  <div class="scanner-stage"><div id="reader"></div><div class="scan-guide" aria-hidden="true"><span></span></div><div id="scannerFeedback" class="scanner-feedback hidden"><strong></strong><span></span></div></div>
   <div id="scannerError" class="notice error hidden"></div>
   <div class="zoom-row">
     <button id="zoom1Btn" class="ghost" disabled>1×</button><button id="zoom2Btn" class="ghost" disabled>2×</button><button id="zoom3Btn" class="ghost" disabled>3×</button><button id="zoom4Btn" class="ghost" disabled>4×</button>

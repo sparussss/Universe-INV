@@ -5,7 +5,7 @@ const state={
   products:new Map(),customers:new Map(),images:new Map(),imageFiles:[],items:[],soldLots:new Map(),
   stockRows:null,stockHeaderRow:-1,stockLotCol:-1,stockFileName:'jmsdata.xls',
   insertAt:null,scanner:null,scannerRunning:false,scannerPaused:false,scannerTransitioning:false,scannerCancelRequested:false,
-  nextSequence:1,lastScan:{value:'',time:0},feedbackTimer:null,installPrompt:null
+  nextSequence:1,lastScan:{value:'',time:0},feedbackTimer:null,installPrompt:null,activeMode:'manual',recognition:null
 };
 
 function normalizeKey(v){return String(v??'').trim()}
@@ -109,6 +109,18 @@ function chooseImageVariant(product,imgs){
   return imgs.find(x=>x.variant==='Default')?.variant||imgs[0].variant;
 }
 
+function setActiveMode(mode){
+  state.activeMode=mode;
+  for(const [id,name] of [['#manualModeBtn','manual'],['#voiceLotBtn','voice'],['#scanBtn','scan']]){
+    const b=$(id);b.classList.toggle('active',name===mode);b.setAttribute('aria-pressed',name===mode?'true':'false');
+  }
+}
+function focusLotInput({textMode=false}={}){
+  const input=$('#lotInput');
+  input.setAttribute('inputmode',textMode?'text':'numeric');
+  input.removeAttribute('readonly');
+  requestAnimationFrame(()=>{input.focus({preventScroll:false});const n=input.value.length;try{input.setSelectionRange(n,n)}catch{}});
+}
 function showAddMessage(text,type='ok'){setStatus('#addMessage',text,type);setTimeout(()=>$('#addMessage').classList.add('hidden'),2200)}
 function addByLot(raw,source='manual'){
   const lot=normalizeLot(raw);if(!lot)return{status:'notfound',lot:'',message:'請輸入 LOTNO。'};
@@ -122,7 +134,8 @@ function addByLot(raw,source='manual'){
   return{status:'success',lot,message:product.artNo};
 }
 $('#addLotBtn').addEventListener('click',()=>{const r=addByLot($('#lotInput').value);if(r.status!=='success')showAddMessage(`${r.lot?`LOTNO ${r.lot} `:''}${r.message}`,'error')});
-$('#lotInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#addLotBtn').click()}});$('#manualModeBtn').addEventListener('click',()=>{$('#lotInput').focus()});
+$('#lotInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#addLotBtn').click()}});
+$('#manualModeBtn').addEventListener('click',()=>{setActiveMode('manual');focusLotInput()});
 
 function renderItems(){
   const box=$('#invoiceItems');box.innerHTML='';$('#invoiceListCount').textContent=`共 ${state.items.length} 件`;
@@ -153,28 +166,32 @@ $('#refreshPreviewBtn').addEventListener('click',renderPreview);
 
 async function fileToBase64(file){const bytes=new Uint8Array(await file.arrayBuffer());let bin='';const chunk=0x8000;for(let i=0;i<bytes.length;i+=chunk)bin+=String.fromCharCode(...bytes.subarray(i,i+chunk));return btoa(bin)}
 function imageExtension(file){const m=file.name.match(/\.(jpe?g|png)$/i);return m?(m[1].toLowerCase()==='jpg'?'jpeg':m[1].toLowerCase()):'jpeg'}
+async function getImageDimensions(file){return await new Promise((resolve,reject)=>{const url=URL.createObjectURL(file),img=new Image();img.onload=()=>{const out={width:img.naturalWidth||1,height:img.naturalHeight||1};URL.revokeObjectURL(url);resolve(out)};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('圖片尺寸讀取失敗'))};img.src=url})}
 function setCellBorder(cell){cell.border={top:{style:'thin',color:{argb:'FFB8BEC8'}},bottom:{style:'thin',color:{argb:'FFB8BEC8'}}}}
 async function buildInvoiceWorkbook(){
   if(typeof ExcelJS==='undefined')throw new Error('Excel 輸出程式未載入。');if(!state.items.length)throw new Error('Invoice 沒有貨品。');
   const wb=new ExcelJS.Workbook();wb.creator='Universe Invoice PWA';wb.created=new Date();const ws=wb.addWorksheet('Sales Invoice',{pageSetup:{paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.25,right:.25,top:.3,bottom:.3,header:.1,footer:.1}}});ws.views=[{showGridLines:false}];
-  const widths=[5,16,16,16,12,8,8,13,13];['A','B','C','D','E','F','G','H','I'].forEach((c,i)=>ws.getColumn(c).width=widths[i]);
+  const widths=[5,15,20,20,15,8,8,13,13];['A','B','C','D','E','F','G','H','I'].forEach((c,i)=>ws.getColumn(c).width=widths[i]);
   ws.mergeCells('A1:I2');const title=ws.getCell('A1');title.value='UNIVERSE GEMS & JEWELLERY CO.';title.font={name:'Arial',size:23,bold:true,color:{argb:'FF17365D'}};title.alignment={horizontal:'center',vertical:'middle'};ws.getRow(1).height=28;ws.getRow(2).height=24;
   ws.mergeCells('A3:I3');ws.getCell('A3').value='UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST, HUNG HOM, KOWLOON, HONG KONG';ws.getCell('A3').alignment={horizontal:'center'};ws.getCell('A3').font={name:'Arial',size:9};
   ws.mergeCells('A4:I4');ws.getCell('A4').value='TEL : (852) 2363 5409     FAX : (852) 2765 0343';ws.getCell('A4').alignment={horizontal:'center'};ws.getCell('A4').font={name:'Arial',size:9};
   ws.getRow(5).height=6;for(let c=1;c<=9;c++)ws.getCell(5,c).border={bottom:{style:'medium',color:{argb:'FF000000'}}};
   ws.mergeCells('A6:D6');ws.getCell('A6').value='Sales Invoice';ws.getCell('A6').font={name:'Arial',size:18,bold:true};
-  const left=[['No.',normalizeKey($('#invoiceNo').value)],['Invoice Date',$('#invoiceDate').value],['Shipment Method',$('#shipmentMethod').value],['Currency',$('#currency').value],['Customer Code',normalizeCustomerCode($('#customerCode').value)],['Customer',$('#customerName').value],['Address',$('#customerAddress').value]];
-  let r=7;for(const[k,v]of left){ws.getCell(r,1).value=k+' :';ws.getCell(r,1).font={bold:k==='Customer'};ws.mergeCells(r,2,r,4);ws.getCell(r,2).value=v;ws.getCell(r,2).alignment={wrapText:true};r+=k==='Address'?2:1}
-  ws.mergeCells('F6:I6');ws.getCell('F6').value="Vender's Banker";ws.getCell('F6').font={bold:true,size:12};const bank=['The Hong Kong & Shanghai Banking Corporation Ltd.','Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong','A/C # : 012-593570-001','A/C Name : Universe Gems & Jewellery Co.'];bank.forEach((v,i)=>{ws.mergeCells(7+i,6,7+i,9);ws.getCell(7+i,6).value=v;ws.getCell(7+i,6).alignment={wrapText:true}});
+  const oneLine=v=>String(v??'').replace(/[\r\n]+/g,' ').replace(/\s+/g,' ').trim();
+  const left=[['No.',normalizeKey($('#invoiceNo').value)],['Invoice Date',$('#invoiceDate').value],['Shipment Method',$('#shipmentMethod').value],['Currency',$('#currency').value],['Customer Code',normalizeCustomerCode($('#customerCode').value)],['Customer',$('#customerName').value],['Address',oneLine($('#customerAddress').value)]];
+  let r=7;for(const[k,v]of left){ws.getCell(r,1).value=k+' :';ws.getCell(r,1).font={bold:k==='Customer'};ws.mergeCells(r,2,r,4);ws.getCell(r,2).value=v;ws.getCell(r,2).alignment={wrapText:false,shrinkToFit:true,vertical:'middle'};r+=1}
+  ws.mergeCells('F6:I6');ws.getCell('F6').value="Vender's Banker";ws.getCell('F6').font={bold:true,size:12};const bank=['The Hong Kong & Shanghai Banking Corporation Ltd.','Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong','A/C # : 012-593570-001','A/C Name : Universe Gems & Jewellery Co.'];bank.forEach((v,i)=>{ws.mergeCells(7+i,6,7+i,9);ws.getCell(7+i,6).value=v;ws.getCell(7+i,6).alignment={wrapText:false,shrinkToFit:true,vertical:'middle'}});
   const headerRow=15;const headers=['No.','Article No.','Description','','Image','Quantity','Unit','Unit Price','Amount'];headers.forEach((v,i)=>{const c=ws.getCell(headerRow,i+1);c.value=v;c.font={bold:true,size:9};c.alignment={horizontal:i>=5?'center':'left'};setCellBorder(c)});ws.mergeCells(headerRow,3,headerRow,4);ws.getCell(headerRow,3).value='Description';ws.getRow(headerRow).height=20;ws.pageSetup.printTitlesRow='1:15';
   let row=headerRow+1,itemCount=0;
   for(const item of state.items){
     const lines=Math.max(4,item.descriptions.length+1),start=row,end=row+lines-1;itemCount++;
     for(const range of [[start,1,end,1],[start,2,end,2],[start,3,end,4],[start,5,end,5],[start,6,end,6],[start,7,end,7],[start,8,end,8],[start,9,end,9]])ws.mergeCells(...range);
     ws.getCell(start,1).value=itemCount;ws.getCell(start,2).value=`Lot.No. : ${item.lotNo}\n${item.artNo}`;ws.getCell(start,3).value=item.descriptions.join('\n');ws.getCell(start,6).value=item.qty;ws.getCell(start,7).value=item.unit;ws.getCell(start,8).value=item.unitPrice;ws.getCell(start,9).value=item.qty*item.unitPrice;
-    for(const col of[1,2,3,5,6,7,8,9]){const c=ws.getCell(start,col);c.alignment={vertical:'top',wrapText:true,horizontal:col>=6?'center':'left'};c.font={name:'Arial',size:9};c.border={bottom:{style:'thin',color:{argb:'FFB8BEC8'}}}}
+    for(const col of[1,2,3,5,6,7,8,9]){const c=ws.getCell(start,col);c.alignment={vertical:'top',wrapText:col===2||col===3,horizontal:col>=6?'center':'left'};c.font={name:'Arial',size:9}}
+    ws.getCell(start,2).alignment={vertical:'top',wrapText:true,horizontal:'left'};
+    ws.getCell(start,3).alignment={vertical:'top',wrapText:true,horizontal:'left'};
     ws.getCell(start,8).numFmt='$#,##0.00';ws.getCell(start,9).numFmt='$#,##0.00';for(let rr=start;rr<=end;rr++)ws.getRow(rr).height=15;
-    const img=getSelectedImage(item);if(img?.file&&/\.(jpe?g|png)$/i.test(img.file.name)){try{const id=wb.addImage({base64:await fileToBase64(img.file),extension:imageExtension(img.file)});ws.addImage(id,{tl:{col:4.08,row:start-1+.12},br:{col:4.92,row:end-.12},editAs:'oneCell'})}catch{}}
+    const img=getSelectedImage(item);if(img?.file&&/\.(jpe?g|png)$/i.test(img.file.name)){try{const id=wb.addImage({base64:await fileToBase64(img.file),extension:imageExtension(img.file)}),dim=await getImageDimensions(img.file),maxW=92,maxH=Math.max(42,lines*20),scale=Math.min(maxW/dim.width,maxH/dim.height),drawW=Math.max(1,Math.round(dim.width*scale)),drawH=Math.max(1,Math.round(dim.height*scale)),rowPx=20,topOffset=Math.max(0,(maxH-drawH)/2/rowPx);ws.addImage(id,{tl:{col:4.05,row:start-1+topOffset},ext:{width:drawW,height:drawH},editAs:'oneCell'})}catch{}}
     row=end+1;if(itemCount%8===0&&itemCount<state.items.length)ws.getRow(row-1).addPageBreak();
   }
   const t=calcTotals();row+=1;ws.mergeCells(row,1,row,6);ws.getCell(row,1).value=`Total Quantity : ${t.qty}`;ws.getCell(row,1).alignment={horizontal:'right'};ws.getCell(row,7).value='Sub Total:';ws.getCell(row,8).value=t.subtotal;ws.mergeCells(row,8,row,9);ws.getCell(row,8).numFmt='$#,##0.00';row++;
@@ -203,30 +220,108 @@ $('#confirmInvoiceBtn').addEventListener('click',async()=>{
 $('#scanBtn').addEventListener('click',startScanner);$('#closeScannerBtn').addEventListener('click',stopScanner);$('#pauseScannerBtn').addEventListener('click',toggleScannerPause);$('#torchBtn').addEventListener('click',toggleTorch);for(const z of[1,2,3,4])$(`#zoom${z}Btn`).addEventListener('click',()=>setZoom(z));
 function setScannerControlsDisabled(disabled){['#scanBtn','#pauseScannerBtn','#torchBtn','#zoom1Btn','#zoom2Btn','#zoom3Btn','#zoom4Btn'].forEach(x=>$(x).disabled=disabled);$('#closeScannerBtn').disabled=false}
 async function startScanner(){
-  if(state.scannerTransitioning||state.scannerRunning)return;state.scannerTransitioning=true;state.scannerCancelRequested=false;setScannerControlsDisabled(true);$('#scannerError').classList.add('hidden');const dlg=$('#scannerDialog');if(!dlg.open)dlg.showModal();
-  if(typeof Html5Qrcode==='undefined'){state.scannerTransitioning=false;setScannerControlsDisabled(false);return setStatus('#scannerError','掃描程式未載入。','error')}
+  setActiveMode('scan');
+  if(state.scannerTransitioning)return;
+  if(state.scannerRunning){if(!$('#scannerDialog').open)$('#scannerDialog').showModal();return}
+  state.scannerTransitioning=true;state.scannerCancelRequested=false;setScannerControlsDisabled(true);
+  $('#scannerError').classList.add('hidden');$('#scannerFeedback').classList.add('hidden');
+  const dlg=$('#scannerDialog');if(!dlg.open)dlg.showModal();
+  if(typeof Html5Qrcode==='undefined'){
+    state.scannerTransitioning=false;setScannerControlsDisabled(false);
+    return setStatus('#scannerError','掃描程式未載入。請連接網絡後重新開啟一次。','error');
+  }
   try{
-    if(state.scanner){try{await state.scanner.clear()}catch{}}$('#reader').innerHTML='';const formats=[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,Html5QrcodeSupportedFormats.ITF];state.scanner=new Html5Qrcode('reader',{verbose:false,formatsToSupport:formats});
-    const cameras=await Html5Qrcode.getCameras();if(!cameras?.length)throw new Error('找不到相機。');const pattern=/(back|rear|environment|後置|背面)/i,cam=cameras.find(c=>pattern.test(c.label||''))||cameras[cameras.length-1];
-    await state.scanner.start(cam.id,{fps:24,qrbox:(w,h)=>({width:Math.floor(w*.72),height:Math.max(48,Math.min(70,Math.floor(h*.09)))}),aspectRatio:1.7778,disableFlip:true,experimentalFeatures:{useBarCodeDetectorIfSupported:true}},onBarcodeSuccess,()=>{});
-    state.scannerRunning=true;state.scannerPaused=false;setScannerControlsDisabled(false);const caps=state.scanner.getRunningTrackCapabilities?.();if(!caps?.torch)$('#torchBtn').disabled=true;if(caps?.zoom){for(const z of[1,2,3,4])$(`#zoom${z}Btn`).disabled=z>(caps.zoom.max||1);await setZoom(Math.min(3,caps.zoom.max||1))}else for(const z of[1,2,3,4])$(`#zoom${z}Btn`).disabled=true;try{await state.scanner.applyVideoConstraints({advanced:[{focusMode:'continuous',exposureMode:'continuous'}]})}catch{}
-  }catch(err){state.scannerRunning=false;setScannerControlsDisabled(false);setStatus('#scannerError',`相機無法啟動：${err?.message||err}`,'error')}finally{state.scannerTransitioning=false}
+    if(state.scanner){try{if(state.scannerRunning)await state.scanner.stop()}catch{}try{await state.scanner.clear()}catch{}}
+    $('#reader').innerHTML='';
+    const formats=[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.ITF];
+    state.scanner=new Html5Qrcode('reader',{verbose:false,formatsToSupport:formats});
+    const config={
+      fps:20,
+      qrbox:(w,h)=>({width:Math.max(240,Math.floor(w*.82)),height:Math.max(54,Math.min(86,Math.floor(h*.12)))}),
+      aspectRatio:1.3333,
+      disableFlip:true
+    };
+    try{
+      await state.scanner.start({facingMode:'environment'},config,onBarcodeSuccess,()=>{});
+    }catch(firstErr){
+      const cameras=await Html5Qrcode.getCameras();
+      if(!cameras?.length)throw firstErr;
+      const pattern=/(back|rear|environment|後置|背面)/i;
+      const cam=cameras.find(c=>pattern.test(c.label||''))||cameras[cameras.length-1];
+      $('#reader').innerHTML='';
+      state.scanner=new Html5Qrcode('reader',{verbose:false,formatsToSupport:formats});
+      await state.scanner.start(cam.id,config,onBarcodeSuccess,()=>{});
+    }
+    if(state.scannerCancelRequested){try{await state.scanner.stop()}catch{};return}
+    state.scannerRunning=true;state.scannerPaused=false;setScannerControlsDisabled(false);
+    $('#pauseScannerBtn').textContent='暫停';
+    const caps=state.scanner.getRunningTrackCapabilities?.()||{};
+    $('#torchBtn').disabled=!caps.torch;
+    if(caps.zoom){
+      const max=Number(caps.zoom.max||1);
+      for(const z of[1,2,3,4])$(`#zoom${z}Btn`).disabled=z>max;
+      await setZoom(Math.min(3,max));
+    }else{
+      for(const z of[1,2,3,4])$(`#zoom${z}Btn`).disabled=true;
+    }
+    try{await state.scanner.applyVideoConstraints({advanced:[{focusMode:'continuous'},{exposureMode:'continuous'}]})}catch{}
+  }catch(err){
+    state.scannerRunning=false;setScannerControlsDisabled(false);
+    setStatus('#scannerError',`相機無法啟動：${err?.message||err}`,'error');
+  }finally{state.scannerTransitioning=false}
 }
 function showScannerFeedback(result){clearTimeout(state.feedbackTimer);const el=$('#scannerFeedback');el.className=`scanner-feedback ${result.status}`;el.classList.remove('hidden');$('strong',el).textContent=result.lot||'—';$('span',el).textContent=result.status==='success'?'':result.message;const delay=result.status==='notfound'?2000:result.status==='duplicate'?1500:1100;state.feedbackTimer=setTimeout(()=>el.classList.add('hidden'),delay);$('#scannerItemCount').textContent=state.items.length}
 async function onBarcodeSuccess(decodedText){const value=normalizeLot(decodedText),now=Date.now();if(!value)return;if(state.lastScan.value===value&&now-state.lastScan.time<1800)return;state.lastScan={value,time:now};const result=addByLot(value,'scanner');showScannerFeedback(result)}
 async function setZoom(value){if(!state.scannerRunning||state.scannerTransitioning)return;try{await state.scanner.applyVideoConstraints({advanced:[{zoom:value}]});for(const z of[1,2,3,4])$(`#zoom${z}Btn`).classList.toggle('active',z===value)}catch{}}
 async function toggleScannerPause(){if(!state.scannerRunning||!state.scanner||state.scannerTransitioning)return;try{if(state.scannerPaused){state.scanner.resume();state.scannerPaused=false;$('#pauseScannerBtn').textContent='暫停'}else{state.scanner.pause(true);state.scannerPaused=true;$('#pauseScannerBtn').textContent='繼續'}}catch{}}
 async function toggleTorch(){if(state.scannerTransitioning)return;try{const current=$('#torchBtn').dataset.on==='1';await state.scanner.applyVideoConstraints({advanced:[{torch:!current}]});$('#torchBtn').dataset.on=current?'0':'1';$('#torchBtn').textContent=current?'🔦':'關燈'}catch{}}
-async function stopScanner(){state.scannerCancelRequested=true;if($('#scannerDialog').open)$('#scannerDialog').close();if(state.scannerTransitioning)return;state.scannerTransitioning=true;setScannerControlsDisabled(true);try{if(state.scannerRunning&&state.scanner)await state.scanner.stop();if(state.scanner)await state.scanner.clear()}catch{}finally{state.scanner=null;state.scannerRunning=false;state.scannerPaused=false;state.scannerTransitioning=false;setScannerControlsDisabled(false)}}
+async function stopScanner(){
+  state.scannerCancelRequested=true;
+  if($('#scannerDialog').open)$('#scannerDialog').close();
+  let guard=0;while(state.scannerTransitioning&&guard++<30)await new Promise(r=>setTimeout(r,50));
+  if(!state.scanner)return;
+  state.scannerTransitioning=true;setScannerControlsDisabled(true);
+  try{if(state.scannerRunning)await state.scanner.stop()}catch{}
+  try{await state.scanner.clear()}catch{}
+  state.scanner=null;state.scannerRunning=false;state.scannerPaused=false;state.scannerTransitioning=false;
+  setScannerControlsDisabled(false);
+}
+
 
 function spokenToDigits(raw){const map={'零':'0','〇':'0','一':'1','么':'1','二':'2','兩':'2','三':'3','四':'4','五':'5','六':'6','七':'7','八':'8','九':'9'};return String(raw||'').split('').map(c=>/\d/.test(c)?c:(map[c]||'')).join('')}
 $('#voiceLotBtn').addEventListener('click',()=>{
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$('#lotInput').setAttribute('inputmode','text');$('#lotInput').focus();showAddMessage('請使用 iPhone 鍵盤咪高峰說出 LOTNO。');return}
-  const rec=new SR();rec.lang='zh-HK';rec.interimResults=false;rec.maxAlternatives=1;$('#voiceLotBtn').disabled=true;rec.onresult=e=>{const raw=e.results?.[0]?.[0]?.transcript||'',lot=spokenToDigits(raw);$('#lotInput').value=lot;if(lot){const result=addByLot(lot,'voice');if(result.status!=='success')showAddMessage(`LOTNO ${lot} ${result.message}`,'error')}else showAddMessage('未能辨識 LOTNO。','error')};rec.onerror=()=>showAddMessage('語音輸入失敗。','error');rec.onend=()=>{$('#voiceLotBtn').disabled=false};try{rec.start()}catch{$('#voiceLotBtn').disabled=false}
+  setActiveMode('voice');
+  const input=$('#lotInput');
+  focusLotInput({textMode:true});
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){
+    showAddMessage('請按 iPhone 鍵盤的咪高峰，說出 LOTNO。');
+    return;
+  }
+  try{state.recognition?.abort?.()}catch{}
+  const rec=new SR();state.recognition=rec;
+  rec.lang='zh-HK';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=3;
+  $('#voiceLotBtn').disabled=true;
+  const applyTranscript=raw=>{
+    const lot=spokenToDigits(raw);
+    if(!lot)return;
+    input.value=lot;
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+    requestAnimationFrame(()=>{input.focus();try{input.setSelectionRange(lot.length,lot.length)}catch{}});
+  };
+  rec.onresult=e=>{
+    let raw='';for(let i=e.resultIndex;i<e.results.length;i++)raw+=e.results[i][0]?.transcript||'';
+    applyTranscript(raw);
+  };
+  rec.onerror=e=>{if(e.error!=='aborted'&&e.error!=='no-speech')showAddMessage('語音輸入失敗，請再試一次。','error')};
+  rec.onend=()=>{$('#voiceLotBtn').disabled=false;state.recognition=null;focusLotInput({textMode:true})};
+  try{rec.start()}catch{$('#voiceLotBtn').disabled=false;state.recognition=null;showAddMessage('未能啟動語音輸入。','error')}
 });
 
-function persistLight(){try{localStorage.setItem('ui-v07',JSON.stringify({customerCode:$('#customerCode').value,customerName:$('#customerName').value,customerAddress:$('#customerAddress').value,salesRate:$('#salesRate').value,currency:$('#currency').value,shipmentMethod:$('#shipmentMethod').value,customerTerms:$('#customerTerms').value,invoiceNo:$('#invoiceNo').value,invoiceDate:$('#invoiceDate').value,discount:$('#discountAmount').value,remark:$('#remark').value,items:state.items,soldLots:[...state.soldLots.entries()]}))}catch{}}
-function restoreLight(){try{const d=JSON.parse(localStorage.getItem('ui-v07')||'null');if(!d)return;for(const[id,key]of[['#customerCode','customerCode'],['#customerName','customerName'],['#customerAddress','customerAddress'],['#salesRate','salesRate'],['#currency','currency'],['#shipmentMethod','shipmentMethod'],['#customerTerms','customerTerms'],['#invoiceNo','invoiceNo'],['#invoiceDate','invoiceDate'],['#discountAmount','discount'],['#remark','remark']])if(d[key]!==undefined)$(id).value=d[key];if(Array.isArray(d.items)){state.items=d.items;let max=0;state.items.forEach((x,i)=>{if(!x.sequence)x.sequence=i+1;max=Math.max(max,x.sequence||0)});state.nextSequence=max+1}if(Array.isArray(d.soldLots))state.soldLots=new Map(d.soldLots)}catch{}}
+
+function persistLight(){try{localStorage.setItem('ui-v09',JSON.stringify({invoiceNo:$('#invoiceNo').value,invoiceDate:$('#invoiceDate').value,discount:$('#discountAmount').value,remark:$('#remark').value,items:state.items,soldLots:[...state.soldLots.entries()]}))}catch{}}
+function restoreLight(){try{const d=JSON.parse(localStorage.getItem('ui-v09')||'null');if(!d)return;for(const[id,key]of[['#invoiceNo','invoiceNo'],['#invoiceDate','invoiceDate'],['#discountAmount','discount'],['#remark','remark']])if(d[key]!==undefined)$(id).value=d[key];if(Array.isArray(d.items)){state.items=d.items;let max=0;state.items.forEach((x,i)=>{if(!x.sequence)x.sequence=i+1;max=Math.max(max,x.sequence||0)});state.nextSequence=max+1}if(Array.isArray(d.soldLots))state.soldLots=new Map(d.soldLots)}catch{}}
 ['#customerCode','#customerName','#customerAddress','#shipmentMethod','#customerTerms','#invoiceNo','#invoiceDate','#remark'].forEach(id=>$(id).addEventListener('change',persistLight));
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();state.installPrompt=e;$('#installBtn').classList.remove('hidden')});$('#installBtn').addEventListener('click',async()=>{if(state.installPrompt){state.installPrompt.prompt();state.installPrompt=null;$('#installBtn').classList.add('hidden')}});if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
-restoreLight();renderSelectedCustomer();renderItems();updateHeader();renderPreview();
+restoreLight();setActiveMode('manual');renderSelectedCustomer();renderItems();updateHeader();renderPreview();
