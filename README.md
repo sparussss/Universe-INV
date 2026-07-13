@@ -1,62 +1,29 @@
-# Universe Invoice PWA Prototype
+# Universe Invoice PWA v0.3
 
-這是可放到 GitHub Pages 的原型版，不需要 Mac、Xcode 或 App Store。
+本測試版新增：
 
-## 已完成的原型功能
-
-- 匯入每次展覽的 `.xls` / `.xlsx` 倉存表
-- Barcode = `LOTNO`
-- 產品圖片以 `ARTNO` 檔名共用
-- 支援 `PT-37499.jpg`、`PT-37499 AM.jpg`、`PT-37499 CT.jpg`
-- 無後綴圖為預設，可逐件切換圖片版本
-- 客戶、地址、Currency、Sales Rate
-- `Unit Price = ceil(PRICE × Sales Rate)`
+- 手機「檔案」App 選擇倉存 Excel
+- 手機「檔案」App 選擇客戶 Excel
+- Customer Code 自動移除所有空格
+- Column L 空白時 Sales Rate = 0.34
+- 依 Customer Code／公司名稱搜尋及選擇客戶
+- Barcode 即時掃描、1×／2×（裝置支援時）、手電筒
+- 拍照／選照片解碼 Barcode
 - 手動輸入 LOTNO
-- 相機 Barcode 掃描（視 Safari / iOS 支援而定）
-- 新增、指定位置插入、刪除、拖拉排序
-- 修改 Quantity、Unit Price、Discount Amount
-- Invoice 預覽
-- 使用 iOS 列印功能「儲存為 PDF」
-- Service Worker 基本離線外殼
+- DESC1–DESC6 作 Invoice Description
+- PRICE × Sales Rate 後永遠向上取整
+- 共用款號圖片及 Default / AM / CT 切換
+- 新增、插入、刪除、拖拉排序、PDF 預覽
 
-## 立即測試
+## 上傳 GitHub Pages
 
-內置示範資料：
+把此資料夾內所有檔案直接放到 Repository 根目錄，不要多包一層資料夾。
 
-- LOTNO：`133685`
-- ARTNO：`PT-37499`
-- U價：`3092`
-- Sales Rate：`0.34`
-- 計算：`ceil(3092 × 0.34) = 1052`
+更新後如仍見舊版：
 
-在「建立 Invoice」頁手動輸入 `133685` 即可測試。
+1. 在 Safari 開網站並重新載入。
+2. 刪除舊主畫面圖示。
+3. Safari「分享」→「加入主畫面」。
+4. 必要時到 iPhone「設定 → Safari → 進階 → 網站資料」刪除該 GitHub Pages 網站資料後再試。
 
-## GitHub Pages 上傳
-
-1. 在 GitHub 建立一個新 Repository，例如 `universe-invoice-pwa`。
-2. 將這個資料夾內所有檔案上傳到 Repository 根目錄。
-3. 進入 Repository 的 `Settings` → `Pages`。
-4. `Build and deployment` 選擇 `Deploy from a branch`。
-5. Branch 選 `main`，Folder 選 `/ (root)`，按 `Save`。
-6. 等待約一至數分鐘，GitHub 會提供網址。
-7. 用 iPhone / iPad Safari 開啟網址，按分享 →「加入主畫面」。
-
-## 重要限制
-
-- Excel 解析使用 SheetJS CDN。首次開啟及首次載入解析程式時需要網絡；載入後瀏覽器通常會快取。正式版應把 SheetJS 檔案直接放入專案，做到完全離線。
-- Safari 的 BarcodeDetector 支援因 iOS 版本而異，因此手動 LOTNO 永遠保留。
-- 目前資料主要存在頁面記憶體；重新整理會清除 Invoice 草稿及已匯入圖片。正式版下一步應加入 IndexedDB 永久保存。
-- 目前 PDF 使用瀏覽器列印功能，版面已作 A4 原型，但未完全逐像素複製正式 Invoice。
-
-## 下一階段建議
-
-1. IndexedDB 保存客戶、圖片、展覽、產品、Invoice 草稿及歷史。
-2. 將 SheetJS 本地化，完整離線匯入 `.xls`。
-3. 完整複製正式 Sales Invoice PDF 的分頁及版面。
-4. 增加客戶 Excel 匯入。
-5. 加入展覽清單、封存及 Invoice History。
-
-
-## v0.2 Barcode 掃描測試
-
-此版已改用 html5-qrcode，支援 Code 128／Code 39／EAN／UPC／ITF。必須部署到 HTTPS 網址（例如 GitHub Pages），不能直接點開本機 HTML 測相機。首次開啟需有網絡載入掃描程式；之後瀏覽器通常會快取。請允許相機權限，使用後置相機，將條碼橫向置於掃描框內。掃描成功後會自動以內容作 LOTNO 加入 Invoice，並可連續掃描。
+相機必須使用 HTTPS 網址。GitHub Pages 符合要求。

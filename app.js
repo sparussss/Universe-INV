@@ -1,293 +1,57 @@
-const $ = (s, root=document) => root.querySelector(s);
-const $$ = (s, root=document) => [...root.querySelectorAll(s)];
-const money = new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2});
+const $=(s,root=document)=>root.querySelector(s);const $$=(s,root=document)=>[...root.querySelectorAll(s)];
+const state={products:new Map(),customers:new Map(),images:new Map(),items:[],insertAt:null,scanner:null,scannerRunning:false,scannerPaused:false,lastScan:{value:'',time:0},installPrompt:null};
+const sample={lotNo:'133685',artNo:'PT-37499',price:3092,unit:'PC',descriptions:['2.10Y750','1-AMCTOCT25x9-10.75ct','6-CDMRD(B2)-0.05ct']};
+const sampleCustomer={code:'JP1221',company:'ICHIMARU JEWELRY CO., LTD',address:'31-21, 2-CHOME YUSHIMA, BUNKYO-KU, TOKYO\n113-0034, JAPAN',rate:0.34,terms:'COD'};
+state.products.set(sample.lotNo,sample);state.customers.set(sampleCustomer.code,sampleCustomer);
+function normalizeKey(v){return String(v??'').trim()}function normalizeArticle(v){return normalizeKey(v).toUpperCase()}function normalizeCustomerCode(v){return String(v??'').replace(/\s+/g,'').trim().toUpperCase()}
+function field(row,names){const keys=Object.keys(row);for(const name of names){const k=keys.find(x=>x.trim().toUpperCase()===name);if(k)return row[k]}return''}
+function setStatus(id,text,type=''){const el=$(id);el.textContent=text;el.className='notice'+(type?' '+type:'')}
+function formatCurrency(v){const c=$('#currency').value||'USD';return new Intl.NumberFormat('en-US',{style:'currency',currency:c,minimumFractionDigits:2}).format(v||0)}
+function updateHeader(){const t=calcTotals();$('#productCount').textContent=state.products.size;$('#customerCount').textContent=state.customers.size;$('#invoiceCount').textContent=state.items.length;$('#headerTotal').textContent=formatCurrency(t.total)}
+$('#invoiceDate').value=new Date().toISOString().slice(0,10);
+$$('.tab').forEach(btn=>btn.addEventListener('click',()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.tab-panel').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$('#'+btn.dataset.tab).classList.add('active');if(btn.dataset.tab==='invoice')renderSelectedCustomer();if(btn.dataset.tab==='preview')renderPreview()}));
 
-const state = {
-  products: new Map(),
-  images: new Map(),
-  items: [],
-  insertAt: null,
-  scanner: null,
-  scannerRunning: false,
-  scannerPaused: false,
-  lastScan: { value: '', time: 0 },
-  installPrompt: null
-};
+async function readWorkbook(file){if(typeof XLSX==='undefined')throw new Error('Excel 解析程式未載入。請連接網絡並重新開啟。');const data=await file.arrayBuffer();return XLSX.read(data,{type:'array',cellDates:false})}
+$('#excelInput').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{const wb=await readWorkbook(file);const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{defval:''});const map=new Map();let invalid=0;for(const row of rows){const lot=normalizeKey(field(row,['LOTNO','LOT NO','LOT.NO.']));if(!lot)continue;const art=normalizeArticle(field(row,['ARTNO','ART NO','ARTICLE NO']));const price=Number(field(row,['PRICE','U PRICE','UPRICE']));if(!art||!Number.isFinite(price)){invalid++;continue}const descriptions=[];for(let i=1;i<=6;i++){const v=normalizeKey(field(row,[`DESC${i}`,`DESCRIPTION${i}`]));if(v)descriptions.push(v)}map.set(lot,{lotNo:lot,artNo:art,price,unit:normalizeKey(field(row,['UNIT']))||'PC',descriptions})}if(!map.size)throw new Error('找不到有效 LOTNO / ARTNO / PRICE 欄位。');state.products=map;setStatus('#excelStatus',`已匯入 ${file.name}：${map.size} 件貨品${invalid?`；略過 ${invalid} 行無效資料`:''}。`,'ok');updateHeader();persistLight()}catch(err){setStatus('#excelStatus',`匯入失敗：${err.message}`,'error')}});
 
-const sample = {lotNo:'133685', artNo:'PT-37499', price:3092, unit:'PC', descriptions:['2.10Y750','1-AMCTOCT25x9-10.75ct','6-CDMRD(B2)-0.05ct']};
-state.products.set(sample.lotNo,sample);
+$('#customerExcelInput').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{const wb=await readWorkbook(file);const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});const map=new Map();let started=false,skipped=0;for(const r of rows){const code=normalizeCustomerCode(r[0]);const company=normalizeKey(r[1]);if(!started){if(code.includes('CUSTOMER')||company.toUpperCase().includes('COMPANY')){started=true;continue}if(!code||!company)continue;started=true}if(!code||!company){skipped++;continue}const addressParts=[r[2],r[3],r[4]].map(normalizeKey).filter(Boolean);const rawRate=r[11];const parsed=Number(rawRate);const rate=rawRate===''||rawRate===null||rawRate===undefined||!Number.isFinite(parsed)?0.34:parsed;map.set(code,{code,company,address:addressParts.join('\n'),rate,terms:normalizeKey(r[10]),contact:normalizeKey(r[9]),phone:normalizeKey(r[6]),email:normalizeKey(r[8])})}if(!map.size)throw new Error('找不到有效 Customer Code / Company 資料。');state.customers=map;setStatus('#customerExcelStatus',`已匯入 ${file.name}：${map.size} 位客戶。空白 Sales Rate 已按 0.34 處理。`,'ok');updateHeader();persistLight()}catch(err){setStatus('#customerExcelStatus',`匯入失敗：${err.message}`,'error')}});
 
-function normalizeKey(v){ return String(v ?? '').trim(); }
-function normalizeArticle(v){ return normalizeKey(v).toUpperCase(); }
-function field(row, names){
-  const keys = Object.keys(row);
-  for(const name of names){ const k=keys.find(x=>x.trim().toUpperCase()===name); if(k) return row[k]; }
-  return '';
-}
-function setStatus(id,text,isError=false){ const el=$(id); el.textContent=text; el.style.background=isError?'#fff1f0':'#f4f7fb'; el.style.color=isError?'#b42318':'#4d596f'; }
-function updateHeader(){
-  $('#productCount').textContent=state.products.size;
-  $('#imageCount').textContent=[...state.images.values()].reduce((a,b)=>a+b.length,0);
-  $('#invoiceCount').textContent=state.items.length;
-  $('#headerTotal').textContent=formatCurrency(calcTotals().total);
-}
-function formatCurrency(v){ const c=$('#currency').value || 'USD'; return new Intl.NumberFormat('en-US',{style:'currency',currency:c,minimumFractionDigits:2}).format(v||0); }
+function searchCustomers(query){const q=normalizeKey(query).toUpperCase();const qc=normalizeCustomerCode(query);if(!q)return[];return [...state.customers.values()].filter(c=>c.code.includes(qc)||c.company.toUpperCase().includes(q)).slice(0,12)}
+function renderCustomerMatches(){const box=$('#customerMatches');const matches=searchCustomers($('#customerSearch').value);box.innerHTML='';if(!matches.length){box.innerHTML='<div class="notice">找不到客戶。</div>';return}matches.forEach(c=>{const b=document.createElement('button');b.className='customer-match';b.innerHTML=`<span><strong>${esc(c.code)} · ${esc(c.company)}</strong><small>${esc(c.address).replace(/\n/g,' · ')}</small></span><span>Rate ${c.rate}</span>`;b.addEventListener('click',()=>selectCustomer(c));box.appendChild(b)})}
+function selectCustomer(c){$('#customerCode').value=c.code;$('#customerName').value=c.company;$('#customerAddress').value=c.address;$('#salesRate').value=c.rate;$('#customerTerms').value=c.terms||'';$('#customerMatches').innerHTML='';$('#customerSearch').value='';repriceItems();renderSelectedCustomer();persistLight()}
+$('#findCustomerBtn').addEventListener('click',renderCustomerMatches);$('#customerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();renderCustomerMatches()}});$('#customerSearch').addEventListener('input',()=>{if($('#customerSearch').value.length>=2)renderCustomerMatches();else $('#customerMatches').innerHTML=''})
+function renderSelectedCustomer(){$('#selectedCustomerSummary').innerHTML=`<strong>${esc($('#customerCode').value)} · ${esc($('#customerName').value)}</strong><span>Sales Rate ${esc($('#salesRate').value)} · ${esc($('#currency').value)}</span>`}
 
-$('#invoiceDate').value = new Date().toISOString().slice(0,10);
+$('#imageInput').addEventListener('change',e=>{const files=[...e.target.files];let added=0;for(const file of files){const base=file.name.replace(/\.[^.]+$/,'').trim();const m=base.match(/^(.*?)(?:\s+([^\s]+))?$/);if(!m)continue;const art=normalizeArticle(m[1]);const variant=normalizeKey(m[2])||'Default';const url=URL.createObjectURL(file);const arr=state.images.get(art)||[];const old=arr.findIndex(x=>x.variant.toUpperCase()===variant.toUpperCase());if(old>=0){URL.revokeObjectURL(arr[old].url);arr.splice(old,1)}arr.push({variant,fileName:file.name,url});arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));state.images.set(art,arr);added++}setStatus('#imageStatus',`已載入 ${added} 張圖片；共 ${state.images.size} 個款號。`,'ok');renderImageLibrary();renderItems();updateHeader()});
+function renderImageLibrary(){const box=$('#imageLibrary');box.innerHTML='';[...state.images.entries()].slice(0,40).forEach(([art,imgs])=>{const chip=document.createElement('div');chip.className='image-chip';chip.innerHTML=`<img src="${imgs[0].url}"><span>${esc(art)} · ${imgs.map(x=>esc(x.variant)).join('/')}</span>`;box.appendChild(chip)})}
+function getImages(art){return state.images.get(normalizeArticle(art))||[]}function getSelectedImage(item){const imgs=getImages(item.artNo);return imgs.find(x=>x.variant===item.imageVariant)||imgs[0]}
+function placeholderSvg(text){return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="#eef2f6"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="18" fill="#64748b">${text}</text></svg>`)}`}
 
-$$('.tab').forEach(btn=>btn.addEventListener('click',()=>{
-  $$('.tab').forEach(x=>x.classList.remove('active')); $$('.tab-panel').forEach(x=>x.classList.remove('active'));
-  btn.classList.add('active'); $('#'+btn.dataset.tab).classList.add('active');
-  if(btn.dataset.tab==='preview') renderPreview();
-}));
-
-$('#excelInput').addEventListener('change', async e=>{
-  const file=e.target.files[0]; if(!file) return;
-  if(typeof XLSX==='undefined'){ setStatus('#excelStatus','Excel 解析程式未載入。首次開啟 PWA 時請連接網絡，重新載入後再匯入。',true); return; }
-  try{
-    const data=await file.arrayBuffer();
-    const wb=XLSX.read(data,{type:'array',cellDates:false});
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
-    const imported=new Map(); const invalid=[];
-    rows.forEach((row,i)=>{
-      const lot=normalizeKey(field(row,['LOTNO','LOT NO','LOT.NO.']));
-      const art=normalizeKey(field(row,['ARTNO','ARTICLE NO','ART NO']));
-      const rawPrice=field(row,['PRICE','U PRICE','UPRICE']);
-      const price=Number(String(rawPrice).replace(/[^0-9.-]/g,''));
-      if(!lot||!art||!Number.isFinite(price)){ if(Object.values(row).some(Boolean)) invalid.push(i+2); return; }
-      const descriptions=[];
-      for(let n=1;n<=7;n++){ const d=normalizeKey(field(row,[`DESC${n}`,`DESC ${n}`])); if(d) descriptions.push(d); }
-      const unit=normalizeKey(field(row,['UNIT']))||'PC';
-      imported.set(lot,{lotNo:lot,artNo:art,price,unit,descriptions});
-    });
-    state.products=imported;
-    setStatus('#excelStatus',`已匯入 ${imported.size} 件貨品${invalid.length?`；${invalid.length} 行資料未能讀取`:''}。檔案：${file.name}`);
-    updateHeader();
-  }catch(err){ console.error(err); setStatus('#excelStatus','匯入失敗：'+err.message,true); }
-});
-
-$('#imageInput').addEventListener('change', async e=>{
-  const files=[...e.target.files]; if(!files.length) return;
-  for(const file of files){
-    const base=file.name.replace(/\.[^.]+$/,'').trim();
-    const match=base.match(/^(.+?)(?:\s+([^\s].*))?$/);
-    const artNo=normalizeArticle(match?.[1]);
-    const variant=(match?.[2]||'Default').trim();
-    const url=URL.createObjectURL(file);
-    if(!state.images.has(artNo)) state.images.set(artNo,[]);
-    const list=state.images.get(artNo);
-    const idx=list.findIndex(x=>x.variant.toUpperCase()===variant.toUpperCase());
-    const rec={artNo,variant,url,fileName:file.name};
-    if(idx>=0) list[idx]=rec; else list.push(rec);
-  }
-  renderImageLibrary(); updateHeader();
-  setStatus('#imageStatus',`已匯入 / 更新 ${files.length} 張圖片。圖片以 ARTNO 檔名配對。`);
-});
-
-function renderImageLibrary(){
-  const box=$('#imageLibrary'); box.innerHTML='';
-  [...state.images.entries()].slice(0,20).forEach(([art,list])=>list.forEach(img=>{
-    const chip=document.createElement('div'); chip.className='image-chip';
-    chip.innerHTML=`<img src="${img.url}"><span>${art} · ${img.variant}</span>`; box.appendChild(chip);
-  }));
-}
-function getImages(artNo){ return state.images.get(normalizeArticle(artNo))||[]; }
-function getSelectedImage(item){
-  const imgs=getImages(item.artNo); if(!imgs.length) return null;
-  return imgs.find(x=>x.variant===item.imageVariant)||imgs.find(x=>x.variant.toLowerCase()==='default')||imgs[0];
-}
-function placeholderSvg(art){ return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><rect width="100%" height="100%" fill="#edf1f5"/><text x="50%" y="48%" text-anchor="middle" font-family="Arial" font-size="18" fill="#64748b">${art}</text><text x="50%" y="60%" text-anchor="middle" font-family="Arial" font-size="13" fill="#94a3b8">No image</text></svg>`)}`; }
-
-$('#addLotBtn').addEventListener('click',()=>addByLot($('#lotInput').value));
-$('#lotInput').addEventListener('keydown',e=>{if(e.key==='Enter') addByLot(e.currentTarget.value)});
-function addByLot(raw){
-  const lot=normalizeKey(raw); if(!lot) return;
-  const product=state.products.get(lot);
-  if(!product){ setStatus('#addMessage',`找不到 LOTNO ${lot}。請檢查 Excel 或重新輸入。`,true); return; }
-  if(state.items.some(x=>x.lotNo===lot) && !confirm(`LOTNO ${lot} 已在 Invoice 內，仍要再次加入嗎？`)) return;
-  const rate=Number($('#salesRate').value)||0;
-  const unitPrice=Math.ceil(product.price*rate);
-  const imgs=getImages(product.artNo);
-  const defaultVariant=(imgs.find(x=>x.variant.toLowerCase()==='default')||imgs[0])?.variant||'Default';
-  const item={id:crypto.randomUUID?.()||String(Date.now()+Math.random()),...product,qty:1,unitPrice,imageVariant:defaultVariant};
-  if(state.insertAt===null) state.items.push(item); else {state.items.splice(state.insertAt,0,item); state.insertAt=null;}
-  $('#lotInput').value=''; setStatus('#addMessage',`已加入 ${product.artNo} / LOTNO ${lot} / ${formatCurrency(unitPrice)}`);
-  renderItems();
-}
-
-function renderItems(){
-  const box=$('#invoiceItems'); box.innerHTML='';
-  if(!state.items.length){box.className='invoice-items empty-state';box.textContent='尚未加入貨品。';updateTotals();return}
-  box.className='invoice-items';
-  state.items.forEach((item,index)=>{
-    const node=$('#itemTemplate').content.firstElementChild.cloneNode(true); node.dataset.id=item.id;
-    $('.item-artno',node).textContent=item.artNo; $('.item-lot',node).textContent=`LOTNO ${item.lotNo}`;
-    $('.item-desc',node).textContent=item.descriptions.join('\n');
-    $('.item-price-note',node).textContent=`${item.price}u × ${Number($('#salesRate').value||0)} → ${formatCurrency(item.unitPrice)}`;
-    const img=getSelectedImage(item); $('.item-thumb',node).src=img?.url||placeholderSvg(item.artNo);
-    const sel=$('.variant-select',node); const imgs=getImages(item.artNo);
-    if(imgs.length){imgs.forEach(x=>{const o=document.createElement('option');o.value=x.variant;o.textContent=`圖片：${x.variant}`;o.selected=x.variant===item.imageVariant;sel.appendChild(o)})}
-    else{sel.innerHTML='<option>沒有圖片</option>';sel.disabled=true}
-    $('.qty-input',node).value=item.qty; $('.price-input',node).value=item.unitPrice;
-    sel.addEventListener('change',e=>{item.imageVariant=e.target.value;renderItems()});
-    $('.qty-input',node).addEventListener('change',e=>{item.qty=Math.max(1,Number(e.target.value)||1);updateTotals()});
-    $('.price-input',node).addEventListener('change',e=>{item.unitPrice=Math.max(0,Math.ceil(Number(e.target.value)||0));updateTotals()});
-    $('.delete-item',node).addEventListener('click',()=>{if(confirm(`刪除 ${item.artNo} / LOTNO ${item.lotNo}？`)){state.items.splice(index,1);renderItems()}});
-    $('.insert-above',node).addEventListener('click',()=>prepareInsert(index)); $('.insert-below',node).addEventListener('click',()=>prepareInsert(index+1));
-    node.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',String(index)));
-    node.addEventListener('dragover',e=>e.preventDefault());
-    node.addEventListener('drop',e=>{e.preventDefault();const from=Number(e.dataTransfer.getData('text/plain'));const moved=state.items.splice(from,1)[0];let to=index;if(from<to)to--;state.items.splice(to,0,moved);renderItems()});
-    box.appendChild(node);
-  }); updateTotals();
-}
-function prepareInsert(index){ state.insertAt=index; $('#lotInput').focus(); setStatus('#addMessage',`下一件貨會插入第 ${index+1} 行。請掃 Barcode 或輸入 LOTNO。`); }
-$('#clearInvoiceBtn').addEventListener('click',()=>{if(state.items.length&&confirm('確定清空目前 Invoice 草稿？')){state.items=[];renderItems()}});
-$('#discountAmount').addEventListener('input',updateTotals); $('#currency').addEventListener('change',()=>{renderItems();renderPreview()}); $('#salesRate').addEventListener('change',()=>{state.items.forEach(x=>x.unitPrice=Math.ceil(x.price*(Number($('#salesRate').value)||0)));renderItems()});
-function calcTotals(){ const qty=state.items.reduce((a,x)=>a+x.qty,0); const subtotal=state.items.reduce((a,x)=>a+x.qty*x.unitPrice,0); const discount=Math.max(0,Number($('#discountAmount').value)||0); return {qty,subtotal,discount,total:Math.max(0,subtotal-discount)}; }
-function updateTotals(){ const t=calcTotals(); $('#totalQty').textContent=t.qty; $('#subtotal').textContent=formatCurrency(t.subtotal);$('#discountDisplay').textContent=formatCurrency(t.discount);$('#grandTotal').textContent=formatCurrency(t.total);updateHeader(); }
-
-function numberToWords(n){
-  n=Math.floor(n); if(n===0)return 'ZERO';
-  const ones=['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];
-  const tens=['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
-  const under1000=x=>{let s='';if(x>=100){s+=ones[Math.floor(x/100)]+' HUNDRED ';x%=100}if(x>=20){s+=tens[Math.floor(x/10)]+' ';x%=10}if(x>0)s+=ones[x]+' ';return s.trim()};
-  const scales=[[1e9,'BILLION'],[1e6,'MILLION'],[1e3,'THOUSAND'],[1,'']]; let out=[];
-  for(const [v,name] of scales){if(n>=v){const part=Math.floor(n/v);n%=v;out.push(under1000(part)+(name?' '+name:''))}}return out.join(' ');
-}
+$('#addLotBtn').addEventListener('click',()=>addByLot($('#lotInput').value));$('#lotInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addByLot(e.target.value)}});
+function addByLot(raw){const lot=normalizeKey(raw).replace(/\s+/g,'');if(!lot)return setStatus('#addMessage','請輸入 LOTNO。','error');const product=state.products.get(lot);if(!product)return setStatus('#addMessage',`找不到 LOTNO ${lot}。請檢查倉存 Excel。`,'error');if(state.items.some(x=>x.lotNo===lot))return setStatus('#addMessage',`LOTNO ${lot} 已經在這張 Invoice。`,'error');const rate=Number($('#salesRate').value)||0;const unitPrice=Math.ceil(product.price*rate);const imgs=getImages(product.artNo);const item={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random()),...product,qty:1,unitPrice,imageVariant:imgs.find(x=>x.variant==='Default')?.variant||imgs[0]?.variant||'Default'};if(state.insertAt===null)state.items.push(item);else{state.items.splice(state.insertAt,0,item);state.insertAt=null}$('#lotInput').value='';setStatus('#addMessage',`已加入 ${product.artNo} / LOTNO ${lot} / ${formatCurrency(unitPrice)}`,'ok');renderItems();persistLight()}
+function renderItems(){const box=$('#invoiceItems');box.innerHTML='';if(!state.items.length){box.className='invoice-items empty-state';box.textContent='尚未加入貨品。';updateTotals();return}box.className='invoice-items';state.items.forEach((item,index)=>{const node=$('#itemTemplate').content.firstElementChild.cloneNode(true);node.dataset.id=item.id;$('.item-artno',node).textContent=item.artNo;$('.item-lot',node).textContent=`LOTNO ${item.lotNo}`;$('.item-desc',node).textContent=item.descriptions.join('\n');$('.item-price-note',node).textContent=`${item.price}u × ${Number($('#salesRate').value||0)} → ${formatCurrency(item.unitPrice)}`;$('.item-thumb',node).src=getSelectedImage(item)?.url||placeholderSvg(item.artNo);const sel=$('.variant-select',node);const imgs=getImages(item.artNo);if(imgs.length){imgs.forEach(x=>{const o=document.createElement('option');o.value=x.variant;o.textContent=`圖片：${x.variant}`;o.selected=x.variant===item.imageVariant;sel.appendChild(o)})}else{sel.innerHTML='<option>沒有圖片</option>';sel.disabled=true}$('.qty-input',node).value=item.qty;$('.price-input',node).value=item.unitPrice;sel.addEventListener('change',e=>{item.imageVariant=e.target.value;renderItems()});$('.qty-input',node).addEventListener('change',e=>{item.qty=Math.max(1,Number(e.target.value)||1);updateTotals();persistLight()});$('.price-input',node).addEventListener('change',e=>{item.unitPrice=Math.max(0,Math.ceil(Number(e.target.value)||0));updateTotals();persistLight()});$('.delete-item',node).addEventListener('click',()=>{if(confirm(`刪除 ${item.artNo} / LOTNO ${item.lotNo}？`)){state.items.splice(index,1);renderItems();persistLight()}});$('.insert-above',node).addEventListener('click',()=>prepareInsert(index));$('.insert-below',node).addEventListener('click',()=>prepareInsert(index+1));node.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',String(index)));node.addEventListener('dragover',e=>e.preventDefault());node.addEventListener('drop',e=>{e.preventDefault();const from=Number(e.dataTransfer.getData('text/plain'));const moved=state.items.splice(from,1)[0];let to=index;if(from<to)to--;state.items.splice(to,0,moved);renderItems();persistLight()});box.appendChild(node)});updateTotals()}
+function prepareInsert(index){state.insertAt=index;$('#lotInput').focus();setStatus('#addMessage',`下一件貨會插入第 ${index+1} 行。請掃 Barcode 或輸入 LOTNO。`)}
+$('#clearInvoiceBtn').addEventListener('click',()=>{if(state.items.length&&confirm('確定清空目前 Invoice 草稿？')){state.items=[];renderItems();persistLight()}});
+$('#discountAmount').addEventListener('input',()=>{updateTotals();persistLight()});$('#currency').addEventListener('change',()=>{renderItems();renderPreview();renderSelectedCustomer();persistLight()});$('#salesRate').addEventListener('change',()=>{repriceItems();renderSelectedCustomer();persistLight()});
+function repriceItems(){const rate=Number($('#salesRate').value)||0;state.items.forEach(x=>x.unitPrice=Math.ceil(x.price*rate));renderItems()}
+function calcTotals(){const qty=state.items.reduce((a,x)=>a+x.qty,0);const subtotal=state.items.reduce((a,x)=>a+x.qty*x.unitPrice,0);const discount=Math.max(0,Number($('#discountAmount').value)||0);return{qty,subtotal,discount,total:Math.max(0,subtotal-discount)}}function updateTotals(){const t=calcTotals();$('#totalQty').textContent=t.qty;$('#subtotal').textContent=formatCurrency(t.subtotal);$('#discountDisplay').textContent=formatCurrency(t.discount);$('#grandTotal').textContent=formatCurrency(t.total);updateHeader()}
+function numberToWords(n){n=Math.floor(n);if(n===0)return'ZERO';const ones=['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];const tens=['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];const under1000=x=>{let s='';if(x>=100){s+=ones[Math.floor(x/100)]+' HUNDRED ';x%=100}if(x>=20){s+=tens[Math.floor(x/10)]+' ';x%=10}if(x>0)s+=ones[x]+' ';return s.trim()};const scales=[[1e9,'BILLION'],[1e6,'MILLION'],[1e3,'THOUSAND'],[1,'']];let out=[];for(const[v,name]of scales){if(n>=v){const part=Math.floor(n/v);n%=v;out.push(under1000(part)+(name?' '+name:''))}}return out.join(' ')}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function renderPreview(){
-  const t=calcTotals();
-  const rows=state.items.map((x,i)=>`<tr><td>${i+1}</td><td><strong>Lot.No. : ${esc(x.lotNo)}</strong><br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="num">${x.qty}</td><td>${esc(x.unit)}</td><td class="num">${formatCurrency(x.unitPrice)}</td><td class="num">${formatCurrency(x.qty*x.unitPrice)}</td></tr>`).join('');
-  $('#invoiceDocument').innerHTML=`
-    <div class="doc-title">Sales Invoice</div>
-    <div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>Invoice Date : ${esc($('#invoiceDate').value)}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div>
-    <table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Quantity</th><th>Unit</th><th class="num">Unit Price</th><th class="num">Amount</th></tr><tr><th colspan="7">F.O.B. Value</th></tr></thead><tbody>${rows||'<tr><td colspan="7">No items</td></tr>'}</tbody></table>
-    <div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${formatCurrency(t.subtotal)}</strong></div>${t.discount?`<div><span>DISCOUNT AMOUNT</span><strong>(${formatCurrency(t.discount)})</strong></div>`:''}<div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${formatCurrency(t.total)}</strong></div></div><p><strong>Total Amount :</strong> ${esc($('#currency').value)} ${numberToWords(t.total)}</p><p><strong>Remark :</strong> ${esc($('#remark').value)}</p><br><div style="display:flex;justify-content:space-between"><span>Vender Signature : __________________</span><span>Accept By : __________________</span></div><p><strong>UNIVERSE GEMS &amp; JEWELLERY CO.</strong></p></div>`;
-}
-$('#refreshPreviewBtn').addEventListener('click',renderPreview); $('#printBtn').addEventListener('click',()=>{renderPreview();window.print()});
+function renderPreview(){const t=calcTotals();const rows=state.items.map((x,i)=>`<tr><td>${i+1}</td><td><strong>Lot.No. : ${esc(x.lotNo)}</strong><br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="num">${x.qty}</td><td>${esc(x.unit)}</td><td class="num">${formatCurrency(x.unitPrice)}</td><td class="num">${formatCurrency(x.qty*x.unitPrice)}</td></tr>`).join('');$('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">Sales Invoice</div><div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>Invoice Date : ${esc($('#invoiceDate').value)}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer Code : ${esc($('#customerCode').value)}<br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Quantity</th><th>Unit</th><th class="num">Unit Price</th><th class="num">Amount</th></tr><tr><th colspan="7">F.O.B. Value</th></tr></thead><tbody>${rows||'<tr><td colspan="7">No items</td></tr>'}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${formatCurrency(t.subtotal)}</strong></div>${t.discount?`<div><span>DISCOUNT AMOUNT</span><strong>(${formatCurrency(t.discount)})</strong></div>`:''}<div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${formatCurrency(t.total)}</strong></div></div><p><strong>Total Amount :</strong> ${esc($('#currency').value)} ${numberToWords(t.total)}</p><p><strong>Remark :</strong> ${esc($('#remark').value)}</p><br><div style="display:flex;justify-content:space-between"><span>Vender Signature : __________________</span><span>Accept By : __________________</span></div><p><strong>UNIVERSE GEMS &amp; JEWELLERY CO.</strong></p></div>`}
+$('#refreshPreviewBtn').addEventListener('click',renderPreview);$('#printBtn').addEventListener('click',()=>{renderPreview();window.print()});
 
-$('#scanBtn').addEventListener('click',startScanner);
-$('#closeScannerBtn').addEventListener('click',stopScanner);
-$('#pauseScannerBtn').addEventListener('click',toggleScannerPause);
-$('#torchBtn').addEventListener('click',toggleTorch);
+$('#scanBtn').addEventListener('click',startScanner);$('#closeScannerBtn').addEventListener('click',stopScanner);$('#pauseScannerBtn').addEventListener('click',toggleScannerPause);$('#torchBtn').addEventListener('click',toggleTorch);$('#zoom1Btn').addEventListener('click',()=>setZoom(1));$('#zoom2Btn').addEventListener('click',()=>setZoom(2));
+function cleanScannedLot(value){return normalizeKey(value).replace(/\s+/g,'')}function vibrateSuccess(){try{navigator.vibrate?.([80,40,80])}catch{}}
+async function startScanner(){const dlg=$('#scannerDialog');dlg.showModal();$('#scannerStatus').textContent='正在啟動後置相機…';['#pauseScannerBtn','#torchBtn','#zoom1Btn','#zoom2Btn'].forEach(x=>$(x).disabled=true);if(typeof Html5Qrcode==='undefined'){return $('#scannerStatus').textContent='掃描程式未載入。請連接網絡並重新開啟。'}try{state.scanner=state.scanner||new Html5Qrcode('reader',{verbose:false});const formats=[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,Html5QrcodeSupportedFormats.ITF];await state.scanner.start({facingMode:'environment'},{fps:15,qrbox:(w,h)=>({width:Math.floor(w*.78),height:Math.max(70,Math.min(105,Math.floor(h*.18)))}),aspectRatio:1.7778,formatsToSupport:formats,experimentalFeatures:{useBarCodeDetectorIfSupported:true}},onBarcodeSuccess,()=>{});state.scannerRunning=true;state.scannerPaused=false;$('#pauseScannerBtn').disabled=false;$('#scannerStatus').textContent='請把條碼橫向放在中央細長框內。';const caps=state.scanner.getRunningTrackCapabilities?.();if(caps?.torch)$('#torchBtn').disabled=false;if(caps?.zoom){$('#zoom1Btn').disabled=false;$('#zoom2Btn').disabled=false;await setZoom(Math.min(2,caps.zoom.max||2))}}catch(err){state.scannerRunning=false;$('#scannerStatus').textContent=`相機無法啟動：${err?.message||err}`}}
+async function onBarcodeSuccess(decodedText){const value=cleanScannedLot(decodedText);const now=Date.now();if(!value)return;if(state.lastScan.value===value&&now-state.lastScan.time<1800)return;state.lastScan={value,time:now};$('#lotInput').value=value;const before=state.items.length;addByLot(value);if(state.items.length>before){vibrateSuccess();$('#scannerStatus').textContent=`✓ 已加入 LOTNO ${value}，可繼續掃下一件。`}else $('#scannerStatus').textContent=$('#addMessage').textContent}
+async function setZoom(value){if(!state.scannerRunning)return;try{await state.scanner.applyVideoConstraints({advanced:[{zoom:value}]});$('#zoom1Btn').classList.toggle('active',value===1);$('#zoom2Btn').classList.toggle('active',value===2);$('#scannerStatus').textContent=`已切換 ${value}×。請保持條碼清晰對焦。`}catch{$('#scannerStatus').textContent='此裝置／瀏覽器不支援網頁相機變焦。'}}
+async function toggleScannerPause(){if(!state.scannerRunning||!state.scanner)return;try{if(state.scannerPaused){state.scanner.resume();state.scannerPaused=false;$('#pauseScannerBtn').textContent='暫停'}else{state.scanner.pause(true);state.scannerPaused=true;$('#pauseScannerBtn').textContent='繼續'}}catch{}}
+async function toggleTorch(){try{const current=$('#torchBtn').dataset.on==='1';await state.scanner.applyVideoConstraints({advanced:[{torch:!current}]});$('#torchBtn').dataset.on=current?'0':'1';$('#torchBtn').textContent=current?'🔦 手電筒':'🔦 關燈'}catch{$('#scannerStatus').textContent='此裝置不支援網頁控制手電筒。'}}
+async function stopScanner(){try{if(state.scannerRunning)await state.scanner.stop()}catch{}state.scannerRunning=false;state.scannerPaused=false;$('#scannerDialog').close();$('#reader').innerHTML=''}
+$('#photoScanBtn').addEventListener('click',()=>$('#photoScanInput').click());$('#photoScanInput').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;if(typeof Html5Qrcode==='undefined')return setStatus('#addMessage','掃描程式未載入。請連接網絡並重新開啟。','error');let scanner;try{scanner=new Html5Qrcode('reader',{verbose:false});const result=await scanner.scanFile(file,true);$('#lotInput').value=cleanScannedLot(result);addByLot(result)}catch(err){setStatus('#addMessage','照片內未能解讀 Barcode。可先在相片 App 裁切／放大條碼後再選取。','error')}finally{e.target.value='';try{scanner?.clear()}catch{}}});
 
-function vibrateSuccess(){
-  try{ navigator.vibrate?.([80,40,80]); }catch{}
-}
-function cleanScannedLot(value){
-  return normalizeKey(value).replace(/\s+/g,'');
-}
-async function startScanner(){
-  const dlg=$('#scannerDialog');
-  dlg.showModal();
-  $('#scannerStatus').textContent='正在啟動後置相機…';
-  $('#pauseScannerBtn').disabled=true;
-  $('#torchBtn').disabled=true;
-  if(typeof Html5Qrcode==='undefined'){
-    $('#scannerStatus').textContent='掃描程式未載入。請先連接網絡並重新開啟此頁。';
-    return;
-  }
-  try{
-    state.scanner = state.scanner || new Html5Qrcode('reader', { verbose:false });
-    const formats = [
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.ITF
-    ];
-    const config={
-      fps:12,
-      qrbox:(w,h)=>({width:Math.floor(w*0.88),height:Math.min(120,Math.floor(h*0.30))}),
-      aspectRatio:1.7778,
-      formatsToSupport:formats,
-      experimentalFeatures:{useBarCodeDetectorIfSupported:true}
-    };
-    await state.scanner.start(
-      {facingMode:'environment'},
-      config,
-      onBarcodeSuccess,
-      ()=>{}
-    );
-    state.scannerRunning=true;
-    state.scannerPaused=false;
-    $('#pauseScannerBtn').disabled=false;
-    $('#pauseScannerBtn').textContent='暫停';
-    $('#scannerStatus').textContent='請把條碼橫向放在綠色框內，保持約 10–20 cm 距離。';
-    const caps=state.scanner.getRunningTrackCapabilities?.();
-    if(caps?.torch) $('#torchBtn').disabled=false;
-  }catch(err){
-    state.scannerRunning=false;
-    $('#scannerStatus').textContent=`相機無法啟動：${err?.message||err}`;
-  }
-}
-
-async function onBarcodeSuccess(decodedText){
-  const value=cleanScannedLot(decodedText);
-  const now=Date.now();
-  if(!value) return;
-  if(state.lastScan.value===value && now-state.lastScan.time<1800) return;
-  state.lastScan={value,time:now};
-  $('#lotInput').value=value;
-  const product=state.products.get(value);
-  if(!product){
-    $('#scannerStatus').textContent=`找不到 LOTNO ${value}。請檢查倉存 Excel。`;
-    try{navigator.vibrate?.([250,120,250])}catch{}
-    return;
-  }
-  const before=state.items.length;
-  addByLot(value);
-  if(state.items.length>before){
-    vibrateSuccess();
-    $('#scannerStatus').textContent=`✓ 已加入 ${product.artNo} / LOTNO ${value}，可繼續掃下一件。`;
-  }
-}
-
-async function toggleScannerPause(){
-  if(!state.scannerRunning||!state.scanner) return;
-  try{
-    if(state.scannerPaused){
-      state.scanner.resume();
-      state.scannerPaused=false;
-      $('#pauseScannerBtn').textContent='暫停';
-      $('#scannerStatus').textContent='掃描已繼續。';
-    }else{
-      state.scanner.pause(true);
-      state.scannerPaused=true;
-      $('#pauseScannerBtn').textContent='繼續';
-      $('#scannerStatus').textContent='掃描已暫停。';
-    }
-  }catch(err){ $('#scannerStatus').textContent=`操作失敗：${err?.message||err}`; }
-}
-
-async function toggleTorch(){
-  if(!state.scannerRunning||!state.scanner) return;
-  const btn=$('#torchBtn');
-  const next=btn.dataset.on!=='true';
-  try{
-    await state.scanner.applyVideoConstraints({advanced:[{torch:next}]});
-    btn.dataset.on=String(next);
-    btn.textContent=next?'🔦 關手電筒':'🔦 手電筒';
-  }catch(err){ $('#scannerStatus').textContent='此裝置／瀏覽器未能控制手電筒。'; }
-}
-
-async function stopScanner(){
-  try{
-    if(state.scannerRunning && state.scanner){ await state.scanner.stop(); }
-    state.scanner?.clear();
-  }catch{}
-  state.scanner=null;
-  state.scannerRunning=false;
-  state.scannerPaused=false;
-  $('#torchBtn').dataset.on='false';
-  $('#torchBtn').textContent='🔦 手電筒';
-  const dlg=$('#scannerDialog'); if(dlg.open) dlg.close();
-}
-
-window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();state.installPrompt=e;$('#installBtn').classList.remove('hidden')});
-$('#installBtn').addEventListener('click',async()=>{if(state.installPrompt){state.installPrompt.prompt();await state.installPrompt.userChoice;state.installPrompt=null;$('#installBtn').classList.add('hidden')}});
-if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(console.error);
-renderItems(); renderPreview(); updateHeader();
+function persistLight(){try{localStorage.setItem('ui-v03',JSON.stringify({customerCode:$('#customerCode').value,customerName:$('#customerName').value,customerAddress:$('#customerAddress').value,salesRate:$('#salesRate').value,currency:$('#currency').value,shipmentMethod:$('#shipmentMethod').value,customerTerms:$('#customerTerms').value,invoiceNo:$('#invoiceNo').value,invoiceDate:$('#invoiceDate').value,discount:$('#discountAmount').value,remark:$('#remark').value,items:state.items}))}catch{}}
+function restoreLight(){try{const d=JSON.parse(localStorage.getItem('ui-v03')||'null');if(!d)return;for(const [id,key] of [['#customerCode','customerCode'],['#customerName','customerName'],['#customerAddress','customerAddress'],['#salesRate','salesRate'],['#currency','currency'],['#shipmentMethod','shipmentMethod'],['#customerTerms','customerTerms'],['#invoiceNo','invoiceNo'],['#invoiceDate','invoiceDate'],['#discountAmount','discount'],['#remark','remark']])if(d[key]!==undefined)$(id).value=d[key];if(Array.isArray(d.items))state.items=d.items}catch{}}
+['#customerCode','#customerName','#customerAddress','#shipmentMethod','#customerTerms','#invoiceNo','#invoiceDate','#remark'].forEach(id=>$(id).addEventListener('change',persistLight));
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();state.installPrompt=e;$('#installBtn').classList.remove('hidden')});$('#installBtn').addEventListener('click',async()=>{if(state.installPrompt){state.installPrompt.prompt();state.installPrompt=null;$('#installBtn').classList.add('hidden')}});if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+restoreLight();renderSelectedCustomer();renderItems();updateHeader();
