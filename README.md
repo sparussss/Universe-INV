@@ -13,3 +13,10 @@
 ## GitHub Pages 更新
 
 把 ZIP 解壓後的所有檔案直接上傳到 Repository 根目錄，覆蓋舊版。若仍顯示舊版本，刪除主畫面舊 PWA，再由 Safari 重新加入主畫面。
+
+
+## v0.6 修正版驗收
+- 左上角顯示 v0.6。
+- 相機改用 cameraId 選取後置鏡頭，避免 facingMode 錯誤。
+- 同款同變體圖片以無 (1)/(2) 的檔案優先。
+- 貨品圖片使用 object-fit: contain，完整顯示而不裁切。
