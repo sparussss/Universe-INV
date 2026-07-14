@@ -26,14 +26,16 @@ function advanceInvoiceSequence(confirmedNo){
 }
 setDefaultInvoiceNo();
 function status(id,msg,type=''){const el=$(id);el.textContent=msg;el.className='notice'+(type?' '+type:'')}
+function setImportCollapsed(key,collapsed=true){const card=document.querySelector(`[data-import-card="${key}"]`);if(!card)return;card.classList.toggle('collapsed',collapsed);const btn=card.querySelector('.import-toggle');if(btn){btn.textContent=collapsed?'展開':'收合';btn.setAttribute('aria-expanded',String(!collapsed))}}
+$$('.import-toggle').forEach(btn=>btn.addEventListener('click',()=>{const card=btn.closest('.import-card');setImportCollapsed(card?.dataset.importCard,!card.classList.contains('collapsed'))}));
 function field(row,names){const keys=Object.keys(row);for(const n of names){const k=keys.find(x=>x.trim().toUpperCase()===n);if(k)return row[k]}return''}
 function fmt(v){return new Intl.NumberFormat('en-US',{style:'currency',currency:$('#currency').value||'USD',minimumFractionDigits:2}).format(Number(v)||0)}
 function totals(){const qty=state.items.reduce((a,x)=>a+x.qty,0),sub=state.items.reduce((a,x)=>a+x.qty*x.unitPrice,0),discount=Math.max(0,Number($('#discountAmount').value)||0);return{qty,sub,discount,total:Math.max(0,sub-discount)}}
 function updateTotals(){const t=totals();$('#totalQty').textContent=t.qty;$('#subtotal').textContent=fmt(t.sub);$('#discountDisplay').textContent=fmt(t.discount);$('#grandTotal').textContent=fmt(t.total);$('#productCount').textContent=state.products.size;$('#customerCount').textContent=state.customers.size;$('#invoiceCount').textContent=state.items.length;$('#headerTotal').textContent=fmt(t.total)}
 $$('.tab').forEach(b=>b.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.tab-panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.tab).classList.add('active');if(b.dataset.tab==='invoice')renderCustomerSummary();if(b.dataset.tab==='preview')renderPreview()});
 async function readWB(file){if(typeof XLSX==='undefined')throw new Error('Excel 程式未載入');return XLSX.read(await file.arrayBuffer(),{type:'array'})}
-$('#stockInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{defval:''});state.stockRows=rows;state.stockHeaders=Object.keys(rows[0]||{});const map=new Map();for(const r of rows){const lot=norm(field(r,['LOTNO']));const art=normArt(field(r,['ARTNO']));const price=Number(field(r,['PRICE']));if(!lot||!art||!Number.isFinite(price))continue;const desc=[];for(let i=1;i<=6;i++){const v=norm(field(r,[`DESC${i}`]));if(v)desc.push(v)}map.set(lot,{lotNo:lot,artNo:art,price,unit:norm(field(r,['UNIT']))||'PC',article:norm(field(r,['ARTICLE']))||'',descriptions:desc,desc2:norm(field(r,['DESC2']))})}state.products=map;status('#stockStatus',`已匯入 ${f.name}：${map.size} 件貨品。`,'ok');updateTotals()}catch(err){status('#stockStatus','匯入失敗：'+err.message,'error')}};
-$('#customerInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();for(const r of rows){const code=normCode(r[0]),company=norm(r[1]);if(!code||!company||code.includes('CUSTOMER'))continue;const raw=r[11],num=Number(raw),rate=(raw===''||!Number.isFinite(num))?0.34:num;map.set(code,{code,company,address:[r[2],r[3],r[4]].map(norm).filter(Boolean).join('\n'),rate,terms:norm(r[10])})}state.customers=map;status('#customerStatus',`已匯入 ${f.name}：${map.size} 位客戶。`,'ok');updateTotals()}catch(err){status('#customerStatus','匯入失敗：'+err.message,'error')}};
+$('#stockInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{defval:''});state.stockRows=rows;state.stockHeaders=Object.keys(rows[0]||{});const map=new Map();for(const r of rows){const lot=norm(field(r,['LOTNO']));const art=normArt(field(r,['ARTNO']));const price=Number(field(r,['PRICE']));if(!lot||!art||!Number.isFinite(price))continue;const desc=[];for(let i=1;i<=6;i++){const v=norm(field(r,[`DESC${i}`]));if(v)desc.push(v)}map.set(lot,{lotNo:lot,artNo:art,price,unit:norm(field(r,['UNIT']))||'PC',article:norm(field(r,['ARTICLE']))||'',descriptions:desc,desc2:norm(field(r,['DESC2']))})}state.products=map;status('#stockStatus',`已匯入 ${f.name}：${map.size} 件貨品。`,'ok');setImportCollapsed('stock',true);updateTotals()}catch(err){status('#stockStatus','匯入失敗：'+err.message,'error');setImportCollapsed('stock',false)}};
+$('#customerInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();for(const r of rows){const code=normCode(r[0]),company=norm(r[1]);if(!code||!company||code.includes('CUSTOMER'))continue;const raw=r[11],num=Number(raw),rate=(raw===''||!Number.isFinite(num))?0.34:num;map.set(code,{code,company,address:[r[2],r[3],r[4]].map(norm).filter(Boolean).join('\n'),rate,terms:norm(r[10])})}state.customers=map;status('#customerStatus',`已匯入 ${f.name}：${map.size} 位客戶。`,'ok');setImportCollapsed('customer',true);updateTotals()}catch(err){status('#customerStatus','匯入失敗：'+err.message,'error');setImportCollapsed('customer',false)}};
 const FALLBACK_STONE_ALIASES=new Map([
   ['SKY BTO','SKY BT'],['SKY BT','SKY BT'],['QAM','AM'],['YCT','CT'],['BTO','BT'],['LBT','L.BT'],['MG','MG'],['AQ','AQ'],['PAM','P.AM'],['PTQ','PTR'],['GPD','PD'],['GPS','G.AM'],['GAM','G.AM'],['TZ','TZ']
 ]);
@@ -71,10 +73,10 @@ $('#stoneMappingInput').onchange=async e=>{
     }
     if(!aliases.size)throw new Error('對照表沒有有效資料');
     state.stoneAliases=aliases;state.stoneMappingName=f.name;
-    status('#stoneMappingStatus',`已匯入 ${f.name}：${aliases.size} 個石種代碼對照。`,'ok');
+    status('#stoneMappingStatus',`已匯入 ${f.name}：${aliases.size} 個石種代碼對照。`,'ok');setImportCollapsed('stone',true);
     for(const item of state.items){item.imageVariant=chooseVariant(item)}
     renderItems();
-  }catch(err){status('#stoneMappingStatus','匯入失敗：'+(err.message||err),'error')}
+  }catch(err){status('#stoneMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('stone',false)}
 };
 $('#articleMappingInput').onchange=async e=>{
   const f=e.target.files[0];if(!f)return;
@@ -90,8 +92,8 @@ $('#articleMappingInput').onchange=async e=>{
     }
     if(!map.size)throw new Error('找不到 Prefix / Article Description 對照。');
     state.articleMap=map;state.articleMappingName=f.name;
-    status('#articleMappingStatus',`已匯入 ${f.name}：${map.size} 個 Article 對照。`,'ok');
-  }catch(err){status('#articleMappingStatus','匯入失敗：'+(err.message||err),'error')}
+    status('#articleMappingStatus',`已匯入 ${f.name}：${map.size} 個 Article 對照。`,'ok');setImportCollapsed('article',true);
+  }catch(err){status('#articleMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('article',false)}
 };
 
 $('#invoiceTemplateInput').onchange=async e=>{
@@ -102,12 +104,12 @@ $('#invoiceTemplateInput').onchange=async e=>{
     const test=new ExcelJS.Workbook();await test.xlsx.load(buf.slice(0));
     if(!test.worksheets.length)throw new Error('範本沒有工作表');
     state.invoiceTemplateBuffer=buf;state.invoiceTemplateName=f.name;
-    status('#invoiceTemplateStatus',`已匯入 ${f.name}；匯出 Excel Invoice 時會套用此範本。`,'ok');
-  }catch(err){state.invoiceTemplateBuffer=null;status('#invoiceTemplateStatus','匯入失敗：'+(err.message||err),'error')}
+    status('#invoiceTemplateStatus',`已匯入 ${f.name}；匯出 Excel Invoice 時會套用此範本。`,'ok');setImportCollapsed('template',true);
+  }catch(err){state.invoiceTemplateBuffer=null;status('#invoiceTemplateStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('template',false)}
 };
 
 function parseImage(file){const stem=file.name.replace(/\.[^.]+$/,'').trim();const arts=[...new Set([...state.products.values()].map(x=>x.artNo))].sort((a,b)=>b.length-a.length);const art=arts.find(a=>stem.toUpperCase()===a||stem.toUpperCase().startsWith(a+' '));if(!art)return null;let variant=stem.slice(art.length).trim().replace(/\s*\(\d+\)$/,'').trim()||'Default';const dup=(stem.match(/\((\d+)\)$/)||[])[1];return{art,variant,dup:dup?Number(dup):0,file}}
-$('#imageFolderInput').onchange=e=>{const map=new Map();for(const f of e.target.files){const p=parseImage(f);if(!p)continue;const key=p.art+'|'+p.variant.toUpperCase(),existing=map.get(key);if(!existing||p.dup<existing.dup)map.set(key,p)}state.imageFiles=new Map();for(const p of map.values()){const arr=state.imageFiles.get(p.art)||[];arr.push({variant:p.variant,url:URL.createObjectURL(p.file),fileName:p.file.name,file:p.file});state.imageFiles.set(p.art,arr)}for(const arr of state.imageFiles.values())arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));status('#imageStatus',`已選擇圖片 Folder：${e.target.files.length} 張圖片，配對 ${state.imageFiles.size} 個款號。`,'ok');renderItems()};
+$('#imageFolderInput').onchange=e=>{const map=new Map();for(const f of e.target.files){const p=parseImage(f);if(!p)continue;const key=p.art+'|'+p.variant.toUpperCase(),existing=map.get(key);if(!existing||p.dup<existing.dup)map.set(key,p)}state.imageFiles=new Map();for(const p of map.values()){const arr=state.imageFiles.get(p.art)||[];arr.push({variant:p.variant,url:URL.createObjectURL(p.file),fileName:p.file.name,file:p.file});state.imageFiles.set(p.art,arr)}for(const arr of state.imageFiles.values())arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));status('#imageStatus',`已選擇圖片 Folder：${e.target.files.length} 張圖片，配對 ${state.imageFiles.size} 個款號。`,'ok');setImportCollapsed('images',true);renderItems()};
 function searchCustomers(q){const s=norm(q).toUpperCase(),c=normCode(q);return [...state.customers.values()].filter(x=>x.code.includes(c)||x.company.toUpperCase().includes(s)).slice(0,10)}
 function showMatches(){const box=$('#customerMatches'),m=searchCustomers($('#customerSearch').value);box.innerHTML='';if(!m.length){box.innerHTML='<div class="notice">找不到客戶。</div>';return}m.forEach(c=>{const b=document.createElement('button');b.className='customer-match';b.innerHTML=`<span><strong>${esc(c.code)} · ${esc(c.company)}</strong><small>${esc(c.address).replace(/\n/g,' · ')}</small></span><span>${c.rate}</span>`;b.onclick=()=>selectCustomer(c);box.appendChild(b)})}
 function selectCustomer(c){$('#customerCode').value=c.code;$('#customerName').value=c.company;$('#customerAddress').value=c.address;$('#salesRate').value=c.rate;$('#customerTerms').value=c.terms;$('#customerMatches').innerHTML='';$('#customerSearch').value='';reprice();renderCustomerSummary()}

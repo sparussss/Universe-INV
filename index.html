@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.9.5</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.9.6</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -40,59 +40,89 @@
 
   <section id="setup" class="tab-panel active">
     <div class="two-col">
-      <article class="card">
-        <h3>1. 匯入倉存 Excel</h3>
-        <label>展覽名稱
-          <input id="exhibitionName" value="Jewellery Show">
-        </label>
-        <label class="file-picker">選擇倉存表 (.xls / .xlsx)
-          <input id="stockInput" type="file" accept=".xls,.xlsx">
-        </label>
-        <div id="stockStatus" class="notice">尚未選擇倉存表。</div>
-        <details><summary>倉存欄位規則</summary><p>Barcode = LOTNO、圖片 = ARTNO、U價 = PRICE、Invoice Description = DESC1 至 DESC6、單位 = UNIT。</p></details>
+      <article class="card import-card" data-import-card="stock">
+        <div class="import-card-head">
+          <h3>1. 匯入倉存 Excel</h3>
+          <button type="button" class="import-toggle ghost" aria-expanded="true">收合</button>
+        </div>
+        <div id="stockStatus" class="notice import-summary">尚未選擇倉存表。</div>
+        <div class="import-card-body">
+          <label>展覽名稱
+            <input id="exhibitionName" value="Jewellery Show">
+          </label>
+          <label class="file-picker">選擇倉存表 (.xls / .xlsx)
+            <input id="stockInput" type="file" accept=".xls,.xlsx">
+          </label>
+          <details><summary>倉存欄位規則</summary><p>Barcode = LOTNO、圖片 = ARTNO、U價 = PRICE、Invoice Description = DESC1 至 DESC6、單位 = UNIT。</p></details>
+        </div>
       </article>
 
-      <article class="card">
-        <h3>2. 匯入客戶 Excel</h3>
-        <label class="file-picker">選擇客戶表 (.xls / .xlsx)
-          <input id="customerInput" type="file" accept=".xls,.xlsx">
-        </label>
-        <div id="customerStatus" class="notice">尚未選擇客戶表。</div>
-        <details><summary>客戶欄位規則</summary><p>Column A = Customer Code、B = Company、C–E = 地址、L = Sales Rate；Column L 空白使用 0.34。</p></details>
+      <article class="card import-card" data-import-card="customer">
+        <div class="import-card-head">
+          <h3>2. 匯入客戶 Excel</h3>
+          <button type="button" class="import-toggle ghost" aria-expanded="true">收合</button>
+        </div>
+        <div id="customerStatus" class="notice import-summary">尚未選擇客戶表。</div>
+        <div class="import-card-body">
+          <label class="file-picker">選擇客戶表 (.xls / .xlsx)
+            <input id="customerInput" type="file" accept=".xls,.xlsx">
+          </label>
+          <details><summary>客戶欄位規則</summary><p>Column A = Customer Code、B = Company、C–E = 地址、L = Sales Rate；Column L 空白使用 0.34。</p></details>
+        </div>
       </article>
     </div>
 
-    <article class="card">
-      <h3>3. 選擇圖片 Folder</h3>
-      <label class="file-picker">選擇圖片 Folder
-        <input id="imageFolderInput" type="file" accept="image/*" multiple webkitdirectory directory>
-      </label>
-      <div id="imageStatus" class="notice">尚未選擇圖片 Folder。</div>
+    <article class="card import-card" data-import-card="images">
+      <div class="import-card-head">
+        <h3>3. 選擇圖片 Folder</h3>
+        <button type="button" class="import-toggle ghost" aria-expanded="true">收合</button>
+      </div>
+      <div id="imageStatus" class="notice import-summary">尚未選擇圖片 Folder。</div>
+      <div class="import-card-body">
+        <label class="file-picker">選擇圖片 Folder
+          <input id="imageFolderInput" type="file" accept="image/*" multiple webkitdirectory directory>
+        </label>
+      </div>
     </article>
 
     <div class="two-col">
-      <article class="card">
-        <h3>4. 匯入 Stone List &amp; Shape &amp; Cutting</h3>
-        <label class="file-picker">選擇對照表 (.xlsx)
-          <input id="stoneMappingInput" type="file" accept=".xlsx,.xls">
-        </label>
-        <div id="stoneMappingStatus" class="notice">尚未選擇 Stone List 對照表；暫時使用內置基本對照。</div>
+      <article class="card import-card" data-import-card="stone">
+        <div class="import-card-head">
+          <h3>4. 匯入 Stone List &amp; Shape &amp; Cutting</h3>
+          <button type="button" class="import-toggle ghost" aria-expanded="true">收合</button>
+        </div>
+        <div id="stoneMappingStatus" class="notice import-summary">尚未選擇 Stone List 對照表；暫時使用內置基本對照。</div>
+        <div class="import-card-body">
+          <label class="file-picker">選擇對照表 (.xlsx)
+            <input id="stoneMappingInput" type="file" accept=".xlsx,.xls">
+          </label>
+        </div>
       </article>
 
-      <article class="card">
-        <h3>5. 匯入 Article Mapping</h3>
-        <label class="file-picker">選擇 Article Mapping (.xlsx)
-          <input id="articleMappingInput" type="file" accept=".xlsx,.xls">
-        </label>
-        <div id="articleMappingStatus" class="notice">尚未選擇 Article Mapping；暫時使用內置基本對照。</div>
+      <article class="card import-card" data-import-card="article">
+        <div class="import-card-head">
+          <h3>5. 匯入 Article Mapping</h3>
+          <button type="button" class="import-toggle ghost" aria-expanded="true">收合</button>
+        </div>
+        <div id="articleMappingStatus" class="notice import-summary">尚未選擇 Article Mapping；暫時使用內置基本對照。</div>
+        <div class="import-card-body">
+          <label class="file-picker">選擇 Article Mapping (.xlsx)
+            <input id="articleMappingInput" type="file" accept=".xlsx,.xls">
+          </label>
+        </div>
       </article>
 
-      <article class="card">
-        <h3>6. 匯入 Invoice 範本</h3>
-        <label class="file-picker">選擇 Invoice 範本 (.xlsx)
-          <input id="invoiceTemplateInput" type="file" accept=".xlsx">
-        </label>
-        <div id="invoiceTemplateStatus" class="notice">尚未選擇 Invoice 範本；匯出時會使用 PWA 標準格式。</div>
+      <article class="card import-card" data-import-card="template">
+        <div class="import-card-head">
+          <h3>6. 匯入 Invoice 範本</h3>
+          <button type="button" class="import-toggle ghost" aria-expanded="true">收合</button>
+        </div>
+        <div id="invoiceTemplateStatus" class="notice import-summary">尚未選擇 Invoice 範本；匯出時會使用 PWA 標準格式。</div>
+        <div class="import-card-body">
+          <label class="file-picker">選擇 Invoice 範本 (.xlsx)
+            <input id="invoiceTemplateInput" type="file" accept=".xlsx">
+          </label>
+        </div>
       </article>
     </div>
 

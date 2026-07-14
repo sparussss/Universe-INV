@@ -94,3 +94,17 @@ button{width:auto}
 }
 
 .preview-actions{flex-wrap:wrap}.preview-actions #excelExportStatus{flex-basis:100%;margin:8px 0 0}.preview-actions .hidden{display:none}
+
+
+/* v0.9.6 collapsible import cards */
+.import-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.import-card-head h3{margin:0}
+.import-toggle{flex:0 0 auto;width:auto;white-space:nowrap}
+.import-summary{margin:12px 0 0}
+.import-card-body{margin-top:12px}
+.import-card.collapsed{padding-bottom:14px}
+.import-card.collapsed .import-card-body{display:none}
+.import-card.collapsed .import-summary{margin-bottom:0}
+.import-card.collapsed .import-toggle::before{content:'▸ ';font-size:.9em}
+.import-card:not(.collapsed) .import-toggle::before{content:'▾ ';font-size:.9em}
+@media(max-width:520px){.import-card-head{align-items:flex-start}.import-card-head h3{font-size:20px;line-height:1.25}.import-toggle{padding:8px 12px}}
