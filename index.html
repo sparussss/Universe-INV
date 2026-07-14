@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.9.2</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.9.3</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -129,7 +129,12 @@
   </section>
 
   <section id="preview" class="tab-panel">
-    <article class="card preview-actions no-print"><button id="refreshPreviewBtn">更新預覽</button><button id="printBtn" class="primary">列印 / 儲存 PDF</button></article>
+    <article class="card preview-actions no-print">
+      <button id="refreshPreviewBtn">更新預覽</button>
+      <button id="exportExcelBtn">匯出 Excel Invoice</button>
+      <button id="printBtn" class="primary">列印 / 儲存 PDF</button>
+      <div id="excelExportStatus" class="notice hidden"></div>
+    </article>
     <article id="invoiceDocument" class="invoice-document"></article>
   </section>
 </main>
@@ -167,6 +172,7 @@
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

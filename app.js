@@ -35,7 +35,7 @@ async function readWB(file){if(typeof XLSX==='undefined')throw new Error('Excel 
 $('#stockInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{defval:''});state.stockRows=rows;state.stockHeaders=Object.keys(rows[0]||{});const map=new Map();for(const r of rows){const lot=norm(field(r,['LOTNO']));const art=normArt(field(r,['ARTNO']));const price=Number(field(r,['PRICE']));if(!lot||!art||!Number.isFinite(price))continue;const desc=[];for(let i=1;i<=6;i++){const v=norm(field(r,[`DESC${i}`]));if(v)desc.push(v)}map.set(lot,{lotNo:lot,artNo:art,price,unit:norm(field(r,['UNIT']))||'PC',descriptions:desc,desc2:norm(field(r,['DESC2']))})}state.products=map;status('#stockStatus',`已匯入 ${f.name}：${map.size} 件貨品。`,'ok');updateTotals()}catch(err){status('#stockStatus','匯入失敗：'+err.message,'error')}};
 $('#customerInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();for(const r of rows){const code=normCode(r[0]),company=norm(r[1]);if(!code||!company||code.includes('CUSTOMER'))continue;const raw=r[11],num=Number(raw),rate=(raw===''||!Number.isFinite(num))?0.34:num;map.set(code,{code,company,address:[r[2],r[3],r[4]].map(norm).filter(Boolean).join('\n'),rate,terms:norm(r[10])})}state.customers=map;status('#customerStatus',`已匯入 ${f.name}：${map.size} 位客戶。`,'ok');updateTotals()}catch(err){status('#customerStatus','匯入失敗：'+err.message,'error')}};
 function parseImage(file){const stem=file.name.replace(/\.[^.]+$/,'').trim();const arts=[...new Set([...state.products.values()].map(x=>x.artNo))].sort((a,b)=>b.length-a.length);const art=arts.find(a=>stem.toUpperCase()===a||stem.toUpperCase().startsWith(a+' '));if(!art)return null;let variant=stem.slice(art.length).trim().replace(/\s*\(\d+\)$/,'').trim()||'Default';const dup=(stem.match(/\((\d+)\)$/)||[])[1];return{art,variant,dup:dup?Number(dup):0,file}}
-$('#imageFolderInput').onchange=e=>{const map=new Map();for(const f of e.target.files){const p=parseImage(f);if(!p)continue;const key=p.art+'|'+p.variant.toUpperCase(),existing=map.get(key);if(!existing||p.dup<existing.dup)map.set(key,p)}state.imageFiles=new Map();for(const p of map.values()){const arr=state.imageFiles.get(p.art)||[];arr.push({variant:p.variant,url:URL.createObjectURL(p.file),fileName:p.file.name});state.imageFiles.set(p.art,arr)}for(const arr of state.imageFiles.values())arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));status('#imageStatus',`已選擇圖片 Folder：${e.target.files.length} 張圖片，配對 ${state.imageFiles.size} 個款號。`,'ok');renderItems()};
+$('#imageFolderInput').onchange=e=>{const map=new Map();for(const f of e.target.files){const p=parseImage(f);if(!p)continue;const key=p.art+'|'+p.variant.toUpperCase(),existing=map.get(key);if(!existing||p.dup<existing.dup)map.set(key,p)}state.imageFiles=new Map();for(const p of map.values()){const arr=state.imageFiles.get(p.art)||[];arr.push({variant:p.variant,url:URL.createObjectURL(p.file),fileName:p.file.name,file:p.file});state.imageFiles.set(p.art,arr)}for(const arr of state.imageFiles.values())arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));status('#imageStatus',`已選擇圖片 Folder：${e.target.files.length} 張圖片，配對 ${state.imageFiles.size} 個款號。`,'ok');renderItems()};
 function searchCustomers(q){const s=norm(q).toUpperCase(),c=normCode(q);return [...state.customers.values()].filter(x=>x.code.includes(c)||x.company.toUpperCase().includes(s)).slice(0,10)}
 function showMatches(){const box=$('#customerMatches'),m=searchCustomers($('#customerSearch').value);box.innerHTML='';if(!m.length){box.innerHTML='<div class="notice">找不到客戶。</div>';return}m.forEach(c=>{const b=document.createElement('button');b.className='customer-match';b.innerHTML=`<span><strong>${esc(c.code)} · ${esc(c.company)}</strong><small>${esc(c.address).replace(/\n/g,' · ')}</small></span><span>${c.rate}</span>`;b.onclick=()=>selectCustomer(c);box.appendChild(b)})}
 function selectCustomer(c){$('#customerCode').value=c.code;$('#customerName').value=c.company;$('#customerAddress').value=c.address;$('#salesRate').value=c.rate;$('#customerTerms').value=c.terms;$('#customerMatches').innerHTML='';$('#customerSearch').value='';reprice();renderCustomerSummary()}
@@ -90,7 +90,115 @@ $('#scrollLatestBtn').onclick=()=>$('#invoiceItems').scrollTo({top:0,behavior:'s
 function reprice(){const r=Number($('#salesRate').value)||0;state.items.forEach(x=>x.unitPrice=Math.ceil(x.price*r));renderItems()}$('#salesRate').onchange=reprice;$('#currency').onchange=()=>{renderItems();renderCustomerSummary()};$('#discountAmount').oninput=updateTotals;
 function words(n){return String(Math.floor(n))}
 function renderPreview(){const t=totals(),rows=state.items.map((x,i)=>`<tr><td>${i+1}</td><td><strong>Lot.No. : ${esc(x.lotNo)}</strong><br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="num">${x.qty}</td><td>${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`).join('');$('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">Sales Invoice</div><div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>Invoice Date : ${esc($('#invoiceDate').value)}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Quantity</th><th>Unit</th><th class="num">Unit Price</th><th class="num">Amount</th></tr><tr><th colspan="7">F.O.B. Value</th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${fmt(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p><strong>Remark :</strong> ${esc($('#remark').value)}</p></div>`}
-$('#refreshPreviewBtn').onclick=renderPreview;$('#printBtn').onclick=()=>{renderPreview();window.print()};
+
+function setExcelExportStatus(message,type=''){
+  const el=$('#excelExportStatus');
+  if(!el)return;
+  el.textContent=message;
+  el.className='notice'+(type?' '+type:'');
+}
+function downloadBlob(blob,fileName){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=fileName;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+}
+async function imageFileToJpegDataUrl(file,maxSide=620,quality=.82){
+  if(!file)return null;
+  const source=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=source});
+    const scale=Math.min(1,maxSide/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+    const w=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
+    const h=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+    const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
+    return canvas.toDataURL('image/jpeg',quality);
+  }finally{URL.revokeObjectURL(source)}
+}
+function applyThinBorder(cell){cell.border={top:{style:'thin',color:{argb:'FFD1D5DB'}},left:{style:'thin',color:{argb:'FFD1D5DB'}},bottom:{style:'thin',color:{argb:'FFD1D5DB'}},right:{style:'thin',color:{argb:'FFD1D5DB'}}}}
+async function exportInvoiceExcel(){
+  if(!state.items.length){alert('Invoice 沒有貨品。');return}
+  if(typeof ExcelJS==='undefined'){setExcelExportStatus('Excel 輸出程式未載入，請連接網絡後重新開啟。','error');return}
+  const btn=$('#exportExcelBtn');btn.disabled=true;setExcelExportStatus('正在建立 Excel Invoice…');
+  try{
+    const wb=new ExcelJS.Workbook();
+    wb.creator='Universe Invoice PWA';wb.created=new Date();
+    const ws=wb.addWorksheet('Sales Invoice',{pageSetup:{paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.25,right:.25,top:.35,bottom:.35,header:.15,footer:.15}}});
+    ws.views=[{showGridLines:false}];
+    ws.columns=[
+      {key:'no',width:5},{key:'image',width:15},{key:'article',width:17},{key:'description',width:34},
+      {key:'qty',width:9},{key:'unit',width:8},{key:'unitPrice',width:14},{key:'amount',width:14}
+    ];
+    const merge=(range,value,size=10,bold=false,align='left')=>{ws.mergeCells(range);const c=ws.getCell(range.split(':')[0]);c.value=value;c.font={name:'Arial',size,bold};c.alignment={vertical:'middle',horizontal:align,wrapText:true};return c};
+    merge('A1:H1','UNIVERSE GEMS & JEWELLERY CO.',17,true,'center');ws.getRow(1).height=24;
+    merge('A2:H2','UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING,',9,false,'center');
+    merge('A3:H3','NO. 1 HOK YUEN STREET EAST, HUNG HOM, KOWLOON, HONG KONG',9,false,'center');
+    merge('A4:H4','TEL : (852) 2363 5409     FAX : (852) 2765 0343',9,false,'center');
+    ws.getRow(5).height=7;
+    merge('A6:D6','Sales Invoice',16,true,'left');
+    merge('E6:H6',`No. : ${norm($('#invoiceNo').value)}`,11,true,'right');
+    merge('A7:D7',`Invoice Date : ${norm($('#invoiceDate').value)}`,10);
+    merge('E7:H7',`Currency : ${norm($('#currency').value)}`,10,false,'right');
+    merge('A8:D8',`Shipment Method : ${norm($('#shipmentMethod').value)}`,10);
+    merge('E8:H8',`Customer Code : ${norm($('#customerCode').value)}`,10,false,'right');
+    merge('A9:D11',`Customer : ${norm($('#customerName').value)}\n${norm($('#customerAddress').value)}`,10,true);
+    merge('E9:H11',"Vender's Banker\nThe Hong Kong & Shanghai Banking Corporation Ltd.\nAddress : 41 Ma Tau Wai Road, Hung Hom, Kowloon, Hong Kong\nA/C # : 012-593570-001\nA/C Name : Universe Gems & Jewellery Co.",9,false,'left');
+    [9,10,11].forEach(r=>ws.getRow(r).height=20);
+    const headerRow=13;
+    const headers=['No.','Picture','Article No.','Description','Quantity','Unit','Unit Price','Amount'];
+    headers.forEach((h,i)=>{const c=ws.getCell(headerRow,i+1);c.value=h;c.font={name:'Arial',size:10,bold:true};c.alignment={horizontal:'center',vertical:'middle',wrapText:true};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE5E7EB'}};applyThinBorder(c)});
+    ws.getRow(headerRow).height=24;
+    ws.mergeCells(`A${headerRow+1}:H${headerRow+1}`);const fob=ws.getCell(headerRow+1,1);fob.value='F.O.B. Value';fob.font={name:'Arial',size:10,bold:true};fob.alignment={vertical:'middle'};applyThinBorder(fob);ws.getRow(headerRow+1).height=21;
+    let row=headerRow+2;
+    let missingImages=0;
+    for(let i=0;i<state.items.length;i++){
+      const item=state.items[i],start=row,end=row+5;
+      for(let r=start;r<=end;r++)ws.getRow(r).height=18;
+      ws.mergeCells(`A${start}:A${end}`);ws.getCell(`A${start}`).value=i+1;
+      ws.getCell(`A${start}`).alignment={horizontal:'center',vertical:'middle'};
+      ws.mergeCells(`B${start}:B${end}`);
+      ws.mergeCells(`C${start}:C${end}`);ws.getCell(`C${start}`).value=`Lot.No. : ${item.lotNo}\n${item.artNo}`;ws.getCell(`C${start}`).font={name:'Arial',size:10,bold:true};ws.getCell(`C${start}`).alignment={vertical:'top',wrapText:true};
+      ws.mergeCells(`D${start}:D${end}`);ws.getCell(`D${start}`).value=item.descriptions.join('\n');ws.getCell(`D${start}`).alignment={vertical:'top',wrapText:true};ws.getCell(`D${start}`).font={name:'Arial',size:10};
+      ws.mergeCells(`E${start}:E${end}`);ws.getCell(`E${start}`).value=item.qty;ws.getCell(`E${start}`).alignment={horizontal:'center',vertical:'middle'};
+      ws.mergeCells(`F${start}:F${end}`);ws.getCell(`F${start}`).value=item.unit;ws.getCell(`F${start}`).alignment={horizontal:'center',vertical:'middle'};
+      ws.mergeCells(`G${start}:G${end}`);ws.getCell(`G${start}`).value=item.unitPrice;ws.getCell(`G${start}`).numFmt='$#,##0.00';ws.getCell(`G${start}`).alignment={horizontal:'right',vertical:'middle'};
+      ws.mergeCells(`H${start}:H${end}`);ws.getCell(`H${start}`).value={formula:`E${start}*G${start}`,result:item.qty*item.unitPrice};ws.getCell(`H${start}`).numFmt='$#,##0.00';ws.getCell(`H${start}`).alignment={horizontal:'right',vertical:'middle'};
+      for(let r=start;r<=end;r++)for(let c=1;c<=8;c++)applyThinBorder(ws.getCell(r,c));
+      const selected=getImg(item);
+      if(selected?.file){
+        try{
+          const dataUrl=await imageFileToJpegDataUrl(selected.file);
+          const imageId=wb.addImage({base64:dataUrl,extension:'jpeg'});
+          ws.addImage(imageId,{tl:{col:1.08,row:start-1+.12},br:{col:1.92,row:end-.12},editAs:'oneCell'});
+        }catch{missingImages++}
+      }else missingImages++;
+      row=end+1;
+      setExcelExportStatus(`正在建立 Excel Invoice… ${i+1}/${state.items.length}`);
+    }
+    const t=totals();
+    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value='Total Quantity';ws.getCell(`A${row}`).font={bold:true};ws.getCell(`G${row}`).value=t.qty;ws.getCell(`G${row}`).font={bold:true};ws.getCell(`G${row}`).alignment={horizontal:'right'};
+    row++;
+    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value='Sub Total';ws.getCell(`A${row}`).font={bold:true};ws.getCell(`G${row}`).value=t.sub;ws.getCell(`G${row}`).numFmt='$#,##0.00';ws.getCell(`G${row}`).font={bold:true};ws.getCell(`G${row}`).alignment={horizontal:'right'};
+    row++;
+    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value='Discount Amount';ws.getCell(`G${row}`).value=t.discount;ws.getCell(`G${row}`).numFmt='$#,##0.00';ws.getCell(`G${row}`).alignment={horizontal:'right'};
+    row++;
+    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value=`Total : (${norm($('#currency').value)})`;ws.getCell(`A${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).value=t.total;ws.getCell(`G${row}`).numFmt='$#,##0.00';ws.getCell(`G${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).alignment={horizontal:'right'};
+    row+=2;
+    merge(`A${row}:H${row}`,`Remark : ${norm($('#remark').value)}`,10);
+    row+=2;merge(`A${row}:D${row}`,'Vender Signature : ______________________',10);merge(`E${row}:H${row}`,'Accept By : ______________________',10,false,'right');
+    ws.headerFooter.oddFooter='Page &P of &N';
+    ws.pageSetup.printArea=`A1:H${row}`;
+    ws.autoFilter={from:{row:headerRow,column:1},to:{row:headerRow,column:8}};
+    const buffer=await wb.xlsx.writeBuffer();
+    const inv=norm($('#invoiceNo').value)||formatInvoiceNo();
+    downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`${inv}.xlsx`);
+    setExcelExportStatus(`Excel Invoice 已輸出${missingImages?`；${missingImages} 款沒有嵌入圖片`:''}。`,'ok');
+  }catch(err){console.error(err);setExcelExportStatus('Excel 輸出失敗：'+(err.message||err),'error')}
+  finally{btn.disabled=false}
+}
+
+$('#refreshPreviewBtn').onclick=renderPreview;$('#exportExcelBtn').onclick=exportInvoiceExcel;$('#printBtn').onclick=()=>{renderPreview();window.print()};
 function updateZoomButtons(){
   $$('.zoom-btn').forEach(btn=>{
     const z=Number(btn.dataset.zoom);

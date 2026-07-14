@@ -1,4 +1,4 @@
-# Universe Invoice PWA v0.9.2
+# Universe Invoice PWA v0.9.3
 
 UI 改善：
 - 移除頂部說明句。
@@ -29,12 +29,18 @@ UI 改善：
 - 加入或輸入錯誤後，自動回到 LOTNO 輸入框。
 
 
-## v0.9.2 修正
+## v0.9.3 修正
 - 修正相機已支援 1×–10×，但 2×、3×、4× 按鈕仍被停用的問題。
 - 不再依賴 html5-qrcode 的 isScanning 屬性，改由 PWA 自行追蹤相機運作狀態。
 - 切換倍率後重新讀取實際相機 Zoom 設定。
 
 
-## v0.9.2
+## v0.9.3
 - 修正 iPhone 小螢幕表單、Invoice 貨品控制及 Invoice 預覽橫向溢出。
 - PDF 預覽表格使用固定欄寬及自動換行。
+
+
+## v0.9.3
+- Invoice 預覽頁新增「匯出 Excel Invoice」
+- Excel 包含公司抬頭、客戶資料、款號圖片、LOTNO、DESC1–DESC6、Qty、Unit、Unit Price、Amount、Subtotal、Discount、Total
+- 圖片會按 Invoice 當時選擇的版本嵌入 xlsx
