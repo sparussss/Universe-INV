@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.9.3</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.9.4</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -70,8 +70,26 @@
       <div id="imageStatus" class="notice">尚未選擇圖片 Folder。</div>
     </article>
 
+    <div class="two-col">
+      <article class="card">
+        <h3>4. 匯入 Stone List &amp; Shape &amp; Cutting</h3>
+        <label class="file-picker">選擇對照表 (.xlsx)
+          <input id="stoneMappingInput" type="file" accept=".xlsx,.xls">
+        </label>
+        <div id="stoneMappingStatus" class="notice">尚未選擇 Stone List 對照表；暫時使用內置基本對照。</div>
+      </article>
+
+      <article class="card">
+        <h3>5. 匯入 Invoice 範本</h3>
+        <label class="file-picker">選擇 Invoice 範本 (.xlsx)
+          <input id="invoiceTemplateInput" type="file" accept=".xlsx">
+        </label>
+        <div id="invoiceTemplateStatus" class="notice">尚未選擇 Invoice 範本；匯出時會使用 PWA 標準格式。</div>
+      </article>
+    </div>
+
     <article class="card">
-      <h3>4. 選擇客戶</h3>
+      <h3>6. 選擇客戶</h3>
       <div class="search-row">
         <input id="customerSearch" placeholder="輸入 Customer Code 或公司名稱" autocomplete="off">
         <button id="findCustomerBtn">搜尋</button>

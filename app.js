@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1}};
+const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],stoneAliases:new Map(),stoneMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1}};
 const norm=v=>String(v??'').trim(),normCode=v=>String(v??'').replace(/\s+/g,'').toUpperCase(),normArt=v=>norm(v).toUpperCase();
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>{const d=new Date(),y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`};$('#invoiceDate').value=today();
@@ -32,8 +32,47 @@ function totals(){const qty=state.items.reduce((a,x)=>a+x.qty,0),sub=state.items
 function updateTotals(){const t=totals();$('#totalQty').textContent=t.qty;$('#subtotal').textContent=fmt(t.sub);$('#discountDisplay').textContent=fmt(t.discount);$('#grandTotal').textContent=fmt(t.total);$('#productCount').textContent=state.products.size;$('#customerCount').textContent=state.customers.size;$('#invoiceCount').textContent=state.items.length;$('#headerTotal').textContent=fmt(t.total)}
 $$('.tab').forEach(b=>b.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.tab-panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.tab).classList.add('active');if(b.dataset.tab==='invoice')renderCustomerSummary();if(b.dataset.tab==='preview')renderPreview()});
 async function readWB(file){if(typeof XLSX==='undefined')throw new Error('Excel 程式未載入');return XLSX.read(await file.arrayBuffer(),{type:'array'})}
-$('#stockInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{defval:''});state.stockRows=rows;state.stockHeaders=Object.keys(rows[0]||{});const map=new Map();for(const r of rows){const lot=norm(field(r,['LOTNO']));const art=normArt(field(r,['ARTNO']));const price=Number(field(r,['PRICE']));if(!lot||!art||!Number.isFinite(price))continue;const desc=[];for(let i=1;i<=6;i++){const v=norm(field(r,[`DESC${i}`]));if(v)desc.push(v)}map.set(lot,{lotNo:lot,artNo:art,price,unit:norm(field(r,['UNIT']))||'PC',descriptions:desc,desc2:norm(field(r,['DESC2']))})}state.products=map;status('#stockStatus',`已匯入 ${f.name}：${map.size} 件貨品。`,'ok');updateTotals()}catch(err){status('#stockStatus','匯入失敗：'+err.message,'error')}};
+$('#stockInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{defval:''});state.stockRows=rows;state.stockHeaders=Object.keys(rows[0]||{});const map=new Map();for(const r of rows){const lot=norm(field(r,['LOTNO']));const art=normArt(field(r,['ARTNO']));const price=Number(field(r,['PRICE']));if(!lot||!art||!Number.isFinite(price))continue;const desc=[];for(let i=1;i<=6;i++){const v=norm(field(r,[`DESC${i}`]));if(v)desc.push(v)}map.set(lot,{lotNo:lot,artNo:art,price,unit:norm(field(r,['UNIT']))||'PC',article:norm(field(r,['ARTICLE']))||'',descriptions:desc,desc2:norm(field(r,['DESC2']))})}state.products=map;status('#stockStatus',`已匯入 ${f.name}：${map.size} 件貨品。`,'ok');updateTotals()}catch(err){status('#stockStatus','匯入失敗：'+err.message,'error')}};
 $('#customerInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();for(const r of rows){const code=normCode(r[0]),company=norm(r[1]);if(!code||!company||code.includes('CUSTOMER'))continue;const raw=r[11],num=Number(raw),rate=(raw===''||!Number.isFinite(num))?0.34:num;map.set(code,{code,company,address:[r[2],r[3],r[4]].map(norm).filter(Boolean).join('\n'),rate,terms:norm(r[10])})}state.customers=map;status('#customerStatus',`已匯入 ${f.name}：${map.size} 位客戶。`,'ok');updateTotals()}catch(err){status('#customerStatus','匯入失敗：'+err.message,'error')}};
+const FALLBACK_STONE_ALIASES=new Map([
+  ['SKY BTO','SKY BT'],['SKY BT','SKY BT'],['QAM','AM'],['YCT','CT'],['BTO','BT'],['LBT','L.BT'],['MG','MG'],['AQ','AQ'],['PAM','P.AM'],['PTQ','PTR'],['GPD','PD'],['GPS','G.AM'],['GAM','G.AM'],['TZ','TZ']
+]);
+function activeStoneAliases(){return state.stoneAliases.size?state.stoneAliases:FALLBACK_STONE_ALIASES}
+$('#stoneMappingInput').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const wb=await readWB(f);
+    const sheetName=wb.SheetNames.find(n=>n.trim().toUpperCase()==='STONE LIST')||wb.SheetNames[0];
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:''});
+    const headerIndex=rows.findIndex(r=>r.some(v=>String(v).trim().toUpperCase()==='BREAKDOWN')&&r.some(v=>String(v).trim().toUpperCase()==='QUOTATION'));
+    if(headerIndex<0)throw new Error('找不到 BREAKDOWN / QUOTATION 欄位');
+    const header=rows[headerIndex].map(v=>String(v).trim().toUpperCase());
+    const bCol=header.indexOf('BREAKDOWN'),qCol=header.indexOf('QUOTATION');
+    const aliases=new Map();
+    for(const r of rows.slice(headerIndex+1)){
+      const breakdown=norm(r[bCol]),quotation=norm(r[qCol]);
+      if(!breakdown||!quotation)continue;
+      for(const code of breakdown.split(/[,，]/).map(norm).filter(Boolean))aliases.set(code.toUpperCase(),quotation.toUpperCase());
+    }
+    if(!aliases.size)throw new Error('對照表沒有有效資料');
+    state.stoneAliases=aliases;state.stoneMappingName=f.name;
+    status('#stoneMappingStatus',`已匯入 ${f.name}：${aliases.size} 個石種代碼對照。`,'ok');
+    for(const item of state.items){item.imageVariant=chooseVariant(item)}
+    renderItems();
+  }catch(err){status('#stoneMappingStatus','匯入失敗：'+(err.message||err),'error')}
+};
+$('#invoiceTemplateInput').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const buf=await f.arrayBuffer();
+    if(typeof ExcelJS==='undefined')throw new Error('Excel 範本程式未載入');
+    const test=new ExcelJS.Workbook();await test.xlsx.load(buf.slice(0));
+    if(!test.worksheets.length)throw new Error('範本沒有工作表');
+    state.invoiceTemplateBuffer=buf;state.invoiceTemplateName=f.name;
+    status('#invoiceTemplateStatus',`已匯入 ${f.name}；匯出 Excel Invoice 時會套用此範本。`,'ok');
+  }catch(err){state.invoiceTemplateBuffer=null;status('#invoiceTemplateStatus','匯入失敗：'+(err.message||err),'error')}
+};
+
 function parseImage(file){const stem=file.name.replace(/\.[^.]+$/,'').trim();const arts=[...new Set([...state.products.values()].map(x=>x.artNo))].sort((a,b)=>b.length-a.length);const art=arts.find(a=>stem.toUpperCase()===a||stem.toUpperCase().startsWith(a+' '));if(!art)return null;let variant=stem.slice(art.length).trim().replace(/\s*\(\d+\)$/,'').trim()||'Default';const dup=(stem.match(/\((\d+)\)$/)||[])[1];return{art,variant,dup:dup?Number(dup):0,file}}
 $('#imageFolderInput').onchange=e=>{const map=new Map();for(const f of e.target.files){const p=parseImage(f);if(!p)continue;const key=p.art+'|'+p.variant.toUpperCase(),existing=map.get(key);if(!existing||p.dup<existing.dup)map.set(key,p)}state.imageFiles=new Map();for(const p of map.values()){const arr=state.imageFiles.get(p.art)||[];arr.push({variant:p.variant,url:URL.createObjectURL(p.file),fileName:p.file.name,file:p.file});state.imageFiles.set(p.art,arr)}for(const arr of state.imageFiles.values())arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));status('#imageStatus',`已選擇圖片 Folder：${e.target.files.length} 張圖片，配對 ${state.imageFiles.size} 個款號。`,'ok');renderItems()};
 function searchCustomers(q){const s=norm(q).toUpperCase(),c=normCode(q);return [...state.customers.values()].filter(x=>x.code.includes(c)||x.company.toUpperCase().includes(s)).slice(0,10)}
@@ -49,7 +88,21 @@ $('#customerSearch').oninput=e=>{
   customerSearchTimer=setTimeout(showMatches,120);
 };
 function renderCustomerSummary(){const code=$('#customerCode').value,name=$('#customerName').value;$('#selectedCustomerSummary').innerHTML=code||name?`<strong>${esc(code)} · ${esc(name)}</strong><span>Sales Rate ${esc($('#salesRate').value)} · ${esc($('#currency').value)}</span>`:'尚未選擇客戶。'}
-function chooseVariant(p){const imgs=state.imageFiles.get(p.artNo)||[];if(!imgs.length)return'Default';const d=(p.desc2||'').toUpperCase();const aliases=[['QAM','AM'],['YCT','CT'],['BTO','BT'],['MG','MG'],['AQ','AQ'],['PAM','P.AM'],['PTQ','PTR'],['LBT','L.BT'],['SKY BTO','SKY BT']];for(const [code,v] of aliases)if(d.includes(code)){const hit=imgs.find(x=>x.variant.toUpperCase()===v.toUpperCase());if(hit)return hit.variant}return imgs.find(x=>x.variant==='Default')?.variant||imgs[0].variant}
+function chooseVariant(p){
+  const imgs=state.imageFiles.get(p.artNo)||[];if(!imgs.length)return'Default';
+  const d=(p.desc2||'').toUpperCase();
+  const hits=[];
+  for(const [code,variant] of [...activeStoneAliases().entries()].sort((a,b)=>b[0].length-a[0].length)){
+    const pos=d.indexOf(code.toUpperCase());if(pos>=0)hits.push({pos,variant:String(variant).toUpperCase()});
+  }
+  hits.sort((a,b)=>a.pos-b.pos);
+  const ordered=[...new Set(hits.map(x=>x.variant))];
+  const candidates=[];
+  if(ordered.length>1){candidates.push(ordered.join('+'));candidates.push([...ordered].reverse().join('+'))}
+  candidates.push(...ordered);
+  for(const wanted of candidates){const hit=imgs.find(x=>x.variant.toUpperCase()===wanted);if(hit)return hit.variant}
+  return imgs.find(x=>x.variant==='Default')?.variant||imgs[0].variant
+}
 function normalizeLotInput(raw){
   const map={'零':'0','〇':'0','一':'1','二':'2','兩':'2','两':'2','三':'3','四':'4','五':'5','六':'6','七':'7','八':'8','九':'9'};
   return String(raw??'')
@@ -117,11 +170,73 @@ async function imageFileToJpegDataUrl(file,maxSide=620,quality=.82){
   }finally{URL.revokeObjectURL(source)}
 }
 function applyThinBorder(cell){cell.border={top:{style:'thin',color:{argb:'FFD1D5DB'}},left:{style:'thin',color:{argb:'FFD1D5DB'}},bottom:{style:'thin',color:{argb:'FFD1D5DB'}},right:{style:'thin',color:{argb:'FFD1D5DB'}}}}
+
+function cloneStyle(v){try{return JSON.parse(JSON.stringify(v||{}))}catch{return v||{}}}
+function copyTemplateRowStyle(ws,sourceRow,targetRow){
+  const src=ws.getRow(sourceRow),dst=ws.getRow(targetRow);dst.height=src.height;
+  for(let c=1;c<=12;c++){
+    const s=src.getCell(c),d=dst.getCell(c);
+    d.style=cloneStyle(s.style);d.numFmt=s.numFmt;d.alignment=cloneStyle(s.alignment);d.border=cloneStyle(s.border);d.fill=cloneStyle(s.fill);d.font=cloneStyle(s.font);d.protection=cloneStyle(s.protection);
+  }
+}
+async function exportInvoiceFromTemplate(){
+  const wb=new ExcelJS.Workbook();await wb.xlsx.load(state.invoiceTemplateBuffer.slice(0));
+  const ws=wb.worksheets[0];if(!ws)throw new Error('範本沒有工作表');
+  ws.name='Invoice';
+  try{ws._media=[]}catch{}
+  // 清除舊貨品與總數區資料，但保留格式
+  for(let r=26;r<=Math.max(320,26+state.items.length*7+20);r++)for(let c=1;c<=12;c++)ws.getCell(r,c).value=null;
+  const inv=norm($('#invoiceNo').value)||formatInvoiceNo();
+  ws.getCell('J7').value=`INVOICE NO : ${inv}`;
+  ws.getCell('K7').value=norm($('#invoiceDate').value);
+  ws.getCell('C9').value=norm($('#customerName').value);
+  ws.getCell('K9').value=norm($('#customerCode').value);
+  ws.getCell('C14').value=norm($('#customerAddress').value);
+  ws.getCell('K17').value=norm($('#shipmentMethod').value);
+  ws.getCell('K19').value=norm($('#currency').value);
+  ws.getCell('K20').value=norm($('#customerTerms').value);
+  let missingImages=0;
+  const sourceStart=26,block=7;
+  for(let i=0;i<state.items.length;i++){
+    const item=state.items[i],start=sourceStart+i*block;
+    if(i>0)for(let rr=0;rr<block;rr++)copyTemplateRowStyle(ws,sourceStart+rr,start+rr);
+    ws.getCell(`A${start}`).value=i+1;
+    ws.getCell(`B${start}`).value=`Lot. No. : ${item.lotNo}`;
+    ws.getCell(`B${start+1}`).value=item.artNo;
+    ws.getCell(`D${start}`).value=item.article||'';
+    const lines=item.descriptions.slice(0,6);
+    for(let j=0;j<6;j++)ws.getCell(`D${start+1+j}`).value=lines[j]||'';
+    ws.getCell(`I${start}`).value=item.qty;
+    ws.getCell(`J${start}`).value=item.unit;
+    ws.getCell(`K${start}`).value=item.unitPrice;
+    ws.getCell(`L${start}`).value=item.qty*item.unitPrice;
+    const selected=getImg(item);
+    if(selected?.file){
+      try{
+        const dataUrl=await imageFileToJpegDataUrl(selected.file,700,.84);
+        const imageId=wb.addImage({base64:dataUrl,extension:'jpeg'});
+        ws.addImage(imageId,{tl:{col:1.05,row:start-1+.08},br:{col:2.95,row:start+block-1-.08},editAs:'oneCell'});
+      }catch{missingImages++}
+    }else missingImages++;
+    setExcelExportStatus(`正在套用 Invoice 範本… ${i+1}/${state.items.length}`);
+  }
+  const t=totals(),sumRow=sourceStart+state.items.length*block+1;
+  ws.getCell(`I${sumRow}`).value='Total Quantity';ws.getCell(`L${sumRow}`).value=t.qty;
+  ws.getCell(`I${sumRow+1}`).value='Sub Total';ws.getCell(`L${sumRow+1}`).value=t.sub;ws.getCell(`L${sumRow+1}`).numFmt='$#,##0.00';
+  ws.getCell(`I${sumRow+2}`).value='Discount';ws.getCell(`L${sumRow+2}`).value=t.discount;ws.getCell(`L${sumRow+2}`).numFmt='$#,##0.00';
+  ws.getCell(`I${sumRow+3}`).value=`Total (${norm($('#currency').value)})`;ws.getCell(`L${sumRow+3}`).value=t.total;ws.getCell(`L${sumRow+3}`).numFmt='$#,##0.00';
+  ws.getCell(`A${sumRow+5}`).value=`Remark : ${norm($('#remark').value)}`;
+  ws.pageSetup=ws.pageSetup||{};ws.pageSetup.fitToPage=true;ws.pageSetup.fitToWidth=1;ws.pageSetup.fitToHeight=0;ws.pageSetup.printArea=`A1:L${sumRow+7}`;
+  const buffer=await wb.xlsx.writeBuffer();
+  downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`${inv}.xlsx`);
+  setExcelExportStatus(`已用範本 ${state.invoiceTemplateName} 輸出 Excel Invoice${missingImages?`；${missingImages} 款沒有嵌入圖片`:''}。`,'ok');
+}
 async function exportInvoiceExcel(){
   if(!state.items.length){alert('Invoice 沒有貨品。');return}
   if(typeof ExcelJS==='undefined'){setExcelExportStatus('Excel 輸出程式未載入，請連接網絡後重新開啟。','error');return}
   const btn=$('#exportExcelBtn');btn.disabled=true;setExcelExportStatus('正在建立 Excel Invoice…');
   try{
+    if(state.invoiceTemplateBuffer){await exportInvoiceFromTemplate();return}
     const wb=new ExcelJS.Workbook();
     wb.creator='Universe Invoice PWA';wb.created=new Date();
     const ws=wb.addWorksheet('Sales Invoice',{pageSetup:{paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.25,right:.25,top:.35,bottom:.35,header:.15,footer:.15}}});
