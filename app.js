@@ -2,7 +2,7 @@ const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelecto
 const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],scanner:null,scannerBusy:false};
 const norm=v=>String(v??'').trim(),normCode=v=>String(v??'').replace(/\s+/g,'').toUpperCase(),normArt=v=>norm(v).toUpperCase();
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const today=()=>new Date().toISOString().slice(0,10);$('#invoiceDate').value=today();
+const today=()=>{const d=new Date(),y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`};$('#invoiceDate').value=today();
 function invoiceYear(){return String(new Date().getFullYear()).slice(-2)}
 function invoiceSequenceKey(yy=invoiceYear()){return `universeInvoiceSeq_${yy}`}
 function getNextInvoiceSequence(yy=invoiceYear()){
@@ -62,7 +62,38 @@ function reprice(){const r=Number($('#salesRate').value)||0;state.items.forEach(
 function words(n){return String(Math.floor(n))}
 function renderPreview(){const t=totals(),rows=state.items.map((x,i)=>`<tr><td>${i+1}</td><td><strong>Lot.No. : ${esc(x.lotNo)}</strong><br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="num">${x.qty}</td><td>${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`).join('');$('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">Sales Invoice</div><div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>Invoice Date : ${esc($('#invoiceDate').value)}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Quantity</th><th>Unit</th><th class="num">Unit Price</th><th class="num">Amount</th></tr><tr><th colspan="7">F.O.B. Value</th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${fmt(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p><strong>Remark :</strong> ${esc($('#remark').value)}</p></div>`}
 $('#refreshPreviewBtn').onclick=renderPreview;$('#printBtn').onclick=()=>{renderPreview();window.print()};
-async function startScanner(){if(state.scannerBusy)return;state.scannerBusy=true;$('#scannerDialog').showModal();$('#scannerStatus').textContent='正在啟動相機…';try{if(typeof Html5Qrcode==='undefined')throw new Error('掃描程式未載入');state.scanner=state.scanner||new Html5Qrcode('reader');const cams=await Html5Qrcode.getCameras();if(!cams.length)throw new Error('找不到相機');const cam=cams.find(x=>/back|rear|environment/i.test(x.label))||cams[cams.length-1];await state.scanner.start(cam.id,{fps:15,qrbox:(w,h)=>({width:Math.floor(w*.82),height:Math.max(70,Math.floor(h*.18))})},txt=>{addLot(txt);navigator.vibrate?.(80);$('#scannerStatus').textContent='已讀取 '+txt},()=>{});$('#scannerStatus').textContent='請把 Barcode 放在掃描框內。'}catch(err){$('#scannerStatus').textContent='相機無法啟動：'+(err.message||err)}finally{state.scannerBusy=false}}
+async function startScanner(){
+  if(state.scannerBusy)return;
+  state.scannerBusy=true;
+  if(!$('#scannerDialog').open)$('#scannerDialog').showModal();
+  $('#scannerStatus').textContent='正在啟動後鏡頭…';
+  const config={fps:15,qrbox:(w,h)=>({width:Math.floor(w*.82),height:Math.max(70,Math.floor(h*.18))})};
+  const onSuccess=txt=>{addLot(txt);navigator.vibrate?.(80);$('#scannerStatus').textContent='已讀取 '+txt};
+  try{
+    if(typeof Html5Qrcode==='undefined')throw new Error('掃描程式未載入');
+    if(state.scanner?.isScanning)await state.scanner.stop();
+    $('#reader').innerHTML='';
+    state.scanner=new Html5Qrcode('reader');
+    const cams=await Html5Qrcode.getCameras();
+    if(!cams.length)throw new Error('找不到相機');
+    const rearPattern=/back|rear|environment|後置|背面|後鏡/i;
+    const rearCams=cams.filter(x=>rearPattern.test(x.label||''));
+    const cam=rearCams[rearCams.length-1]||cams[cams.length-1];
+    try{
+      await state.scanner.start(cam.id,config,onSuccess,()=>{});
+    }catch(firstErr){
+      try{await state.scanner.clear()}catch{}
+      $('#reader').innerHTML='';
+      state.scanner=new Html5Qrcode('reader');
+      await state.scanner.start({facingMode:'environment'},config,onSuccess,()=>{});
+    }
+    $('#scannerStatus').textContent='已使用後鏡頭，請把 Barcode 放在掃描框內。';
+  }catch(err){
+    $('#scannerStatus').textContent='後鏡頭無法啟動：'+(err.message||err);
+  }finally{
+    state.scannerBusy=false;
+  }
+}
 async function stopScanner(){if(state.scannerBusy)return;state.scannerBusy=true;try{if(state.scanner?.isScanning)await state.scanner.stop()}catch{}finally{$('#reader').innerHTML='';$('#scannerDialog').close();state.scannerBusy=false}}
 $('#scanBtn').onclick=startScanner;$('#closeScannerBtn').onclick=stopScanner;
 function exportRemaining(){if(!state.items.length)return alert('Invoice 沒有貨品。');const sold=new Set(state.items.map(x=>x.lotNo));const remain=state.stockRows.filter(r=>!sold.has(norm(field(r,['LOTNO']))));const ws=XLSX.utils.json_to_sheet(remain,{header:state.stockHeaders});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Remaining Stock');const inv=norm($('#invoiceNo').value)||formatInvoiceNo();XLSX.writeFile(wb,`Remaining_Stock_${inv}_${remain.length}pcs_${today().replaceAll('-','')}.xlsx`);for(const lot of sold)state.products.delete(lot);state.stockRows=remain;state.items=[];advanceInvoiceSequence(inv);renderItems();status('#addMessage',`Invoice ${inv} 已 Confirm，下一張為 ${$('#invoiceNo').value}。`,'ok');status('#stockStatus',`目前 Remaining Stock：${state.products.size} 件。`,'ok')}
