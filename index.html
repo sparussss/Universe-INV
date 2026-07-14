@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.7</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.8</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -94,7 +94,7 @@
       <h3>客人 Invoice 資料</h3>
       <div id="selectedCustomerSummary" class="selected-customer"></div>
       <div class="form-grid">
-        <label>Invoice No.<input id="invoiceNo" value="INV260013"></label>
+        <label>Invoice No.<input id="invoiceNo" value="" placeholder="INVYY0001"></label>
         <label>Invoice Date<input id="invoiceDate" inputmode="numeric" placeholder="YYYY-MM-DD"></label>
         <label>Discount Amount<input id="discountAmount" type="number" min="0" step="1" value="0"></label>
         <label>Remark<input id="remark" value=""></label>
@@ -104,11 +104,9 @@
       <h3>加入貨品</h3>
       <div class="scan-buttons">
         <button id="scanBtn" class="primary">📷 即時掃 Barcode</button>
-        <button id="photoScanBtn">🖼 拍照／選照片掃碼</button>
-        <input id="photoScanInput" class="hidden" type="file" accept="image/*" capture="environment">
       </div>
       <div class="lot-entry">
-        <input id="lotInput" inputmode="numeric" placeholder="手動輸入 LOTNO">
+        <input id="lotInput" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="手動輸入 LOTNO（可用鍵盤咪高峰）">
         <button id="addLotBtn">加入</button>
       </div>
       <div id="addMessage" class="notice">尚未加入貨品。</div>
