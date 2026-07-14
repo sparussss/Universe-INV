@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.9.4</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.9.5</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -80,7 +80,15 @@
       </article>
 
       <article class="card">
-        <h3>5. 匯入 Invoice 範本</h3>
+        <h3>5. 匯入 Article Mapping</h3>
+        <label class="file-picker">選擇 Article Mapping (.xlsx)
+          <input id="articleMappingInput" type="file" accept=".xlsx,.xls">
+        </label>
+        <div id="articleMappingStatus" class="notice">尚未選擇 Article Mapping；暫時使用內置基本對照。</div>
+      </article>
+
+      <article class="card">
+        <h3>6. 匯入 Invoice 範本</h3>
         <label class="file-picker">選擇 Invoice 範本 (.xlsx)
           <input id="invoiceTemplateInput" type="file" accept=".xlsx">
         </label>
@@ -89,7 +97,7 @@
     </div>
 
     <article class="card">
-      <h3>6. 選擇客戶</h3>
+      <h3>7. 選擇客戶</h3>
       <div class="search-row">
         <input id="customerSearch" placeholder="輸入 Customer Code 或公司名稱" autocomplete="off">
         <button id="findCustomerBtn">搜尋</button>
@@ -150,7 +158,6 @@
     <article class="card preview-actions no-print">
       <button id="refreshPreviewBtn">更新預覽</button>
       <button id="exportExcelBtn">匯出 Excel Invoice</button>
-      <button id="printBtn" class="primary">列印 / 儲存 PDF</button>
       <div id="excelExportStatus" class="notice hidden"></div>
     </article>
     <article id="invoiceDocument" class="invoice-document"></article>

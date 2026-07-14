@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],stoneAliases:new Map(),stoneMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1}};
+const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],stoneAliases:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1}};
 const norm=v=>String(v??'').trim(),normCode=v=>String(v??'').replace(/\s+/g,'').toUpperCase(),normArt=v=>norm(v).toUpperCase();
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>{const d=new Date(),y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`};$('#invoiceDate').value=today();
@@ -37,6 +37,21 @@ $('#customerInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;tr
 const FALLBACK_STONE_ALIASES=new Map([
   ['SKY BTO','SKY BT'],['SKY BT','SKY BT'],['QAM','AM'],['YCT','CT'],['BTO','BT'],['LBT','L.BT'],['MG','MG'],['AQ','AQ'],['PAM','P.AM'],['PTQ','PTR'],['GPD','PD'],['GPS','G.AM'],['GAM','G.AM'],['TZ','TZ']
 ]);
+const FALLBACK_ARTICLE_MAP=new Map([
+  ['RG','RING /w SEMI-PRECIOUS'],
+  ['ER','EARRING /w SEMI-PRECIOUS'],
+  ['PT','PENDANT /w SEMI-PRECIOUS'],
+  ['BR','BROOCH /w SEMI-PRECIOUS'],
+  ['NL','NECKLACE /w SEMI-PRECIOUS'],
+  ['BL','BRACELET /w SEMI-PRECIOUS'],
+  ['BG','BANGLE /w SEMI-PRECIOUS']
+]);
+function activeArticleMap(){return state.articleMap.size?state.articleMap:FALLBACK_ARTICLE_MAP}
+function articleDescriptionFor(item){
+  const prefix=normArt(item?.artNo).split('-')[0].split('.')[0];
+  return activeArticleMap().get(prefix)||norm(item?.article)||'';
+}
+
 function activeStoneAliases(){return state.stoneAliases.size?state.stoneAliases:FALLBACK_STONE_ALIASES}
 $('#stoneMappingInput').onchange=async e=>{
   const f=e.target.files[0];if(!f)return;
@@ -61,6 +76,24 @@ $('#stoneMappingInput').onchange=async e=>{
     renderItems();
   }catch(err){status('#stoneMappingStatus','匯入失敗：'+(err.message||err),'error')}
 };
+$('#articleMappingInput').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    const map=new Map();
+    for(const row of rows){
+      const prefix=normCode(row[0]);
+      const description=norm(row[1]);
+      if(!prefix||!description||prefix==='PREFIX')continue;
+      map.set(prefix,description);
+    }
+    if(!map.size)throw new Error('找不到 Prefix / Article Description 對照。');
+    state.articleMap=map;state.articleMappingName=f.name;
+    status('#articleMappingStatus',`已匯入 ${f.name}：${map.size} 個 Article 對照。`,'ok');
+  }catch(err){status('#articleMappingStatus','匯入失敗：'+(err.message||err),'error')}
+};
+
 $('#invoiceTemplateInput').onchange=async e=>{
   const f=e.target.files[0];if(!f)return;
   try{
@@ -169,6 +202,19 @@ async function imageFileToJpegDataUrl(file,maxSide=620,quality=.82){
     return canvas.toDataURL('image/jpeg',quality);
   }finally{URL.revokeObjectURL(source)}
 }
+async function imageFileToJpegAsset(file,maxSide=700,quality=.84){
+  if(!file)return null;
+  const source=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=source});
+    const scale=Math.min(1,maxSide/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+    const width=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
+    const height=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,width,height);ctx.drawImage(img,0,0,width,height);
+    return {base64:canvas.toDataURL('image/jpeg',quality),width,height};
+  }finally{URL.revokeObjectURL(source)}
+}
 function applyThinBorder(cell){cell.border={top:{style:'thin',color:{argb:'FFD1D5DB'}},left:{style:'thin',color:{argb:'FFD1D5DB'}},bottom:{style:'thin',color:{argb:'FFD1D5DB'}},right:{style:'thin',color:{argb:'FFD1D5DB'}}}}
 
 function cloneStyle(v){try{return JSON.parse(JSON.stringify(v||{}))}catch{return v||{}}}
@@ -203,7 +249,7 @@ async function exportInvoiceFromTemplate(){
     ws.getCell(`A${start}`).value=i+1;
     ws.getCell(`B${start}`).value=`Lot. No. : ${item.lotNo}`;
     ws.getCell(`B${start+1}`).value=item.artNo;
-    ws.getCell(`D${start}`).value=item.article||'';
+    ws.getCell(`D${start}`).value=articleDescriptionFor(item);
     const lines=item.descriptions.slice(0,6);
     for(let j=0;j<6;j++)ws.getCell(`D${start+1+j}`).value=lines[j]||'';
     ws.getCell(`I${start}`).value=item.qty;
@@ -213,9 +259,11 @@ async function exportInvoiceFromTemplate(){
     const selected=getImg(item);
     if(selected?.file){
       try{
-        const dataUrl=await imageFileToJpegDataUrl(selected.file,700,.84);
-        const imageId=wb.addImage({base64:dataUrl,extension:'jpeg'});
-        ws.addImage(imageId,{tl:{col:1.05,row:start-1+.08},br:{col:2.95,row:start+block-1-.08},editAs:'oneCell'});
+        const asset=await imageFileToJpegAsset(selected.file,700,.84);
+        const imageId=wb.addImage({base64:asset.base64,extension:'jpeg'});
+        const maxW=190,maxH=118,scale=Math.min(maxW/asset.width,maxH/asset.height,1);
+        const width=Math.max(20,Math.round(asset.width*scale)),height=Math.max(20,Math.round(asset.height*scale));
+        ws.addImage(imageId,{tl:{col:6.12,row:start-1+.10},ext:{width,height},editAs:'oneCell'});
       }catch{missingImages++}
     }else missingImages++;
     setExcelExportStatus(`正在套用 Invoice 範本… ${i+1}/${state.items.length}`);
@@ -274,7 +322,7 @@ async function exportInvoiceExcel(){
       ws.getCell(`A${start}`).alignment={horizontal:'center',vertical:'middle'};
       ws.mergeCells(`B${start}:B${end}`);
       ws.mergeCells(`C${start}:C${end}`);ws.getCell(`C${start}`).value=`Lot.No. : ${item.lotNo}\n${item.artNo}`;ws.getCell(`C${start}`).font={name:'Arial',size:10,bold:true};ws.getCell(`C${start}`).alignment={vertical:'top',wrapText:true};
-      ws.mergeCells(`D${start}:D${end}`);ws.getCell(`D${start}`).value=item.descriptions.join('\n');ws.getCell(`D${start}`).alignment={vertical:'top',wrapText:true};ws.getCell(`D${start}`).font={name:'Arial',size:10};
+      ws.mergeCells(`D${start}:D${end}`);ws.getCell(`D${start}`).value=[articleDescriptionFor(item),...item.descriptions].filter(Boolean).join('\n');ws.getCell(`D${start}`).alignment={vertical:'top',wrapText:true};ws.getCell(`D${start}`).font={name:'Arial',size:10};
       ws.mergeCells(`E${start}:E${end}`);ws.getCell(`E${start}`).value=item.qty;ws.getCell(`E${start}`).alignment={horizontal:'center',vertical:'middle'};
       ws.mergeCells(`F${start}:F${end}`);ws.getCell(`F${start}`).value=item.unit;ws.getCell(`F${start}`).alignment={horizontal:'center',vertical:'middle'};
       ws.mergeCells(`G${start}:G${end}`);ws.getCell(`G${start}`).value=item.unitPrice;ws.getCell(`G${start}`).numFmt='$#,##0.00';ws.getCell(`G${start}`).alignment={horizontal:'right',vertical:'middle'};
@@ -313,7 +361,7 @@ async function exportInvoiceExcel(){
   finally{btn.disabled=false}
 }
 
-$('#refreshPreviewBtn').onclick=renderPreview;$('#exportExcelBtn').onclick=exportInvoiceExcel;$('#printBtn').onclick=()=>{renderPreview();window.print()};
+$('#refreshPreviewBtn').onclick=renderPreview;$('#exportExcelBtn').onclick=exportInvoiceExcel;
 function updateZoomButtons(){
   $$('.zoom-btn').forEach(btn=>{
     const z=Number(btn.dataset.zoom);
