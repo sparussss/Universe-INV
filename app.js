@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],scanner:null,scannerBusy:false,scannerZoom:{min:1,max:1,step:1,current:1}};
+const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1}};
 const norm=v=>String(v??'').trim(),normCode=v=>String(v??'').replace(/\s+/g,'').toUpperCase(),normArt=v=>norm(v).toUpperCase();
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>{const d=new Date(),y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`};$('#invoiceDate').value=today();
@@ -95,20 +95,22 @@ function updateZoomButtons(){
   $$('.zoom-btn').forEach(btn=>{
     const z=Number(btn.dataset.zoom);
     const supported=z>=state.scannerZoom.min-0.001&&z<=state.scannerZoom.max+0.001;
-    btn.disabled=!supported||!state.scanner?.isScanning;
+    btn.disabled=!supported||!state.scannerRunning;
     btn.classList.toggle('active',Math.abs(z-state.scannerZoom.current)<0.05);
   });
 }
 async function setScannerZoom(requested){
-  if(!state.scanner?.isScanning)return;
+  if(!state.scannerRunning||!state.scanner)return;
   const min=state.scannerZoom.min,max=state.scannerZoom.max,step=state.scannerZoom.step||0.1;
   const clamped=Math.max(min,Math.min(max,requested));
   const zoom=Math.round(clamped/step)*step;
   try{
     await state.scanner.applyVideoConstraints({advanced:[{zoom}]});
-    state.scannerZoom.current=zoom;
+    const applied=Number(state.scanner.getRunningTrackSettings?.().zoom);
+    state.scannerZoom.current=Number.isFinite(applied)?applied:zoom;
     updateZoomButtons();
-    $('#scannerStatus').textContent=`後鏡頭 ${zoom.toFixed(zoom%1?1:0)}×，請把 Barcode 放在掃描框內。`;
+    const shown=state.scannerZoom.current;
+    $('#scannerStatus').textContent=`後鏡頭 ${shown.toFixed(shown%1?1:0)}×，請把 Barcode 放在掃描框內。`;
   }catch(err){
     $('#scannerStatus').textContent='此倍率未能套用：'+(err.message||err);
   }
@@ -123,7 +125,8 @@ async function startScanner(){
   const onSuccess=txt=>{if(addLot(txt)){navigator.vibrate?.(80);$('#scannerStatus').textContent='已讀取 '+txt}};
   try{
     if(typeof Html5Qrcode==='undefined')throw new Error('掃描程式未載入');
-    if(state.scanner?.isScanning)await state.scanner.stop();
+    if(state.scannerRunning&&state.scanner)await state.scanner.stop();
+    state.scannerRunning=false;
     $('#reader').innerHTML='';
     state.scanner=new Html5Qrcode('reader');
     const cams=await Html5Qrcode.getCameras();
@@ -139,6 +142,7 @@ async function startScanner(){
       state.scanner=new Html5Qrcode('reader');
       await state.scanner.start({facingMode:'environment'},config,onSuccess,()=>{});
     }
+    state.scannerRunning=true;
     const caps=state.scanner.getRunningTrackCapabilities?.()||{};
     const settings=state.scanner.getRunningTrackSettings?.()||{};
     if(caps.zoom){
@@ -153,12 +157,13 @@ async function startScanner(){
       $('#scannerStatus').textContent='已使用後鏡頭；Safari 未提供相機 Zoom 控制。';
     }
   }catch(err){
+    state.scannerRunning=false;
     $('#scannerStatus').textContent='後鏡頭無法啟動：'+(err.message||err);
   }finally{
     state.scannerBusy=false;
   }
 }
-async function stopScanner(){if(state.scannerBusy)return;state.scannerBusy=true;try{if(state.scanner?.isScanning)await state.scanner.stop()}catch{}finally{$('#reader').innerHTML='';state.scannerZoom={min:1,max:1,step:1,current:1};updateZoomButtons();$('#scannerDialog').close();state.scannerBusy=false}}
+async function stopScanner(){if(state.scannerBusy)return;state.scannerBusy=true;try{if(state.scannerRunning&&state.scanner)await state.scanner.stop()}catch{}finally{state.scannerRunning=false;$('#reader').innerHTML='';state.scannerZoom={min:1,max:1,step:1,current:1};updateZoomButtons();$('#scannerDialog').close();state.scannerBusy=false}}
 $('#scanBtn').onclick=startScanner;$('#closeScannerBtn').onclick=stopScanner;
 function exportRemaining(){if(!state.items.length)return alert('Invoice 沒有貨品。');const sold=new Set(state.items.map(x=>x.lotNo));const remain=state.stockRows.filter(r=>!sold.has(norm(field(r,['LOTNO']))));const ws=XLSX.utils.json_to_sheet(remain,{header:state.stockHeaders});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Remaining Stock');const inv=norm($('#invoiceNo').value)||formatInvoiceNo();XLSX.writeFile(wb,`Remaining_Stock_${inv}_${remain.length}pcs_${today().replaceAll('-','')}.xlsx`);for(const lot of sold)state.products.delete(lot);state.stockRows=remain;state.items=[];advanceInvoiceSequence(inv);renderItems();status('#addMessage',`Invoice ${inv} 已 Confirm，下一張為 ${$('#invoiceNo').value}。`,'ok');status('#stockStatus',`目前 Remaining Stock：${state.products.size} 件。`,'ok')}
 $('#confirmInvoiceBtn').onclick=()=>{if(confirm('Confirm Invoice 並匯出 Remaining Stock Excel？'))exportRemaining()};
