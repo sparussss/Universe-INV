@@ -51,7 +51,7 @@ const FALLBACK_ARTICLE_MAP=new Map([
 function activeArticleMap(){return state.articleMap.size?state.articleMap:FALLBACK_ARTICLE_MAP}
 function articleDescriptionFor(item){
   const prefix=normArt(item?.artNo).split('-')[0].split('.')[0];
-  return activeArticleMap().get(prefix)||norm(item?.article)||'';
+  return state.articleMap.size?(state.articleMap.get(prefix)||''):'';
 }
 
 function activeStoneAliases(){return state.stoneAliases.size?state.stoneAliases:FALLBACK_STONE_ALIASES}
@@ -253,6 +253,12 @@ async function imageFileToJpegAsset(file,maxSide=700,quality=.84){
 function applyThinBorder(cell){cell.border={top:{style:'thin',color:{argb:'FFD1D5DB'}},left:{style:'thin',color:{argb:'FFD1D5DB'}},bottom:{style:'thin',color:{argb:'FFD1D5DB'}},right:{style:'thin',color:{argb:'FFD1D5DB'}}}}
 
 function cloneStyle(v){try{return JSON.parse(JSON.stringify(v||{}))}catch{return v||{}}}
+function excelColNumber(letter){let n=0;for(const ch of String(letter).toUpperCase())n=n*26+(ch.charCodeAt(0)-64);return n}
+function excelColPixels(ws,colNo){const width=Number(ws.getColumn(colNo).width)||8.43;return Math.max(12,Math.round(width*7+5))}
+function excelRowPixels(ws,rowNo){const points=Number(ws.getRow(rowNo).height)||15;return Math.max(8,points*96/72)}
+function imageAnchorCol(ws,startColNo,endColNo,offsetPx){let col=startColNo-1,remain=Math.max(0,offsetPx);for(let c=startColNo;c<=endColNo;c++){const px=excelColPixels(ws,c);if(remain<=px)return col+remain/px;remain-=px;col+=1}return endColNo}
+function imageAnchorRow(ws,startRow,endRow,offsetPx){let row=startRow-1,remain=Math.max(0,offsetPx);for(let r=startRow;r<=endRow;r++){const px=excelRowPixels(ws,r);if(remain<=px)return row+remain/px;remain-=px;row+=1}return endRow}
+function rowRangeHeightPoints(ws,start,end){let total=0;for(let r=start;r<=end;r++)total+=Number(ws.getRow(r).height)||15;return total}
 function copyTemplateRowStyle(ws,sourceRow,targetRow){
   const src=ws.getRow(sourceRow),dst=ws.getRow(targetRow);dst.height=src.height;
   for(let c=1;c<=12;c++){
@@ -389,21 +395,25 @@ async function exportInvoiceFromTemplate(){
 
   let rowCursor=firstItemRow;
   let missingImages=0;
-  let pageUsedRows=0;
-  const pageItemCapacity=28;
+  const pageHeightPts=841.89; // A4 portrait
+  const marginTopPts=25.2,marginBottomPts=25.2;
+  const repeatedHeaderPts=rowRangeHeightPoints(ws,1,Math.max(1,firstItemRow-1));
+  const pageBodyCapacityPts=Math.max(220,pageHeightPts-marginTopPts-marginBottomPts-repeatedHeaderPts);
+  let pageUsedPts=0;
 
   for(let i=0;i<itemPlans.length;i++){
     const {item,lines,contentRows,totalRows}=itemPlans[i];
     const start=rowCursor,contentEnd=start+contentRows-1,separatorRow=contentEnd+1;
-    if(pageUsedRows>0&&pageUsedRows+totalRows>pageItemCapacity){
+    const itemHeightPts=contentRows*contentHeight+separatorHeight;
+    if(pageUsedPts>0&&pageUsedPts+itemHeightPts>pageBodyCapacityPts){
       try{ws.getRow(start).addPageBreak()}catch{}
-      pageUsedRows=0;
+      pageUsedPts=0;
     }
     for(let r=start;r<=contentEnd;r++)applyRowStyle(r,contentStyle,contentHeight);
     applyRowStyle(separatorRow,separatorStyle,separatorHeight);
 
     ws.getCell(`${noCol}${start}`).value=i+1;
-    ws.getCell(`${noCol}${start}`).alignment={...cloneStyle(ws.getCell(`${noCol}${start}`).alignment),horizontal:'center',vertical:'top'};
+    ws.getCell(`${noCol}${start}`).alignment={...cloneStyle(ws.getCell(`${noCol}${start}`).alignment),horizontal:'center',vertical:'middle'};
     ws.getCell(`${lotCol}${start}`).value=`Lot.No. : ${item.lotNo}`;
     ws.getCell(`${artCol}${start+1}`).value=item.artNo;
     ws.getCell(`${lotCol}${start}`).font={...cloneStyle(ws.getCell(`${lotCol}${start}`).font),bold:true};
@@ -412,7 +422,7 @@ async function exportInvoiceFromTemplate(){
     for(let r=0;r<contentRows;r++){
       const cell=ws.getCell(`${descCol}${start+r}`);
       cell.value=lines[r]||'';
-      cell.alignment={...cloneStyle(cell.alignment),vertical:'top',wrapText:true};
+      cell.alignment={...cloneStyle(cell.alignment),vertical:'middle',wrapText:false};
     }
 
     try{ws.mergeCells(`${imageStartCol}${start}:${imageEndCol}${start+4}`)}catch{}
@@ -432,14 +442,21 @@ async function exportInvoiceFromTemplate(){
       try{
         const asset=await imageFileToJpegAsset(selected.file,620,.84);
         const imageId=wb.addImage({base64:asset.base64,extension:'jpeg'});
-        const maxW=170,maxH=90,scale=Math.min(maxW/asset.width,maxH/asset.height,1);
+        const imageStartColNo=excelColNumber(imageStartCol),imageEndColNo=excelColNumber(imageEndCol);
+        const imageEndRow=start+4;
+        let boxW=0,boxH=0;
+        for(let c=imageStartColNo;c<=imageEndColNo;c++)boxW+=excelColPixels(ws,c);
+        for(let r=start;r<=imageEndRow;r++)boxH+=excelRowPixels(ws,r);
+        const pad=6,maxW=Math.max(20,boxW-pad*2),maxH=Math.max(20,boxH-pad*2);
+        const scale=Math.min(maxW/asset.width,maxH/asset.height,1);
         const width=Math.max(20,Math.round(asset.width*scale));
         const height=Math.max(20,Math.round(asset.height*scale));
-        ws.addImage(imageId,{tl:{col:3.05+(maxW-width)/144,row:start-1+.08+(maxH-height)/40},ext:{width,height},editAs:'oneCell'});
+        const xOffset=(boxW-width)/2,yOffset=(boxH-height)/2;
+        ws.addImage(imageId,{tl:{col:imageAnchorCol(ws,imageStartColNo,imageEndColNo,xOffset),row:imageAnchorRow(ws,start,imageEndRow,yOffset)},ext:{width,height},editAs:'oneCell'});
       }catch{missingImages++}
     }else missingImages++;
 
-    rowCursor+=totalRows;pageUsedRows+=totalRows;
+    rowCursor+=totalRows;pageUsedPts+=itemHeightPts;
     setExcelExportStatus(`正在依 Template Map 建立 Excel… ${i+1}/${state.items.length}`);
   }
 
@@ -476,16 +493,24 @@ async function exportInvoiceFromTemplate(){
   if(amountLabel){
     const amountCell=ws.getRow(amountLabel.r).getCell(Math.min(columnCount,amountLabel.c+1));
     amountCell.value=`${currencyWords($('#currency').value)} ${numberToWords(t.total)}`;
-    amountCell.alignment={...cloneStyle(amountCell.alignment),wrapText:true};
+    amountCell.alignment={...cloneStyle(amountCell.alignment),vertical:'middle',wrapText:false};
   }
   const remarkLabel=findLabelRow('remark');
   if(remarkLabel)ws.getRow(remarkLabel.r).getCell(Math.min(columnCount,remarkLabel.c+1)).value=norm($('#remark').value);
 
-  if(pageUsedRows+footerRows.length>pageItemCapacity){try{ws.getRow(footerStart).addPageBreak()}catch{}}
+  const footerHeightPts=footerRows.reduce((sum,x)=>sum+(Number(x.height)||15),0);
+  if(pageUsedPts>0&&pageUsedPts+footerHeightPts>pageBodyCapacityPts){try{ws.getRow(footerStart).addPageBreak()}catch{}}
+  // Uniform alignment requested for the complete Invoice sheet.
+  for(let r=1;r<=requiredEnd;r++)for(let c=1;c<=columnCount;c++){
+    const cell=ws.getRow(r).getCell(c);
+    cell.alignment={...cloneStyle(cell.alignment),vertical:'middle',wrapText:false};
+  }
   ws.pageSetup=ws.pageSetup||{};
   ws.pageSetup.paperSize=9;ws.pageSetup.orientation='portrait';ws.pageSetup.fitToPage=true;
   ws.pageSetup.fitToWidth=1;ws.pageSetup.fitToHeight=0;ws.pageSetup.printArea=`A1:I${requiredEnd}`;
   ws.pageSetup.printTitlesRow=`1:${Math.max(1,firstItemRow-1)}`;
+  ws.pageSetup.horizontalCentered=true;ws.pageSetup.verticalCentered=false;
+  ws.pageSetup.margins={left:.35,right:.35,top:.35,bottom:.35,header:.15,footer:.15};
   ws.headerFooter=ws.headerFooter||{};ws.headerFooter.oddFooter='Page &P of &N';
 
   if(mapWs)wb.removeWorksheet(mapWs.id);
