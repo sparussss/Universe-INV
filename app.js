@@ -322,7 +322,7 @@ async function exportInvoiceFromTemplate(){
   const footerBaseRow=Number((footerQtyCell.match(/\d+/)||['25'])[0]);
   const originalFooterEnd=ws.rowCount;
   const originalContentRows=Math.max(1,footerBaseRow-firstItemRow-1);
-  const baseContentRows=Math.min(5,originalContentRows);
+  const baseContentRows=Math.min(4,originalContentRows);
   const separatorSourceRow=firstItemRow+baseContentRows;
   const columnCount=Math.max(9,ws.columnCount||9);
 
@@ -335,8 +335,8 @@ async function exportInvoiceFromTemplate(){
   for(let c=1;c<=columnCount;c++)contentStyle.push(captureCell(ws.getRow(firstItemRow).getCell(c)));
   const separatorStyle=[];
   for(let c=1;c<=columnCount;c++)separatorStyle.push(captureCell(ws.getRow(separatorSourceRow).getCell(c)));
-  const contentHeight=ws.getRow(firstItemRow).height||18;
-  const separatorHeight=ws.getRow(separatorSourceRow).height||8;
+  const contentHeight=10.5;
+  const separatorHeight=10.5;
 
   const footerRows=[];
   for(let r=footerBaseRow;r<=originalFooterEnd;r++){
@@ -347,12 +347,14 @@ async function exportInvoiceFromTemplate(){
 
   // Preserve all drawings already embedded in the imported template, including the company letterhead.
   for(let r=firstItemRow;r<=originalFooterEnd;r++){
-    try{ws.unMergeCells(`D${r}:E${r+4}`)}catch{}
+    try{ws.unMergeCells(`D${r}:E${r+3}`)}catch{}
   }
 
+  // Each item uses at least 4 content rows. Extra DESC rows extend only the text area.
+  // One additional 10.5 pt separator row follows every item; the image remains fixed to the first 4 rows.
   const itemPlans=state.items.map(item=>{
     const lines=[articleDescriptionFor(item),...(item.descriptions||[])].map(norm).filter(Boolean);
-    const contentRows=Math.max(5,lines.length);
+    const contentRows=Math.max(4,lines.length);
     return {item,lines,contentRows,totalRows:contentRows+1};
   });
   const totalItemRows=itemPlans.reduce((s,x)=>s+x.totalRows,0);
@@ -410,7 +412,7 @@ async function exportInvoiceFromTemplate(){
     const pageIsFullByCount=pageItemCount>=maxItemsPerPage;
     const pageIsFullByHeight=pageUsedPts>0&&pageUsedPts+itemHeightPts>pageBodyCapacityPts;
     if(pageUsedPts>0&&(pageIsFullByCount||pageIsFullByHeight)){
-      try{ws.getRow(start).addPageBreak()}catch{}
+      try{ws.getRow(Math.max(firstItemRow,start-1)).addPageBreak()}catch{}
       pageUsedPts=0;
       pageItemCount=0;
     }
@@ -430,7 +432,7 @@ async function exportInvoiceFromTemplate(){
       cell.alignment={...cloneStyle(cell.alignment),vertical:'middle',wrapText:false};
     }
 
-    try{ws.mergeCells(`${imageStartCol}${start}:${imageEndCol}${start+4}`)}catch{}
+    try{ws.mergeCells(`${imageStartCol}${start}:${imageEndCol}${start+3}`)}catch{}
     ws.getCell(`${imageStartCol}${start}`).value=null;
     ws.getCell(`${imageStartCol}${start}`).alignment={horizontal:'center',vertical:'middle'};
 
@@ -448,7 +450,7 @@ async function exportInvoiceFromTemplate(){
         const asset=await imageFileToJpegAsset(selected.file,620,.84);
         const imageId=wb.addImage({base64:asset.base64,extension:'jpeg'});
         const imageStartColNo=excelColNumber(imageStartCol),imageEndColNo=excelColNumber(imageEndCol);
-        const imageEndRow=start+4;
+        const imageEndRow=start+3;
         let boxW=0,boxH=0;
         for(let c=imageStartColNo;c<=imageEndColNo;c++)boxW+=excelColPixels(ws,c);
         for(let r=start;r<=imageEndRow;r++)boxH+=excelRowPixels(ws,r);
@@ -504,7 +506,7 @@ async function exportInvoiceFromTemplate(){
   if(remarkLabel)ws.getRow(remarkLabel.r).getCell(Math.min(columnCount,remarkLabel.c+1)).value=norm($('#remark').value);
 
   const footerHeightPts=footerRows.reduce((sum,x)=>sum+(Number(x.height)||15),0);
-  if(pageUsedPts>0&&pageUsedPts+footerHeightPts>pageBodyCapacityPts){try{ws.getRow(footerStart).addPageBreak()}catch{}}
+  if(pageUsedPts>0&&pageUsedPts+footerHeightPts>pageBodyCapacityPts){try{ws.getRow(Math.max(firstItemRow,footerStart-1)).addPageBreak()}catch{}}
   // Uniform alignment requested for the complete Invoice sheet.
   for(let r=1;r<=requiredEnd;r++)for(let c=1;c<=columnCount;c++){
     const cell=ws.getRow(r).getCell(c);
