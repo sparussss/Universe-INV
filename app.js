@@ -177,6 +177,39 @@ function renderItems(){const box=$('#invoiceItems');box.innerHTML='';if(!state.i
 $('#scrollLatestBtn').onclick=()=>$('#invoiceItems').scrollTo({top:0,behavior:'smooth'});$('#clearInvoiceBtn').onclick=()=>{if(confirm('清空目前 Invoice？')){state.items=[];renderItems()}};
 function reprice(){const r=Number($('#salesRate').value)||0;state.items.forEach(x=>x.unitPrice=Math.ceil(x.price*r));renderItems()}$('#salesRate').onchange=reprice;$('#currency').onchange=()=>{renderItems();renderCustomerSummary()};$('#discountAmount').oninput=updateTotals;
 function words(n){return String(Math.floor(n))}
+function numberToWords(value){
+  let n=Math.floor(Number(value)||0);
+  if(n===0)return 'ZERO';
+  if(n<0)return 'MINUS '+numberToWords(Math.abs(n));
+  const ones=['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];
+  const tens=['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
+  const underThousand=x=>{
+    const parts=[];
+    if(x>=100){parts.push(ones[Math.floor(x/100)]+' HUNDRED');x%=100}
+    if(x>=20){parts.push(tens[Math.floor(x/10)]);x%=10}
+    if(x>0)parts.push(ones[x]);
+    return parts.join(' ');
+  };
+  const scales=[
+    [1_000_000_000,'BILLION'],
+    [1_000_000,'MILLION'],
+    [1_000,'THOUSAND'],
+    [1,'']
+  ];
+  const parts=[];
+  for(const [size,label] of scales){
+    if(n>=size){
+      const chunk=Math.floor(n/size);
+      n%=size;
+      const text=underThousand(chunk);
+      if(text)parts.push(label?`${text} ${label}`:text);
+    }
+  }
+  return parts.join(' ');
+}
+function currencyWords(code){
+  return ({USD:'US DOLLARS',EUR:'EUROS',JPY:'JAPANESE YEN',HKD:'HONG KONG DOLLARS'})[String(code||'').toUpperCase()]||String(code||'').toUpperCase();
+}
 function renderPreview(){const t=totals(),rows=state.items.map((x,i)=>`<tr><td>${i+1}</td><td><strong>Lot.No. : ${esc(x.lotNo)}</strong><br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="num">${x.qty}</td><td>${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`).join('');$('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">Sales Invoice</div><div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>Invoice Date : ${esc($('#invoiceDate').value)}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Quantity</th><th>Unit</th><th class="num">Unit Price</th><th class="num">Amount</th></tr><tr><th colspan="7">F.O.B. Value</th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${fmt(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p><strong>Remark :</strong> ${esc($('#remark').value)}</p></div>`}
 
 function setExcelExportStatus(message,type=''){
@@ -412,7 +445,7 @@ async function exportInvoiceFromTemplate(){
   ws.getCell(`I${rel(25)}`).value=t.total;
   ws.getCell(`I${rel(25)}`).numFmt='$#,##0.00';
   const words=numberToWords(t.total);
-  const amountText=`${norm($('#currency').value)||'US DOLLARS'} ${words}`;
+  const amountText=`${currencyWords($('#currency').value)} ${words}`;
   ws.getCell(`C${rel(27)}`).value='Total Amount : ';
   ws.getCell(`D${rel(27)}`).value=amountText;
   ws.getCell(`D${rel(27)}`).alignment={...cloneStyle(ws.getCell(`D${rel(27)}`).alignment),wrapText:true};
