@@ -1,4 +1,4 @@
-# Universe Invoice PWA v0.9.6
+# Universe Invoice PWA v0.9.7
 
 UI 改善：
 - 移除頂部說明句。
@@ -29,30 +29,30 @@ UI 改善：
 - 加入或輸入錯誤後，自動回到 LOTNO 輸入框。
 
 
-## v0.9.6 修正
+## v0.9.7 修正
 - 修正相機已支援 1×–10×，但 2×、3×、4× 按鈕仍被停用的問題。
 - 不再依賴 html5-qrcode 的 isScanning 屬性，改由 PWA 自行追蹤相機運作狀態。
 - 切換倍率後重新讀取實際相機 Zoom 設定。
 
 
-## v0.9.6
+## v0.9.7
 - 修正 iPhone 小螢幕表單、Invoice 貨品控制及 Invoice 預覽橫向溢出。
 - PDF 預覽表格使用固定欄寬及自動換行。
 
 
-## v0.9.6
+## v0.9.7
 - Invoice 預覽頁新增「匯出 Excel Invoice」
 - Excel 包含公司抬頭、客戶資料、款號圖片、LOTNO、DESC1–DESC6、Qty、Unit、Unit Price、Amount、Subtotal、Discount、Total
 - 圖片會按 Invoice 當時選擇的版本嵌入 xlsx
 
 
-## v0.9.6
+## v0.9.7
 - 可匯入 Stone List & Shape & Cutting.xlsx，按 BREAKDOWN → QUOTATION 更新圖片自動選擇。
 - 可匯入 Invoice .xlsx 範本；匯出 Excel Invoice 時優先套用範本。
 - 未匯入範本時仍保留原有標準 Excel 輸出。
 
 
-## v0.9.6
+## v0.9.7
 - 移除 PWA 直接輸出／列印 PDF 功能。
 - 新增 Article Mapping.xlsx 匯入。
 - Invoice 範本輸出時，ARTNO 前綴自動轉為 Article Description。
@@ -60,7 +60,17 @@ UI 改善：
 - 圖片保持原比例，不拉伸、不裁切。
 
 
-## v0.9.6
+## v0.9.7
 - 六個資料匯入區塊可手動展開／收合。
 - 匯入成功後自動收合，只保留檔名及匯入結果。
 - 匯入失敗時保持展開，方便重新選擇檔案。
+
+
+## v0.9.7 Excel Template 3(2) dynamic item layout
+
+- Each item uses at least five content rows.
+- ARTICLE and non-empty DESC1–DESC6 expand the item automatically when needed.
+- One empty separator row is always inserted after each item.
+- Product image is restricted to the first fixed five rows and keeps its aspect ratio.
+- Footer is moved below the dynamic item area.
+- Item blocks and footer are given page-break protection for Excel-to-PDF output.

@@ -228,58 +228,218 @@ function copyTemplateRowStyle(ws,sourceRow,targetRow){
   }
 }
 async function exportInvoiceFromTemplate(){
-  const wb=new ExcelJS.Workbook();await wb.xlsx.load(state.invoiceTemplateBuffer.slice(0));
-  const ws=wb.worksheets[0];if(!ws)throw new Error('範本沒有工作表');
+  const wb=new ExcelJS.Workbook();
+  await wb.xlsx.load(state.invoiceTemplateBuffer.slice(0));
+  const ws=wb.worksheets[0];
+  if(!ws)throw new Error('範本沒有工作表');
   ws.name='Invoice';
+
+  // Template 3(2) layout:
+  // A = No., B = Lot No./ARTNO, C = ARTICLE + DESC1–DESC6,
+  // D:E = fixed 5-row image area, F = Qty, G = Unit, H = Unit Price, I = Amount.
+  const firstItemRow=14;
+  const originalItemRows=6;       // rows 14–18 content/image + row 19 blank separator
+  const originalFooterRow=20;
+  const originalFooterEnd=35;
+  const columnCount=9;
+
+  // Capture the template styles before changing row positions.
+  const captureCell=(cell)=>({
+    value:cell.value,
+    style:cloneStyle(cell.style),
+    numFmt:cell.numFmt,
+    alignment:cloneStyle(cell.alignment),
+    border:cloneStyle(cell.border),
+    fill:cloneStyle(cell.fill),
+    font:cloneStyle(cell.font),
+    protection:cloneStyle(cell.protection)
+  });
+  const itemContentStyle=[];
+  for(let c=1;c<=columnCount;c++)itemContentStyle.push(captureCell(ws.getRow(firstItemRow).getCell(c)));
+  const itemSeparatorStyle=[];
+  for(let c=1;c<=columnCount;c++)itemSeparatorStyle.push(captureCell(ws.getRow(firstItemRow+5).getCell(c)));
+  const contentRowHeight=ws.getRow(firstItemRow).height||15;
+  const separatorRowHeight=ws.getRow(firstItemRow+5).height||8;
+
+  const footerRows=[];
+  for(let r=originalFooterRow;r<=originalFooterEnd;r++){
+    const row=[];
+    for(let c=1;c<=columnCount;c++)row.push(captureCell(ws.getRow(r).getCell(c)));
+    footerRows.push({height:ws.getRow(r).height,row});
+  }
+
+  // Remove template image and its original merged range.
   try{ws._media=[]}catch{}
-  // 清除舊貨品與總數區資料，但保留格式
-  for(let r=26;r<=Math.max(320,26+state.items.length*7+20);r++)for(let c=1;c<=12;c++)ws.getCell(r,c).value=null;
+  try{ws.unMergeCells(`D${firstItemRow}:E${firstItemRow+4}`)}catch{}
+
+  const itemPlans=state.items.map(item=>{
+    const lines=[articleDescriptionFor(item),...(item.descriptions||[])].map(norm).filter(Boolean);
+    const contentRows=Math.max(5,lines.length);
+    return {item,lines,contentRows,totalRows:contentRows+1}; // final row is always blank separator
+  });
+  const totalItemRows=itemPlans.reduce((sum,x)=>sum+x.totalRows,0);
+  const footerStart=firstItemRow+totalItemRows;
+  const requiredEnd=footerStart+footerRows.length-1;
+
+  // Clear the old item/footer area and any rows that will be used by the new output.
+  const clearEnd=Math.max(originalFooterEnd,requiredEnd+3);
+  for(let r=firstItemRow;r<=clearEnd;r++){
+    for(let c=1;c<=columnCount;c++)ws.getRow(r).getCell(c).value=null;
+    ws.getRow(r).height=undefined;
+  }
+
+  const applyCaptured=(cell,src,includeValue=false)=>{
+    cell.style=cloneStyle(src.style);
+    cell.numFmt=src.numFmt;
+    cell.alignment=cloneStyle(src.alignment);
+    cell.border=cloneStyle(src.border);
+    cell.fill=cloneStyle(src.fill);
+    cell.font=cloneStyle(src.font);
+    cell.protection=cloneStyle(src.protection);
+    if(includeValue)cell.value=src.value;
+  };
+  const applyRowStyle=(rowNo,styleRow,height)=>{
+    const row=ws.getRow(rowNo);row.height=height;
+    for(let c=1;c<=columnCount;c++)applyCaptured(row.getCell(c),styleRow[c-1],false);
+  };
+
+  // Header values from the imported template layout.
   const inv=norm($('#invoiceNo').value)||formatInvoiceNo();
-  ws.getCell('J7').value=`INVOICE NO : ${inv}`;
-  ws.getCell('K7').value=norm($('#invoiceDate').value);
-  ws.getCell('C9').value=norm($('#customerName').value);
-  ws.getCell('K9').value=norm($('#customerCode').value);
-  ws.getCell('C14').value=norm($('#customerAddress').value);
-  ws.getCell('K17').value=norm($('#shipmentMethod').value);
-  ws.getCell('K19').value=norm($('#currency').value);
-  ws.getCell('K20').value=norm($('#customerTerms').value);
+  ws.getCell('A2').value='Sales Invoice';
+  ws.getCell('A3').value=inv;
+  ws.getCell('A4').value=norm($('#invoiceDate').value);
+  ws.getCell('A4').numFmt='yyyy-mm-dd';
+  ws.getCell('A5').value=norm($('#shipmentMethod').value)||' ';
+  ws.getCell('A6').value=norm($('#currency').value)||'USD';
+  ws.getCell('A8').value='Customer : ';
+  ws.getCell('B8').value=norm($('#customerName').value);
+  const addressLines=norm($('#customerAddress').value).split(/\r?\n/).filter(Boolean);
+  ws.getCell('B9').value=addressLines[0]||'';
+  ws.getCell('B10').value=addressLines.slice(1).join(', ');
+
+  let rowCursor=firstItemRow;
   let missingImages=0;
-  const sourceStart=26,block=7;
-  for(let i=0;i<state.items.length;i++){
-    const item=state.items[i],start=sourceStart+i*block;
-    if(i>0)for(let rr=0;rr<block;rr++)copyTemplateRowStyle(ws,sourceStart+rr,start+rr);
+  let pageUsedRows=0;
+  const pageItemCapacity=28; // conservative content-row estimate for A4 portrait output
+
+  for(let i=0;i<itemPlans.length;i++){
+    const {item,lines,contentRows,totalRows}=itemPlans[i];
+    const start=rowCursor;
+    const contentEnd=start+contentRows-1;
+    const separatorRow=contentEnd+1;
+
+    // Keep each complete item together when Excel is printed / saved as PDF.
+    if(pageUsedRows>0&&pageUsedRows+totalRows>pageItemCapacity){
+      try{ws.getRow(start).addPageBreak()}catch{}
+      pageUsedRows=0;
+    }
+
+    for(let r=start;r<=contentEnd;r++)applyRowStyle(r,itemContentStyle,contentRowHeight);
+    applyRowStyle(separatorRow,itemSeparatorStyle,separatorRowHeight);
+
     ws.getCell(`A${start}`).value=i+1;
-    ws.getCell(`B${start}`).value=`Lot. No. : ${item.lotNo}`;
+    ws.getCell(`A${start}`).alignment={...cloneStyle(ws.getCell(`A${start}`).alignment),horizontal:'center',vertical:'top'};
+    ws.getCell(`B${start}`).value=`Lot.No. : ${item.lotNo}`;
     ws.getCell(`B${start+1}`).value=item.artNo;
-    ws.getCell(`D${start}`).value=articleDescriptionFor(item);
-    const lines=item.descriptions.slice(0,6);
-    for(let j=0;j<6;j++)ws.getCell(`D${start+1+j}`).value=lines[j]||'';
-    ws.getCell(`I${start}`).value=item.qty;
-    ws.getCell(`J${start}`).value=item.unit;
-    ws.getCell(`K${start}`).value=item.unitPrice;
-    ws.getCell(`L${start}`).value=item.qty*item.unitPrice;
+    ws.getCell(`B${start}`).font={...cloneStyle(ws.getCell(`B${start}`).font),bold:true};
+    ws.getCell(`B${start+1}`).font={...cloneStyle(ws.getCell(`B${start+1}`).font),bold:true};
+
+    for(let r=0;r<contentRows;r++){
+      const cell=ws.getCell(`C${start+r}`);
+      cell.value=lines[r]||'';
+      cell.alignment={...cloneStyle(cell.alignment),vertical:'top',wrapText:true};
+    }
+
+    // Product image is always limited to the first five rows, even if description extends lower.
+    try{ws.mergeCells(`D${start}:E${start+4}`)}catch{}
+    const imageAnchor=ws.getCell(`D${start}`);
+    imageAnchor.value=null;
+    imageAnchor.alignment={horizontal:'center',vertical:'middle'};
+
+    ws.getCell(`F${start}`).value=item.qty;
+    ws.getCell(`F${start}`).numFmt='0';
+    ws.getCell(`G${start}`).value=item.unit;
+    ws.getCell(`H${start}`).value=item.unitPrice;
+    ws.getCell(`H${start}`).numFmt='$#,##0.00';
+    ws.getCell(`I${start}`).value=item.qty*item.unitPrice;
+    ws.getCell(`I${start}`).numFmt='$#,##0.00';
+
     const selected=getImg(item);
     if(selected?.file){
       try{
-        const asset=await imageFileToJpegAsset(selected.file,700,.84);
+        const asset=await imageFileToJpegAsset(selected.file,620,.84);
         const imageId=wb.addImage({base64:asset.base64,extension:'jpeg'});
-        const maxW=190,maxH=118,scale=Math.min(maxW/asset.width,maxH/asset.height,1);
-        const width=Math.max(20,Math.round(asset.width*scale)),height=Math.max(20,Math.round(asset.height*scale));
-        ws.addImage(imageId,{tl:{col:6.12,row:start-1+.10},ext:{width,height},editAs:'oneCell'});
+        const maxW=178,maxH=92;
+        const scale=Math.min(maxW/asset.width,maxH/asset.height,1);
+        const width=Math.max(20,Math.round(asset.width*scale));
+        const height=Math.max(20,Math.round(asset.height*scale));
+        const leftOffset=Math.max(0,(maxW-width)/2);
+        const topOffset=Math.max(0,(maxH-height)/2);
+        ws.addImage(imageId,{
+          tl:{col:3.05+leftOffset/72,row:start-1+.08+topOffset/20},
+          ext:{width,height},
+          editAs:'oneCell'
+        });
       }catch{missingImages++}
     }else missingImages++;
-    setExcelExportStatus(`正在套用 Invoice 範本… ${i+1}/${state.items.length}`);
+
+    rowCursor+=totalRows;
+    pageUsedRows+=totalRows;
+    setExcelExportStatus(`正在套用動態 5 行範本… ${i+1}/${state.items.length}`);
   }
-  const t=totals(),sumRow=sourceStart+state.items.length*block+1;
-  ws.getCell(`I${sumRow}`).value='Total Quantity';ws.getCell(`L${sumRow}`).value=t.qty;
-  ws.getCell(`I${sumRow+1}`).value='Sub Total';ws.getCell(`L${sumRow+1}`).value=t.sub;ws.getCell(`L${sumRow+1}`).numFmt='$#,##0.00';
-  ws.getCell(`I${sumRow+2}`).value='Discount';ws.getCell(`L${sumRow+2}`).value=t.discount;ws.getCell(`L${sumRow+2}`).numFmt='$#,##0.00';
-  ws.getCell(`I${sumRow+3}`).value=`Total (${norm($('#currency').value)})`;ws.getCell(`L${sumRow+3}`).value=t.total;ws.getCell(`L${sumRow+3}`).numFmt='$#,##0.00';
-  ws.getCell(`A${sumRow+5}`).value=`Remark : ${norm($('#remark').value)}`;
-  ws.pageSetup=ws.pageSetup||{};ws.pageSetup.fitToPage=true;ws.pageSetup.fitToWidth=1;ws.pageSetup.fitToHeight=0;ws.pageSetup.printArea=`A1:L${sumRow+7}`;
+
+  // Restore the original footer below the dynamically sized item area.
+  for(let offset=0;offset<footerRows.length;offset++){
+    const targetRow=footerStart+offset;
+    const captured=footerRows[offset];
+    const row=ws.getRow(targetRow);row.height=captured.height;
+    for(let c=1;c<=columnCount;c++)applyCaptured(row.getCell(c),captured.row[c-1],true);
+  }
+
+  const t=totals();
+  // Footer positions correspond to original rows 20, 23, 25, 27–28, 30, 33, 35.
+  const rel=r=>footerStart+(r-originalFooterRow);
+  ws.getCell(`E${rel(20)}`).value='Total Quantity : ';
+  ws.getCell(`F${rel(20)}`).value=t.qty;
+  ws.getCell(`F${rel(20)}`).numFmt='0';
+  ws.getCell(`H${rel(20)}`).value='Sub Total : ';
+  ws.getCell(`I${rel(20)}`).value=t.sub;
+  ws.getCell(`I${rel(20)}`).numFmt='$#,##0.00';
+  ws.getCell(`H${rel(23)}`).value='DISCOUNT AMOUNT : ';
+  ws.getCell(`I${rel(23)}`).value=t.discount;
+  ws.getCell(`I${rel(23)}`).numFmt='$#,##0.00';
+  ws.getCell(`H${rel(25)}`).value=`Total : (${norm($('#currency').value)||'USD'}) `;
+  ws.getCell(`I${rel(25)}`).value=t.total;
+  ws.getCell(`I${rel(25)}`).numFmt='$#,##0.00';
+  const words=numberToWords(t.total);
+  const amountText=`${norm($('#currency').value)||'US DOLLARS'} ${words}`;
+  ws.getCell(`C${rel(27)}`).value='Total Amount : ';
+  ws.getCell(`D${rel(27)}`).value=amountText;
+  ws.getCell(`D${rel(27)}`).alignment={...cloneStyle(ws.getCell(`D${rel(27)}`).alignment),wrapText:true};
+  ws.getCell(`D${rel(28)}`).value='';
+  ws.getCell(`C${rel(30)}`).value='Remark : ';
+  ws.getCell(`D${rel(30)}`).value=norm($('#remark').value);
+
+  // If footer cannot fit after the last item, begin it on a new printed page.
+  const footerHeightRows=footerRows.length;
+  if(pageUsedRows+footerHeightRows>pageItemCapacity){
+    try{ws.getRow(footerStart).addPageBreak()}catch{}
+  }
+
+  ws.pageSetup=ws.pageSetup||{};
+  ws.pageSetup.paperSize=9;
+  ws.pageSetup.orientation='portrait';
+  ws.pageSetup.fitToPage=true;
+  ws.pageSetup.fitToWidth=1;
+  ws.pageSetup.fitToHeight=0;
+  ws.pageSetup.printArea=`A1:I${requiredEnd}`;
+  ws.pageSetup.printTitlesRow='1:13';
+  ws.headerFooter=ws.headerFooter||{};
+  ws.headerFooter.oddFooter='Page &P of &N';
+
   const buffer=await wb.xlsx.writeBuffer();
   downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`${inv}.xlsx`);
-  setExcelExportStatus(`已用範本 ${state.invoiceTemplateName} 輸出 Excel Invoice${missingImages?`；${missingImages} 款沒有嵌入圖片`:''}。`,'ok');
+  setExcelExportStatus(`已用範本 ${state.invoiceTemplateName} 輸出動態 Excel Invoice${missingImages?`；${missingImages} 款沒有嵌入圖片`:''}。`,'ok');
 }
 async function exportInvoiceExcel(){
   if(!state.items.length){alert('Invoice 沒有貨品。');return}
