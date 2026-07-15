@@ -263,71 +263,106 @@ function copyTemplateRowStyle(ws,sourceRow,targetRow){
 async function exportInvoiceFromTemplate(){
   const wb=new ExcelJS.Workbook();
   await wb.xlsx.load(state.invoiceTemplateBuffer.slice(0));
-  const ws=wb.worksheets[0];
-  if(!ws)throw new Error('範本沒有工作表');
-  ws.name='Invoice';
 
-  // Template 3(2) layout:
-  // A = No., B = Lot No./ARTNO, C = ARTICLE + DESC1–DESC6,
-  // D:E = fixed 5-row image area, F = Qty, G = Unit, H = Unit Price, I = Amount.
-  const firstItemRow=14;
-  const originalItemRows=6;       // rows 14–18 content/image + row 19 blank separator
-  const originalFooterRow=20;
-  const originalFooterEnd=35;
-  const columnCount=9;
+  const mapWs=wb.getWorksheet('Template Map');
+  const ws=wb.getWorksheet('Invoice Template')||wb.worksheets.find(s=>s.name!=='Template Map')||wb.worksheets[0];
+  if(!ws)throw new Error('範本沒有 Invoice 工作表');
 
-  // Capture the template styles before changing row positions.
+  const map=new Map();
+  if(mapWs){
+    mapWs.eachRow((row,rowNo)=>{
+      if(rowNo===1)return;
+      const field=norm(row.getCell(2).value);
+      const target=norm(row.getCell(3).value);
+      const format=norm(row.getCell(5).value);
+      const notes=norm(row.getCell(6).value);
+      if(field&&target)map.set(field.toLowerCase(),{field,target,format,notes});
+    });
+  }
+  const getMap=(name,fallback='')=>map.get(name.toLowerCase())?.target||fallback;
+  const mapFormat=(name)=>map.get(name.toLowerCase())?.format||'';
+
+  // Header fields are now controlled by the Template Map sheet.
+  const setMapped=(field,value)=>{
+    const address=getMap(field);
+    if(!address)return;
+    const cell=ws.getCell(address.split(':')[0]);
+    cell.value=value;
+    const fmt=mapFormat(field).toLowerCase();
+    if(fmt.includes('date'))cell.numFmt='d mmmm, yyyy';
+  };
+  const inv=norm($('#invoiceNo').value)||formatInvoiceNo();
+  const invoiceDateText=norm($('#invoiceDate').value);
+  const invoiceDate=invoiceDateText?new Date(`${invoiceDateText}T00:00:00`):new Date();
+  setMapped('Invoice No.',inv);
+  setMapped('Invoice Date',invoiceDate);
+  setMapped('Shipment Method',norm($('#shipmentMethod').value));
+  setMapped('Currency',norm($('#currency').value)||'USD');
+  setMapped('Company',norm($('#customerName').value));
+  setMapped('Customer Code',norm($('#customerCode').value));
+  setMapped('Payment Term',norm($('#customerTerms').value));
+
+  const addressLines=norm($('#customerAddress').value).split(/\r?\n/).map(norm).filter(Boolean);
+  setMapped('Ship To',addressLines[0]||'');
+  setMapped('Country',addressLines.slice(1).join(', '));
+
+  // Locate the item table and footer from the map / visible labels.
+  let headerRow=0;
+  for(let r=1;r<=Math.min(ws.rowCount,80);r++){
+    if(norm(ws.getCell(`A${r}`).value).toLowerCase()==='no.') {headerRow=r;break}
+  }
+  const firstItemRow=headerRow?headerRow+2:19;
+  const footerQtyCell=getMap('Total Quantity','F25').split(':')[0];
+  const footerBaseRow=Number((footerQtyCell.match(/\d+/)||['25'])[0]);
+  const originalFooterEnd=ws.rowCount;
+  const originalContentRows=Math.max(1,footerBaseRow-firstItemRow-1);
+  const baseContentRows=Math.min(5,originalContentRows);
+  const separatorSourceRow=firstItemRow+baseContentRows;
+  const columnCount=Math.max(9,ws.columnCount||9);
+
   const captureCell=(cell)=>({
-    value:cell.value,
-    style:cloneStyle(cell.style),
-    numFmt:cell.numFmt,
-    alignment:cloneStyle(cell.alignment),
-    border:cloneStyle(cell.border),
-    fill:cloneStyle(cell.fill),
-    font:cloneStyle(cell.font),
-    protection:cloneStyle(cell.protection)
+    value:cell.value,style:cloneStyle(cell.style),numFmt:cell.numFmt,
+    alignment:cloneStyle(cell.alignment),border:cloneStyle(cell.border),
+    fill:cloneStyle(cell.fill),font:cloneStyle(cell.font),protection:cloneStyle(cell.protection)
   });
-  const itemContentStyle=[];
-  for(let c=1;c<=columnCount;c++)itemContentStyle.push(captureCell(ws.getRow(firstItemRow).getCell(c)));
-  const itemSeparatorStyle=[];
-  for(let c=1;c<=columnCount;c++)itemSeparatorStyle.push(captureCell(ws.getRow(firstItemRow+5).getCell(c)));
-  const contentRowHeight=ws.getRow(firstItemRow).height||15;
-  const separatorRowHeight=ws.getRow(firstItemRow+5).height||8;
+  const contentStyle=[];
+  for(let c=1;c<=columnCount;c++)contentStyle.push(captureCell(ws.getRow(firstItemRow).getCell(c)));
+  const separatorStyle=[];
+  for(let c=1;c<=columnCount;c++)separatorStyle.push(captureCell(ws.getRow(separatorSourceRow).getCell(c)));
+  const contentHeight=ws.getRow(firstItemRow).height||18;
+  const separatorHeight=ws.getRow(separatorSourceRow).height||8;
 
   const footerRows=[];
-  for(let r=originalFooterRow;r<=originalFooterEnd;r++){
+  for(let r=footerBaseRow;r<=originalFooterEnd;r++){
     const row=[];
     for(let c=1;c<=columnCount;c++)row.push(captureCell(ws.getRow(r).getCell(c)));
     footerRows.push({height:ws.getRow(r).height,row});
   }
 
-  // Remove template image and its original merged range.
   try{ws._media=[]}catch{}
-  try{ws.unMergeCells(`D${firstItemRow}:E${firstItemRow+4}`)}catch{}
+  for(let r=firstItemRow;r<=originalFooterEnd;r++){
+    try{ws.unMergeCells(`D${r}:E${r+4}`)}catch{}
+  }
 
   const itemPlans=state.items.map(item=>{
     const lines=[articleDescriptionFor(item),...(item.descriptions||[])].map(norm).filter(Boolean);
     const contentRows=Math.max(5,lines.length);
-    return {item,lines,contentRows,totalRows:contentRows+1}; // final row is always blank separator
+    return {item,lines,contentRows,totalRows:contentRows+1};
   });
-  const totalItemRows=itemPlans.reduce((sum,x)=>sum+x.totalRows,0);
+  const totalItemRows=itemPlans.reduce((s,x)=>s+x.totalRows,0);
   const footerStart=firstItemRow+totalItemRows;
   const requiredEnd=footerStart+footerRows.length-1;
+  const clearEnd=Math.max(originalFooterEnd,requiredEnd+2);
 
-  // Clear the old item/footer area and any rows that will be used by the new output.
-  const clearEnd=Math.max(originalFooterEnd,requiredEnd+3);
   for(let r=firstItemRow;r<=clearEnd;r++){
     for(let c=1;c<=columnCount;c++)ws.getRow(r).getCell(c).value=null;
     ws.getRow(r).height=undefined;
   }
 
   const applyCaptured=(cell,src,includeValue=false)=>{
-    cell.style=cloneStyle(src.style);
-    cell.numFmt=src.numFmt;
-    cell.alignment=cloneStyle(src.alignment);
-    cell.border=cloneStyle(src.border);
-    cell.fill=cloneStyle(src.fill);
-    cell.font=cloneStyle(src.font);
+    cell.style=cloneStyle(src.style);cell.numFmt=src.numFmt;
+    cell.alignment=cloneStyle(src.alignment);cell.border=cloneStyle(src.border);
+    cell.fill=cloneStyle(src.fill);cell.font=cloneStyle(src.font);
     cell.protection=cloneStyle(src.protection);
     if(includeValue)cell.value=src.value;
   };
@@ -335,144 +370,129 @@ async function exportInvoiceFromTemplate(){
     const row=ws.getRow(rowNo);row.height=height;
     for(let c=1;c<=columnCount;c++)applyCaptured(row.getCell(c),styleRow[c-1],false);
   };
-
-  // Header values from the imported template layout.
-  const inv=norm($('#invoiceNo').value)||formatInvoiceNo();
-  ws.getCell('A2').value='Sales Invoice';
-  ws.getCell('A3').value=inv;
-  ws.getCell('A4').value=norm($('#invoiceDate').value);
-  ws.getCell('A4').numFmt='yyyy-mm-dd';
-  ws.getCell('A5').value=norm($('#shipmentMethod').value)||' ';
-  ws.getCell('A6').value=norm($('#currency').value)||'USD';
-  ws.getCell('A8').value='Customer : ';
-  ws.getCell('B8').value=norm($('#customerName').value);
-  const addressLines=norm($('#customerAddress').value).split(/\r?\n/).filter(Boolean);
-  ws.getCell('B9').value=addressLines[0]||'';
-  ws.getCell('B10').value=addressLines.slice(1).join(', ');
+  const colLetter=(field,fallback)=>{
+    const target=getMap(field,fallback);
+    const m=target.match(/[A-Z]+/i);return (m?m[0]:fallback).toUpperCase();
+  };
+  const noCol='A';
+  const lotCol=colLetter('Lot No.','B');
+  const artCol=colLetter('ARTNO',lotCol);
+  const descCol=colLetter('Article','C');
+  const imageTarget=getMap('Product Image','D:E merged item block');
+  const imageMatch=imageTarget.match(/([A-Z]+)\s*:\s*([A-Z]+)/i);
+  const imageStartCol=(imageMatch?imageMatch[1]:'D').toUpperCase();
+  const imageEndCol=(imageMatch?imageMatch[2]:'E').toUpperCase();
+  const qtyCol=colLetter('Qty','F');
+  const unitCol=colLetter('Unit','G');
+  const unitPriceCol=colLetter('Unit Price','H');
+  const amountCol=colLetter('Amount','I');
 
   let rowCursor=firstItemRow;
   let missingImages=0;
   let pageUsedRows=0;
-  const pageItemCapacity=28; // conservative content-row estimate for A4 portrait output
+  const pageItemCapacity=28;
 
   for(let i=0;i<itemPlans.length;i++){
     const {item,lines,contentRows,totalRows}=itemPlans[i];
-    const start=rowCursor;
-    const contentEnd=start+contentRows-1;
-    const separatorRow=contentEnd+1;
-
-    // Keep each complete item together when Excel is printed / saved as PDF.
+    const start=rowCursor,contentEnd=start+contentRows-1,separatorRow=contentEnd+1;
     if(pageUsedRows>0&&pageUsedRows+totalRows>pageItemCapacity){
       try{ws.getRow(start).addPageBreak()}catch{}
       pageUsedRows=0;
     }
+    for(let r=start;r<=contentEnd;r++)applyRowStyle(r,contentStyle,contentHeight);
+    applyRowStyle(separatorRow,separatorStyle,separatorHeight);
 
-    for(let r=start;r<=contentEnd;r++)applyRowStyle(r,itemContentStyle,contentRowHeight);
-    applyRowStyle(separatorRow,itemSeparatorStyle,separatorRowHeight);
-
-    ws.getCell(`A${start}`).value=i+1;
-    ws.getCell(`A${start}`).alignment={...cloneStyle(ws.getCell(`A${start}`).alignment),horizontal:'center',vertical:'top'};
-    ws.getCell(`B${start}`).value=`Lot.No. : ${item.lotNo}`;
-    ws.getCell(`B${start+1}`).value=item.artNo;
-    ws.getCell(`B${start}`).font={...cloneStyle(ws.getCell(`B${start}`).font),bold:true};
-    ws.getCell(`B${start+1}`).font={...cloneStyle(ws.getCell(`B${start+1}`).font),bold:true};
+    ws.getCell(`${noCol}${start}`).value=i+1;
+    ws.getCell(`${noCol}${start}`).alignment={...cloneStyle(ws.getCell(`${noCol}${start}`).alignment),horizontal:'center',vertical:'top'};
+    ws.getCell(`${lotCol}${start}`).value=`Lot.No. : ${item.lotNo}`;
+    ws.getCell(`${artCol}${start+1}`).value=item.artNo;
+    ws.getCell(`${lotCol}${start}`).font={...cloneStyle(ws.getCell(`${lotCol}${start}`).font),bold:true};
+    ws.getCell(`${artCol}${start+1}`).font={...cloneStyle(ws.getCell(`${artCol}${start+1}`).font),bold:true};
 
     for(let r=0;r<contentRows;r++){
-      const cell=ws.getCell(`C${start+r}`);
+      const cell=ws.getCell(`${descCol}${start+r}`);
       cell.value=lines[r]||'';
       cell.alignment={...cloneStyle(cell.alignment),vertical:'top',wrapText:true};
     }
 
-    // Product image is always limited to the first five rows, even if description extends lower.
-    try{ws.mergeCells(`D${start}:E${start+4}`)}catch{}
-    const imageAnchor=ws.getCell(`D${start}`);
-    imageAnchor.value=null;
-    imageAnchor.alignment={horizontal:'center',vertical:'middle'};
+    try{ws.mergeCells(`${imageStartCol}${start}:${imageEndCol}${start+4}`)}catch{}
+    ws.getCell(`${imageStartCol}${start}`).value=null;
+    ws.getCell(`${imageStartCol}${start}`).alignment={horizontal:'center',vertical:'middle'};
 
-    ws.getCell(`F${start}`).value=item.qty;
-    ws.getCell(`F${start}`).numFmt='0';
-    ws.getCell(`G${start}`).value=item.unit;
-    ws.getCell(`H${start}`).value=item.unitPrice;
-    ws.getCell(`H${start}`).numFmt='$#,##0.00';
-    ws.getCell(`I${start}`).value=item.qty*item.unitPrice;
-    ws.getCell(`I${start}`).numFmt='$#,##0.00';
+    ws.getCell(`${qtyCol}${start}`).value=item.qty;
+    ws.getCell(`${qtyCol}${start}`).numFmt='0';
+    ws.getCell(`${unitCol}${start}`).value=item.unit;
+    ws.getCell(`${unitPriceCol}${start}`).value=item.unitPrice;
+    ws.getCell(`${unitPriceCol}${start}`).numFmt='$#,##0.00';
+    ws.getCell(`${amountCol}${start}`).value=item.qty*item.unitPrice;
+    ws.getCell(`${amountCol}${start}`).numFmt='$#,##0.00';
 
     const selected=getImg(item);
     if(selected?.file){
       try{
         const asset=await imageFileToJpegAsset(selected.file,620,.84);
         const imageId=wb.addImage({base64:asset.base64,extension:'jpeg'});
-        const maxW=178,maxH=92;
-        const scale=Math.min(maxW/asset.width,maxH/asset.height,1);
+        const maxW=170,maxH=90,scale=Math.min(maxW/asset.width,maxH/asset.height,1);
         const width=Math.max(20,Math.round(asset.width*scale));
         const height=Math.max(20,Math.round(asset.height*scale));
-        const leftOffset=Math.max(0,(maxW-width)/2);
-        const topOffset=Math.max(0,(maxH-height)/2);
-        ws.addImage(imageId,{
-          tl:{col:3.05+leftOffset/72,row:start-1+.08+topOffset/20},
-          ext:{width,height},
-          editAs:'oneCell'
-        });
+        ws.addImage(imageId,{tl:{col:3.05+(maxW-width)/144,row:start-1+.08+(maxH-height)/40},ext:{width,height},editAs:'oneCell'});
       }catch{missingImages++}
     }else missingImages++;
 
-    rowCursor+=totalRows;
-    pageUsedRows+=totalRows;
-    setExcelExportStatus(`正在套用動態 5 行範本… ${i+1}/${state.items.length}`);
+    rowCursor+=totalRows;pageUsedRows+=totalRows;
+    setExcelExportStatus(`正在依 Template Map 建立 Excel… ${i+1}/${state.items.length}`);
   }
 
-  // Restore the original footer below the dynamically sized item area.
   for(let offset=0;offset<footerRows.length;offset++){
-    const targetRow=footerStart+offset;
-    const captured=footerRows[offset];
-    const row=ws.getRow(targetRow);row.height=captured.height;
+    const targetRow=footerStart+offset,captured=footerRows[offset],row=ws.getRow(targetRow);
+    row.height=captured.height;
     for(let c=1;c<=columnCount;c++)applyCaptured(row.getCell(c),captured.row[c-1],true);
   }
 
   const t=totals();
-  // Footer positions correspond to original rows 20, 23, 25, 27–28, 30, 33, 35.
-  const rel=r=>footerStart+(r-originalFooterRow);
-  ws.getCell(`E${rel(20)}`).value='Total Quantity : ';
-  ws.getCell(`F${rel(20)}`).value=t.qty;
-  ws.getCell(`F${rel(20)}`).numFmt='0';
-  ws.getCell(`H${rel(20)}`).value='Sub Total : ';
-  ws.getCell(`I${rel(20)}`).value=t.sub;
-  ws.getCell(`I${rel(20)}`).numFmt='$#,##0.00';
-  ws.getCell(`H${rel(23)}`).value='DISCOUNT AMOUNT : ';
-  ws.getCell(`I${rel(23)}`).value=t.discount;
-  ws.getCell(`I${rel(23)}`).numFmt='$#,##0.00';
-  ws.getCell(`H${rel(25)}`).value=`Total : (${norm($('#currency').value)||'USD'}) `;
-  ws.getCell(`I${rel(25)}`).value=t.total;
-  ws.getCell(`I${rel(25)}`).numFmt='$#,##0.00';
-  const words=numberToWords(t.total);
-  const amountText=`${currencyWords($('#currency').value)} ${words}`;
-  ws.getCell(`C${rel(27)}`).value='Total Amount : ';
-  ws.getCell(`D${rel(27)}`).value=amountText;
-  ws.getCell(`D${rel(27)}`).alignment={...cloneStyle(ws.getCell(`D${rel(27)}`).alignment),wrapText:true};
-  ws.getCell(`D${rel(28)}`).value='';
-  ws.getCell(`C${rel(30)}`).value='Remark : ';
-  ws.getCell(`D${rel(30)}`).value=norm($('#remark').value);
+  const shiftedAddress=(field,fallback)=>{
+    const addr=getMap(field,fallback).split(':')[0];
+    const m=addr.match(/^([A-Z]+)(\d+)$/i);if(!m)return fallback;
+    return `${m[1].toUpperCase()}${footerStart+(Number(m[2])-footerBaseRow)}`;
+  };
+  const totalQtyAddr=shiftedAddress('Total Quantity','F25');
+  const subAddr=shiftedAddress('Sub Total','I25');
+  const discountAddr=shiftedAddress('Discount','I28');
+  const totalAddr=shiftedAddress('Total','I30');
+  ws.getCell(totalQtyAddr).value=t.qty;ws.getCell(totalQtyAddr).numFmt='0';
+  ws.getCell(subAddr).value=t.sub;ws.getCell(subAddr).numFmt='$#,##0.00';
+  ws.getCell(discountAddr).value=t.discount;ws.getCell(discountAddr).numFmt='$#,##0.00';
+  ws.getCell(totalAddr).value=t.total;ws.getCell(totalAddr).numFmt='$#,##0.00';
 
-  // If footer cannot fit after the last item, begin it on a new printed page.
-  const footerHeightRows=footerRows.length;
-  if(pageUsedRows+footerHeightRows>pageItemCapacity){
-    try{ws.getRow(footerStart).addPageBreak()}catch{}
+  // Fill text fields in the footer by label, so changing rows in the template remains safe.
+  const findLabelRow=(text)=>{
+    const needle=text.toLowerCase();
+    for(let r=footerStart;r<=requiredEnd;r++)for(let c=1;c<=columnCount;c++){
+      if(norm(ws.getRow(r).getCell(c).value).toLowerCase().includes(needle))return {r,c};
+    }
+    return null;
+  };
+  const amountLabel=findLabelRow('total amount');
+  if(amountLabel){
+    const amountCell=ws.getRow(amountLabel.r).getCell(Math.min(columnCount,amountLabel.c+1));
+    amountCell.value=`${currencyWords($('#currency').value)} ${numberToWords(t.total)}`;
+    amountCell.alignment={...cloneStyle(amountCell.alignment),wrapText:true};
   }
+  const remarkLabel=findLabelRow('remark');
+  if(remarkLabel)ws.getRow(remarkLabel.r).getCell(Math.min(columnCount,remarkLabel.c+1)).value=norm($('#remark').value);
 
+  if(pageUsedRows+footerRows.length>pageItemCapacity){try{ws.getRow(footerStart).addPageBreak()}catch{}}
   ws.pageSetup=ws.pageSetup||{};
-  ws.pageSetup.paperSize=9;
-  ws.pageSetup.orientation='portrait';
-  ws.pageSetup.fitToPage=true;
-  ws.pageSetup.fitToWidth=1;
-  ws.pageSetup.fitToHeight=0;
-  ws.pageSetup.printArea=`A1:I${requiredEnd}`;
-  ws.pageSetup.printTitlesRow='1:13';
-  ws.headerFooter=ws.headerFooter||{};
-  ws.headerFooter.oddFooter='Page &P of &N';
+  ws.pageSetup.paperSize=9;ws.pageSetup.orientation='portrait';ws.pageSetup.fitToPage=true;
+  ws.pageSetup.fitToWidth=1;ws.pageSetup.fitToHeight=0;ws.pageSetup.printArea=`A1:I${requiredEnd}`;
+  ws.pageSetup.printTitlesRow=`1:${Math.max(1,firstItemRow-1)}`;
+  ws.headerFooter=ws.headerFooter||{};ws.headerFooter.oddFooter='Page &P of &N';
 
+  if(mapWs)wb.removeWorksheet(mapWs.id);
+  ws.name='Invoice';
   const buffer=await wb.xlsx.writeBuffer();
   downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`${inv}.xlsx`);
-  setExcelExportStatus(`已用範本 ${state.invoiceTemplateName} 輸出動態 Excel Invoice${missingImages?`；${missingImages} 款沒有嵌入圖片`:''}。`,'ok');
+  setExcelExportStatus(`已依 Template Map 輸出 ${state.invoiceTemplateName}${missingImages?`；${missingImages} 款沒有圖片`:''}。`,'ok');
 }
 async function exportInvoiceExcel(){
   if(!state.items.length){alert('Invoice 沒有貨品。');return}
