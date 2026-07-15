@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.10.3</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.10.4</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -27,7 +27,7 @@
     <div class="status-grid">
       <div><span>產品</span><strong id="productCount">0</strong></div>
       <div><span>客戶</span><strong id="customerCount">0</strong></div>
-      <div><span>Invoice 款數</span><strong id="invoiceCount">0</strong></div>
+      <div><span>文件款數</span><strong id="invoiceCount">0</strong></div>
       <div><span>總額</span><strong id="headerTotal">$0.00</strong></div>
     </div>
   </section>
@@ -147,11 +147,16 @@
 
   <section id="invoice" class="tab-panel">
     <article class="card invoice-workspace">
-      <h3>客人 Invoice 資料</h3>
+      <h3 id="documentDataHeading">客人 Invoice 資料</h3>
       <div id="selectedCustomerSummary" class="selected-customer"></div>
+      <div class="document-type-switch" role="group" aria-label="Document Type">
+        <span>Document Type</span>
+        <label><input type="radio" name="documentType" value="invoice" checked> Invoice</label>
+        <label><input type="radio" name="documentType" value="consignment"> Consignment</label>
+      </div>
       <div class="form-grid">
-        <label>Invoice No.<input id="invoiceNo" value="" placeholder="INVYY0001"></label>
-        <label>Invoice Date<input id="invoiceDate" inputmode="numeric" placeholder="YYYY-MM-DD"></label>
+        <label><span id="documentNoLabel">Invoice No.</span><input id="invoiceNo" value="" placeholder="INVYY0001"></label>
+        <label><span id="documentDateLabel">Invoice Date</span><input id="invoiceDate" inputmode="numeric" placeholder="YYYY-MM-DD"></label>
         <label>Discount Amount<input id="discountAmount" type="number" min="0" step="1" value="0"></label>
         <label>Remark<input id="remark" value=""></label>
       </div>
@@ -170,7 +175,7 @@
 
     <article class="card">
       <div class="section-title-row">
-        <h3>Invoice 貨品</h3>
+        <h3 id="documentItemsHeading">Invoice 貨品</h3>
         <div class="item-actions"><button id="scrollLatestBtn" class="ghost">回到最新</button><button id="clearInvoiceBtn" class="danger ghost">清空草稿</button></div>
       </div>
       <div id="invoiceItems" class="invoice-items empty-state">尚未加入貨品。</div>

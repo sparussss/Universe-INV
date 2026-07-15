@@ -1,6 +1,6 @@
-# Universe Invoice PWA v0.10.3
+# Universe Invoice PWA v0.10.4
 
-## v0.10.3 Excel output changes
+## v0.10.4 Excel output changes
 
 - Header layout remains unchanged.
 - Invoice Date is written as fixed English text, for example `15 July, 2026`, so PDF conversion will not localise the month into Chinese.
@@ -128,3 +128,10 @@ UI 改善：
 - Product images are contained within the first 4 rows of the D:E image area.
 - Manual page breaks are placed before the next item (on the preceding row), preventing a single item line from being left at the bottom of a page.
 - Footer page break uses the same before-block logic.
+
+
+## v0.10.4 Consignment test
+- Added Invoice / Consignment document type switch.
+- Separate INV and CON number sequences.
+- Consignment preview and Excel labels use Sales Consign / Consign Date.
+- Confirming Consignment exports Available Stock and Consignment Out workbooks.

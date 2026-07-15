@@ -1,33 +1,50 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],stoneAliases:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1}};
+const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],stoneAliases:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1}};
 const norm=v=>String(v??'').trim(),normCode=v=>String(v??'').replace(/\s+/g,'').toUpperCase(),normArt=v=>norm(v).toUpperCase();
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>{const d=new Date(),y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`};$('#invoiceDate').value=today();
 function englishInvoiceDate(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return String(iso||'');const months=['January','February','March','April','May','June','July','August','September','October','November','December'];return `${Number(m[3])} ${months[Number(m[2])-1]}, ${m[1]}`;}
 function discountDisplay(value){const n=Math.max(0,Number(value)||0);return n>0?`(${fmt(n)})`:fmt(0)}
 function invoiceYear(){return String(new Date().getFullYear()).slice(-2)}
-function invoiceSequenceKey(yy=invoiceYear()){return `universeInvoiceSeq_${yy}`}
-function getNextInvoiceSequence(yy=invoiceYear()){
-  const saved=Number(localStorage.getItem(invoiceSequenceKey(yy))||1);
+function documentPrefix(type=state.documentType){return type==='consignment'?'CON':'INV'}
+function documentSequenceKey(type=state.documentType,yy=invoiceYear()){return `universe${type==='consignment'?'Consign':'Invoice'}Seq_${yy}`}
+function getNextDocumentSequence(type=state.documentType,yy=invoiceYear()){
+  const saved=Number(localStorage.getItem(documentSequenceKey(type,yy))||1);
   return Number.isInteger(saved)&&saved>0?saved:1;
 }
-function formatInvoiceNo(seq=getNextInvoiceSequence(),yy=invoiceYear()){
-  return `INV${yy}${String(seq).padStart(4,'0')}`;
+function formatDocumentNo(seq=getNextDocumentSequence(),yy=invoiceYear(),type=state.documentType){
+  return `${documentPrefix(type)}${yy}${String(seq).padStart(4,'0')}`;
 }
+function formatInvoiceNo(seq=getNextDocumentSequence('invoice'),yy=invoiceYear()){return formatDocumentNo(seq,yy,'invoice')}
 function setDefaultInvoiceNo(force=false){
   const el=$('#invoiceNo');
-  if(force||!norm(el.value))el.value=formatInvoiceNo();
+  if(force||!norm(el.value)||!String(el.value).toUpperCase().startsWith(documentPrefix()))el.value=formatDocumentNo();
 }
-function advanceInvoiceSequence(confirmedNo){
-  const yy=invoiceYear();
-  const m=String(confirmedNo||'').toUpperCase().match(/^INV(\d{2})(\d{4})$/);
-  let next=getNextInvoiceSequence(yy)+1;
+function advanceDocumentSequence(confirmedNo,type=state.documentType){
+  const yy=invoiceYear(),prefix=documentPrefix(type);
+  const m=String(confirmedNo||'').toUpperCase().match(new RegExp(`^${prefix}(\\d{2})(\\d{4})$`));
+  let next=getNextDocumentSequence(type,yy)+1;
   if(m&&m[1]===yy)next=Math.max(next,Number(m[2])+1);
-  localStorage.setItem(invoiceSequenceKey(yy),String(next));
-  $('#invoiceNo').value=formatInvoiceNo(next,yy);
+  localStorage.setItem(documentSequenceKey(type,yy),String(next));
+  $('#invoiceNo').value=formatDocumentNo(next,yy,type);
 }
+function advanceInvoiceSequence(confirmedNo){advanceDocumentSequence(confirmedNo,'invoice')}
 setDefaultInvoiceNo();
 function status(id,msg,type=''){const el=$(id);el.textContent=msg;el.className='notice'+(type?' '+type:'')}
+function documentLabels(type=state.documentType){return type==='consignment'?{type:'consignment',title:'Sales Consign',short:'Consignment',date:'Consign Date',no:'Consign No.',items:'Consignment 貨品',confirm:'Confirm Consignment 並匯出 Available Stock',export:'匯出 Excel Consignment'}:{type:'invoice',title:'Sales Invoice',short:'Invoice',date:'Invoice Date',no:'Invoice No.',items:'Invoice 貨品',confirm:'Confirm Invoice 並匯出 Remaining Stock',export:'匯出 Excel Invoice'}}
+function updateDocumentTypeUI(){
+  const l=documentLabels();
+  $('#documentDataHeading').textContent=`客人 ${l.short} 資料`;
+  $('#documentNoLabel').textContent=l.no;
+  $('#documentDateLabel').textContent=l.date;
+  $('#documentItemsHeading').textContent=l.items;
+  $('#confirmInvoiceBtn').textContent=l.confirm;
+  $('#exportExcelBtn').textContent=l.export;
+  $('#invoiceNo').placeholder=`${documentPrefix()}YY0001`;
+  setDefaultInvoiceNo(true);
+  renderPreview();
+}
+$$('input[name="documentType"]').forEach(r=>r.addEventListener('change',e=>{state.documentType=e.target.value;updateDocumentTypeUI()}));
 function setImportCollapsed(key,collapsed=true){const card=document.querySelector(`[data-import-card="${key}"]`);if(!card)return;card.classList.toggle('collapsed',collapsed);const btn=card.querySelector('.import-toggle');if(btn){btn.textContent=collapsed?'展開':'收合';btn.setAttribute('aria-expanded',String(!collapsed))}}
 $$('.import-toggle').forEach(btn=>btn.addEventListener('click',()=>{const card=btn.closest('.import-card');setImportCollapsed(card?.dataset.importCard,!card.classList.contains('collapsed'))}));
 function field(row,names){const keys=Object.keys(row);for(const n of names){const k=keys.find(x=>x.trim().toUpperCase()===n);if(k)return row[k]}return''}
@@ -212,7 +229,7 @@ function numberToWords(value){
 function currencyWords(code){
   return ({USD:'US DOLLARS',EUR:'EUROS',JPY:'JAPANESE YEN',HKD:'HONG KONG DOLLARS'})[String(code||'').toUpperCase()]||String(code||'').toUpperCase();
 }
-function renderPreview(){const t=totals(),rows=state.items.map((x,i)=>`<tr><td>${i+1}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="num">${x.qty}</td><td>${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`).join('');$('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">Sales Invoice</div><div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>Invoice Date : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Quantity</th><th>Unit</th><th class="num">Unit Price</th><th class="num">Amount</th></tr><tr><th colspan="7">F.O.B. Value</th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p><strong>Remark :</strong> ${esc($('#remark').value)}</p></div>`}
+function renderPreview(){const t=totals(),rows=state.items.map((x,i)=>`<tr><td>${i+1}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="num">${x.qty}</td><td>${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`).join('');$('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Quantity</th><th>Unit</th><th class="num">Unit Price</th><th class="num">Amount</th></tr><tr><th colspan="7">F.O.B. Value</th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p><strong>Remark :</strong> ${esc($('#remark').value)}</p></div>`}
 
 function setExcelExportStatus(message,type=''){
   const el=$('#excelExportStatus');
@@ -276,6 +293,19 @@ async function exportInvoiceFromTemplate(){
   const ws=wb.getWorksheet('Invoice Template')||wb.worksheets.find(s=>s.name!=='Template Map')||wb.worksheets[0];
   if(!ws)throw new Error('範本沒有 Invoice 工作表');
 
+  const docLabels=documentLabels();
+  // Convert the imported Invoice template into Consignment when selected.
+  if(state.documentType==='consignment'){
+    ws.eachRow(row=>row.eachCell(cell=>{
+      if(typeof cell.value==='string'){
+        cell.value=cell.value
+          .replace(/Sales Invoice/gi,'Sales Consign')
+          .replace(/Invoice Date/gi,'Consign Date')
+          .replace(/Invoice No\.?/gi,'Consign No.');
+      }
+    }));
+  }
+
   const map=new Map();
   if(mapWs){
     mapWs.eachRow((row,rowNo)=>{
@@ -299,7 +329,7 @@ async function exportInvoiceFromTemplate(){
     const fmt=mapFormat(field).toLowerCase();
     if(fmt.includes('date'))cell.numFmt='d mmmm, yyyy';
   };
-  const inv=norm($('#invoiceNo').value)||formatInvoiceNo();
+  const inv=norm($('#invoiceNo').value)||formatDocumentNo();
   const invoiceDateText=norm($('#invoiceDate').value);
   const invoiceDateEnglish=englishInvoiceDate(invoiceDateText||today());
   setMapped('Invoice No.',inv);
@@ -559,7 +589,7 @@ async function exportInvoiceFromTemplate(){
   ws.headerFooter=ws.headerFooter||{};ws.headerFooter.oddFooter='Page &P of &N';
 
   if(mapWs)wb.removeWorksheet(mapWs.id);
-  ws.name='Invoice';
+  ws.name=state.documentType==='consignment'?'Consignment':'Invoice';
   const buffer=await wb.xlsx.writeBuffer();
   downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`${inv}.xlsx`);
   setExcelExportStatus(`已依 Template Map 輸出 ${state.invoiceTemplateName}${missingImages?`；${missingImages} 款沒有圖片`:''}。`,'ok');
@@ -572,7 +602,7 @@ async function exportInvoiceExcel(){
     if(state.invoiceTemplateBuffer){await exportInvoiceFromTemplate();return}
     const wb=new ExcelJS.Workbook();
     wb.creator='Universe Invoice PWA';wb.created=new Date();
-    const ws=wb.addWorksheet('Sales Invoice',{pageSetup:{paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.25,right:.25,top:.35,bottom:.35,header:.15,footer:.15}}});
+    const ws=wb.addWorksheet(documentLabels().title,{pageSetup:{paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.25,right:.25,top:.35,bottom:.35,header:.15,footer:.15}}});
     ws.views=[{showGridLines:false}];
     ws.columns=[
       {key:'no',width:5},{key:'image',width:15},{key:'article',width:17},{key:'description',width:34},
@@ -584,9 +614,9 @@ async function exportInvoiceExcel(){
     merge('A3:H3','NO. 1 HOK YUEN STREET EAST, HUNG HOM, KOWLOON, HONG KONG',9,false,'center');
     merge('A4:H4','TEL : (852) 2363 5409     FAX : (852) 2765 0343',9,false,'center');
     ws.getRow(5).height=7;
-    merge('A6:D6','Sales Invoice',16,true,'left');
+    merge('A6:D6',documentLabels().title,16,true,'left');
     merge('E6:H6',`No. : ${norm($('#invoiceNo').value)}`,11,true,'right');
-    merge('A7:D7',`Invoice Date : ${englishInvoiceDate($('#invoiceDate').value)}`,10);
+    merge('A7:D7',`${documentLabels().date} : ${englishInvoiceDate($('#invoiceDate').value)}`,10);
     merge('E7:H7',`Currency : ${norm($('#currency').value)}`,10,false,'right');
     merge('A8:D8',`Shipment Method : ${norm($('#shipmentMethod').value)}`,10);
     merge('E8:H8',`Customer Code : ${norm($('#customerCode').value)}`,10,false,'right');
@@ -639,7 +669,7 @@ async function exportInvoiceExcel(){
     ws.pageSetup.printArea=`A1:H${row}`;
     ws.autoFilter={from:{row:headerRow,column:1},to:{row:headerRow,column:8}};
     const buffer=await wb.xlsx.writeBuffer();
-    const inv=norm($('#invoiceNo').value)||formatInvoiceNo();
+    const inv=norm($('#invoiceNo').value)||formatDocumentNo();
     downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`${inv}.xlsx`);
     setExcelExportStatus(`Excel Invoice 已輸出${missingImages?`；${missingImages} 款沒有嵌入圖片`:''}。`,'ok');
   }catch(err){console.error(err);setExcelExportStatus('Excel 輸出失敗：'+(err.message||err),'error')}
@@ -721,6 +751,41 @@ async function startScanner(){
 }
 async function stopScanner(){if(state.scannerBusy)return;state.scannerBusy=true;try{if(state.scannerRunning&&state.scanner)await state.scanner.stop()}catch{}finally{state.scannerRunning=false;$('#reader').innerHTML='';state.scannerZoom={min:1,max:1,step:1,current:1};updateZoomButtons();$('#scannerDialog').close();state.scannerBusy=false}}
 $('#scanBtn').onclick=startScanner;$('#closeScannerBtn').onclick=stopScanner;
-function exportRemaining(){if(!state.items.length)return alert('Invoice 沒有貨品。');const sold=new Set(state.items.map(x=>x.lotNo));const remain=state.stockRows.filter(r=>!sold.has(norm(field(r,['LOTNO']))));const ws=XLSX.utils.json_to_sheet(remain,{header:state.stockHeaders});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Remaining Stock');const inv=norm($('#invoiceNo').value)||formatInvoiceNo();XLSX.writeFile(wb,`Remaining_Stock_${inv}_${remain.length}pcs_${today().replaceAll('-','')}.xlsx`);for(const lot of sold)state.products.delete(lot);state.stockRows=remain;state.items=[];advanceInvoiceSequence(inv);renderItems();status('#addMessage',`Invoice ${inv} 已 Confirm，下一張為 ${$('#invoiceNo').value}。`,'ok');status('#stockStatus',`目前 Remaining Stock：${state.products.size} 件。`,'ok')}
-$('#confirmInvoiceBtn').onclick=()=>{if(confirm('Confirm Invoice 並匯出 Remaining Stock Excel？'))exportRemaining()};
-renderCustomerSummary();renderItems();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+function exportCurrentStockAfterConfirm(){
+  if(!state.items.length)return alert(`${documentLabels().short} 沒有貨品。`);
+  const type=state.documentType;
+  const used=new Set(state.items.map(x=>x.lotNo));
+  const available=state.stockRows.filter(r=>!used.has(norm(field(r,['LOTNO']))));
+  const inv=norm($('#invoiceNo').value)||formatDocumentNo();
+  const dateStamp=today().replaceAll('-','');
+
+  const stockWs=XLSX.utils.json_to_sheet(available,{header:state.stockHeaders});
+  const stockWb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(stockWb,stockWs,type==='consignment'?'Available Stock':'Remaining Stock');
+  const stockFile=type==='consignment'?`Available_Stock_${inv}_${available.length}pcs_${dateStamp}.xlsx`:`Remaining_Stock_${inv}_${available.length}pcs_${dateStamp}.xlsx`;
+  XLSX.writeFile(stockWb,stockFile);
+
+  if(type==='consignment'){
+    const customerCode=norm($('#customerCode').value),customer=norm($('#customerName').value),docDate=norm($('#invoiceDate').value);
+    const outRows=state.items.map(x=>({
+      CONSIGN_NO:inv,CONSIGN_DATE:docDate,CUSTOMER_CODE:customerCode,CUSTOMER:customer,
+      LOTNO:x.lotNo,ARTNO:x.artNo,DESCRIPTION:(x.descriptions||[]).join(' | '),QTY:x.qty,UNIT:x.unit,
+      UNIT_PRICE:x.unitPrice,AMOUNT:x.qty*x.unitPrice,STATUS:'CONSIGNED'
+    }));
+    const outWs=XLSX.utils.json_to_sheet(outRows);
+    const outWb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(outWb,outWs,'Consignment Out');
+    XLSX.writeFile(outWb,`Consignment_Out_${inv}_${outRows.length}pcs_${dateStamp}.xlsx`);
+  }
+
+  for(const lot of used)state.products.delete(lot);
+  state.stockRows=available;state.items=[];
+  advanceDocumentSequence(inv,type);
+  renderItems();
+  const msg=type==='consignment'?`Consignment ${inv} 已 Confirm，已輸出 Available Stock 及 Consignment Out；下一張為 ${$('#invoiceNo').value}。`:`Invoice ${inv} 已 Confirm，下一張為 ${$('#invoiceNo').value}。`;
+  status('#addMessage',msg,'ok');
+  status('#stockStatus',`目前 Available Stock：${state.products.size} 件。`,'ok');
+}
+function exportRemaining(){exportCurrentStockAfterConfirm()}
+$('#confirmInvoiceBtn').onclick=()=>{const l=documentLabels();if(confirm(`${l.confirm}？`))exportCurrentStockAfterConfirm()};
+updateDocumentTypeUI();renderCustomerSummary();renderItems();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
