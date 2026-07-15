@@ -345,7 +345,7 @@ async function exportInvoiceFromTemplate(){
     footerRows.push({height:ws.getRow(r).height,row});
   }
 
-  try{ws._media=[]}catch{}
+  // Preserve all drawings already embedded in the imported template, including the company letterhead.
   for(let r=firstItemRow;r<=originalFooterEnd;r++){
     try{ws.unMergeCells(`D${r}:E${r+4}`)}catch{}
   }
@@ -400,14 +400,19 @@ async function exportInvoiceFromTemplate(){
   const repeatedHeaderPts=rowRangeHeightPoints(ws,1,Math.max(1,firstItemRow-1));
   const pageBodyCapacityPts=Math.max(220,pageHeightPts-marginTopPts-marginBottomPts-repeatedHeaderPts);
   let pageUsedPts=0;
+  let pageItemCount=0;
+  const maxItemsPerPage=10;
 
   for(let i=0;i<itemPlans.length;i++){
     const {item,lines,contentRows,totalRows}=itemPlans[i];
     const start=rowCursor,contentEnd=start+contentRows-1,separatorRow=contentEnd+1;
     const itemHeightPts=contentRows*contentHeight+separatorHeight;
-    if(pageUsedPts>0&&pageUsedPts+itemHeightPts>pageBodyCapacityPts){
+    const pageIsFullByCount=pageItemCount>=maxItemsPerPage;
+    const pageIsFullByHeight=pageUsedPts>0&&pageUsedPts+itemHeightPts>pageBodyCapacityPts;
+    if(pageUsedPts>0&&(pageIsFullByCount||pageIsFullByHeight)){
       try{ws.getRow(start).addPageBreak()}catch{}
       pageUsedPts=0;
+      pageItemCount=0;
     }
     for(let r=start;r<=contentEnd;r++)applyRowStyle(r,contentStyle,contentHeight);
     applyRowStyle(separatorRow,separatorStyle,separatorHeight);
@@ -456,7 +461,7 @@ async function exportInvoiceFromTemplate(){
       }catch{missingImages++}
     }else missingImages++;
 
-    rowCursor+=totalRows;pageUsedPts+=itemHeightPts;
+    rowCursor+=totalRows;pageUsedPts+=itemHeightPts;pageItemCount+=1;
     setExcelExportStatus(`正在依 Template Map 建立 Excel… ${i+1}/${state.items.length}`);
   }
 
@@ -508,6 +513,7 @@ async function exportInvoiceFromTemplate(){
   ws.pageSetup=ws.pageSetup||{};
   ws.pageSetup.paperSize=9;ws.pageSetup.orientation='portrait';ws.pageSetup.fitToPage=true;
   ws.pageSetup.fitToWidth=1;ws.pageSetup.fitToHeight=0;ws.pageSetup.printArea=`A1:I${requiredEnd}`;
+  ws.pageSetup.scale=undefined;
   ws.pageSetup.printTitlesRow=`1:${Math.max(1,firstItemRow-1)}`;
   ws.pageSetup.horizontalCentered=true;ws.pageSetup.verticalCentered=false;
   ws.pageSetup.margins={left:.35,right:.35,top:.35,bottom:.35,header:.15,footer:.15};
