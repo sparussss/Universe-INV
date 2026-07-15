@@ -3,6 +3,8 @@ const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[
 const norm=v=>String(v??'').trim(),normCode=v=>String(v??'').replace(/\s+/g,'').toUpperCase(),normArt=v=>norm(v).toUpperCase();
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>{const d=new Date(),y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`};$('#invoiceDate').value=today();
+function englishInvoiceDate(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return String(iso||'');const months=['January','February','March','April','May','June','July','August','September','October','November','December'];return `${Number(m[3])} ${months[Number(m[2])-1]}, ${m[1]}`;}
+function discountDisplay(value){const n=Math.max(0,Number(value)||0);return n>0?`(${fmt(n)})`:fmt(0)}
 function invoiceYear(){return String(new Date().getFullYear()).slice(-2)}
 function invoiceSequenceKey(yy=invoiceYear()){return `universeInvoiceSeq_${yy}`}
 function getNextInvoiceSequence(yy=invoiceYear()){
@@ -210,7 +212,7 @@ function numberToWords(value){
 function currencyWords(code){
   return ({USD:'US DOLLARS',EUR:'EUROS',JPY:'JAPANESE YEN',HKD:'HONG KONG DOLLARS'})[String(code||'').toUpperCase()]||String(code||'').toUpperCase();
 }
-function renderPreview(){const t=totals(),rows=state.items.map((x,i)=>`<tr><td>${i+1}</td><td><strong>Lot.No. : ${esc(x.lotNo)}</strong><br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="num">${x.qty}</td><td>${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`).join('');$('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">Sales Invoice</div><div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>Invoice Date : ${esc($('#invoiceDate').value)}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Quantity</th><th>Unit</th><th class="num">Unit Price</th><th class="num">Amount</th></tr><tr><th colspan="7">F.O.B. Value</th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${fmt(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p><strong>Remark :</strong> ${esc($('#remark').value)}</p></div>`}
+function renderPreview(){const t=totals(),rows=state.items.map((x,i)=>`<tr><td>${i+1}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="num">${x.qty}</td><td>${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`).join('');$('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">Sales Invoice</div><div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>Invoice Date : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Quantity</th><th>Unit</th><th class="num">Unit Price</th><th class="num">Amount</th></tr><tr><th colspan="7">F.O.B. Value</th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p><strong>Remark :</strong> ${esc($('#remark').value)}</p></div>`}
 
 function setExcelExportStatus(message,type=''){
   const el=$('#excelExportStatus');
@@ -299,9 +301,13 @@ async function exportInvoiceFromTemplate(){
   };
   const inv=norm($('#invoiceNo').value)||formatInvoiceNo();
   const invoiceDateText=norm($('#invoiceDate').value);
-  const invoiceDate=invoiceDateText?new Date(`${invoiceDateText}T00:00:00`):new Date();
+  const invoiceDateEnglish=englishInvoiceDate(invoiceDateText||today());
   setMapped('Invoice No.',inv);
-  setMapped('Invoice Date',invoiceDate);
+  setMapped('Invoice Date',invoiceDateEnglish);
+  {
+    const dateAddress=getMap('Invoice Date');
+    if(dateAddress){const dateCell=ws.getCell(dateAddress.split(':')[0]);dateCell.numFmt='@';dateCell.value=invoiceDateEnglish;}
+  }
   setMapped('Shipment Method',norm($('#shipmentMethod').value));
   setMapped('Currency',norm($('#currency').value)||'USD');
   setMapped('Company',norm($('#customerName').value));
@@ -395,26 +401,56 @@ async function exportInvoiceFromTemplate(){
   const unitPriceCol=colLetter('Unit Price','H');
   const amountCol=colLetter('Amount','I');
 
+  function buildSmartPagePlan(plans,normalCapacity,footerCapacity,maxItems){
+    const n=plans.length;
+    const heights=plans.map(x=>x.contentRows*contentHeight+separatorHeight);
+    const memo=new Map();
+    function solve(i){
+      if(i>=n)return {score:0,pages:[]};
+      if(memo.has(i))return memo.get(i);
+      let best=null,sum=0;
+      for(let count=1;count<=maxItems&&i+count<=n;count++){
+        sum+=heights[i+count-1];
+        const isLast=i+count===n;
+        const cap=isLast?footerCapacity:normalCapacity;
+        if(sum>cap+0.01)break;
+        const tail=solve(i+count);
+        if(!tail)continue;
+        const unused=Math.max(0,cap-sum);
+        // First minimise page count, then balance the unused space across pages.
+        const score=1000000+unused*unused+tail.score;
+        const candidate={score,pages:[{start:i,end:i+count-1,used:sum,capacity:cap},...tail.pages]};
+        if(!best||candidate.score<best.score)best=candidate;
+      }
+      memo.set(i,best);return best;
+    }
+    return solve(0);
+  }
+
   let rowCursor=firstItemRow;
   let missingImages=0;
   const pageHeightPts=841.89; // A4 portrait
   const marginTopPts=25.2,marginBottomPts=25.2;
   const repeatedHeaderPts=rowRangeHeightPoints(ws,1,Math.max(1,firstItemRow-1));
   const pageBodyCapacityPts=Math.max(220,pageHeightPts-marginTopPts-marginBottomPts-repeatedHeaderPts);
-  let pageUsedPts=0;
-  let pageItemCount=0;
+  const footerHeightPts=footerRows.reduce((sum,x)=>sum+(Number(x.height)||15),0);
+  const finalPageItemCapacityPts=Math.max(0,pageBodyCapacityPts-footerHeightPts);
   const maxItemsPerPage=10;
+  let smartPlan=buildSmartPagePlan(itemPlans,pageBodyCapacityPts,finalPageItemCapacityPts,maxItemsPerPage);
+  let footerNeedsOwnPage=false;
+  if(!smartPlan){
+    // If the template footer is too tall to share a page with even one item,
+    // paginate the items normally and move the complete footer to its own page.
+    smartPlan=buildSmartPagePlan(itemPlans,pageBodyCapacityPts,pageBodyCapacityPts,maxItemsPerPage);
+    footerNeedsOwnPage=true;
+  }
+  const pageStartIndexes=new Set((smartPlan?.pages||[]).slice(1).map(p=>p.start));
 
   for(let i=0;i<itemPlans.length;i++){
     const {item,lines,contentRows,totalRows}=itemPlans[i];
     const start=rowCursor,contentEnd=start+contentRows-1,separatorRow=contentEnd+1;
-    const itemHeightPts=contentRows*contentHeight+separatorHeight;
-    const pageIsFullByCount=pageItemCount>=maxItemsPerPage;
-    const pageIsFullByHeight=pageUsedPts>0&&pageUsedPts+itemHeightPts>pageBodyCapacityPts;
-    if(pageUsedPts>0&&(pageIsFullByCount||pageIsFullByHeight)){
+    if(pageStartIndexes.has(i)){
       try{ws.getRow(Math.max(firstItemRow,start-1)).addPageBreak()}catch{}
-      pageUsedPts=0;
-      pageItemCount=0;
     }
     for(let r=start;r<=contentEnd;r++)applyRowStyle(r,contentStyle,contentHeight);
     applyRowStyle(separatorRow,separatorStyle,separatorHeight);
@@ -423,8 +459,8 @@ async function exportInvoiceFromTemplate(){
     ws.getCell(`${noCol}${start}`).alignment={...cloneStyle(ws.getCell(`${noCol}${start}`).alignment),horizontal:'center',vertical:'middle'};
     ws.getCell(`${lotCol}${start}`).value=`Lot.No. : ${item.lotNo}`;
     ws.getCell(`${artCol}${start+1}`).value=item.artNo;
-    ws.getCell(`${lotCol}${start}`).font={...cloneStyle(ws.getCell(`${lotCol}${start}`).font),bold:true};
-    ws.getCell(`${artCol}${start+1}`).font={...cloneStyle(ws.getCell(`${artCol}${start+1}`).font),bold:true};
+    ws.getCell(`${lotCol}${start}`).font={...cloneStyle(ws.getCell(`${lotCol}${start}`).font),bold:false};
+    ws.getCell(`${artCol}${start+1}`).font={...cloneStyle(ws.getCell(`${artCol}${start+1}`).font),bold:false};
 
     for(let r=0;r<contentRows;r++){
       const cell=ws.getCell(`${descCol}${start+r}`);
@@ -463,9 +499,11 @@ async function exportInvoiceFromTemplate(){
       }catch{missingImages++}
     }else missingImages++;
 
-    rowCursor+=totalRows;pageUsedPts+=itemHeightPts;pageItemCount+=1;
+    rowCursor+=totalRows;
     setExcelExportStatus(`正在依 Template Map 建立 Excel… ${i+1}/${state.items.length}`);
   }
+
+  if(footerNeedsOwnPage){try{ws.getRow(Math.max(firstItemRow,footerStart-1)).addPageBreak()}catch{}}
 
   for(let offset=0;offset<footerRows.length;offset++){
     const targetRow=footerStart+offset,captured=footerRows[offset],row=ws.getRow(targetRow);
@@ -485,7 +523,7 @@ async function exportInvoiceFromTemplate(){
   const totalAddr=shiftedAddress('Total','I30');
   ws.getCell(totalQtyAddr).value=t.qty;ws.getCell(totalQtyAddr).numFmt='0';
   ws.getCell(subAddr).value=t.sub;ws.getCell(subAddr).numFmt='$#,##0.00';
-  ws.getCell(discountAddr).value=t.discount;ws.getCell(discountAddr).numFmt='$#,##0.00';
+  ws.getCell(discountAddr).value=t.discount;ws.getCell(discountAddr).numFmt='($#,##0.00);($#,##0.00);$0.00';
   ws.getCell(totalAddr).value=t.total;ws.getCell(totalAddr).numFmt='$#,##0.00';
 
   // Fill text fields in the footer by label, so changing rows in the template remains safe.
@@ -505,8 +543,7 @@ async function exportInvoiceFromTemplate(){
   const remarkLabel=findLabelRow('remark');
   if(remarkLabel)ws.getRow(remarkLabel.r).getCell(Math.min(columnCount,remarkLabel.c+1)).value=norm($('#remark').value);
 
-  const footerHeightPts=footerRows.reduce((sum,x)=>sum+(Number(x.height)||15),0);
-  if(pageUsedPts>0&&pageUsedPts+footerHeightPts>pageBodyCapacityPts){try{ws.getRow(Math.max(firstItemRow,footerStart-1)).addPageBreak()}catch{}}
+
   // Uniform alignment requested for the complete Invoice sheet.
   for(let r=1;r<=requiredEnd;r++)for(let c=1;c<=columnCount;c++){
     const cell=ws.getRow(r).getCell(c);
@@ -549,7 +586,7 @@ async function exportInvoiceExcel(){
     ws.getRow(5).height=7;
     merge('A6:D6','Sales Invoice',16,true,'left');
     merge('E6:H6',`No. : ${norm($('#invoiceNo').value)}`,11,true,'right');
-    merge('A7:D7',`Invoice Date : ${norm($('#invoiceDate').value)}`,10);
+    merge('A7:D7',`Invoice Date : ${englishInvoiceDate($('#invoiceDate').value)}`,10);
     merge('E7:H7',`Currency : ${norm($('#currency').value)}`,10,false,'right');
     merge('A8:D8',`Shipment Method : ${norm($('#shipmentMethod').value)}`,10);
     merge('E8:H8',`Customer Code : ${norm($('#customerCode').value)}`,10,false,'right');
@@ -569,7 +606,7 @@ async function exportInvoiceExcel(){
       ws.mergeCells(`A${start}:A${end}`);ws.getCell(`A${start}`).value=i+1;
       ws.getCell(`A${start}`).alignment={horizontal:'center',vertical:'middle'};
       ws.mergeCells(`B${start}:B${end}`);
-      ws.mergeCells(`C${start}:C${end}`);ws.getCell(`C${start}`).value=`Lot.No. : ${item.lotNo}\n${item.artNo}`;ws.getCell(`C${start}`).font={name:'Arial',size:10,bold:true};ws.getCell(`C${start}`).alignment={vertical:'top',wrapText:true};
+      ws.mergeCells(`C${start}:C${end}`);ws.getCell(`C${start}`).value=`Lot.No. : ${item.lotNo}\n${item.artNo}`;ws.getCell(`C${start}`).font={name:'Arial',size:10,bold:false};ws.getCell(`C${start}`).alignment={vertical:'top',wrapText:true};
       ws.mergeCells(`D${start}:D${end}`);ws.getCell(`D${start}`).value=[articleDescriptionFor(item),...item.descriptions].filter(Boolean).join('\n');ws.getCell(`D${start}`).alignment={vertical:'top',wrapText:true};ws.getCell(`D${start}`).font={name:'Arial',size:10};
       ws.mergeCells(`E${start}:E${end}`);ws.getCell(`E${start}`).value=item.qty;ws.getCell(`E${start}`).alignment={horizontal:'center',vertical:'middle'};
       ws.mergeCells(`F${start}:F${end}`);ws.getCell(`F${start}`).value=item.unit;ws.getCell(`F${start}`).alignment={horizontal:'center',vertical:'middle'};
@@ -592,7 +629,7 @@ async function exportInvoiceExcel(){
     row++;
     ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value='Sub Total';ws.getCell(`A${row}`).font={bold:true};ws.getCell(`G${row}`).value=t.sub;ws.getCell(`G${row}`).numFmt='$#,##0.00';ws.getCell(`G${row}`).font={bold:true};ws.getCell(`G${row}`).alignment={horizontal:'right'};
     row++;
-    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value='Discount Amount';ws.getCell(`G${row}`).value=t.discount;ws.getCell(`G${row}`).numFmt='$#,##0.00';ws.getCell(`G${row}`).alignment={horizontal:'right'};
+    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value='Discount Amount';ws.getCell(`G${row}`).value=t.discount;ws.getCell(`G${row}`).numFmt='($#,##0.00);($#,##0.00);$0.00';ws.getCell(`G${row}`).alignment={horizontal:'right'};
     row++;
     ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value=`Total : (${norm($('#currency').value)})`;ws.getCell(`A${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).value=t.total;ws.getCell(`G${row}`).numFmt='$#,##0.00';ws.getCell(`G${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).alignment={horizontal:'right'};
     row+=2;

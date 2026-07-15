@@ -1,4 +1,16 @@
-# Universe Invoice PWA v0.10.2
+# Universe Invoice PWA v0.10.3
+
+## v0.10.3 Excel output changes
+
+- Header layout remains unchanged.
+- Invoice Date is written as fixed English text, for example `15 July, 2026`, so PDF conversion will not localise the month into Chinese.
+- LOTNO and ARTNO use normal font weight.
+- A non-zero Discount displays in brackets, for example `($100.00)`; zero displays as `$0.00`.
+- Smart pagination calculates every item height before writing the workbook.
+- Each item remains an indivisible block; page breaks are inserted before a complete item.
+- The final page reserves enough room for the complete footer. When necessary, the footer moves to its own page.
+- Maximum 10 items per page remains a safety limit.
+
 
 UI 改善：
 - 移除頂部說明句。
