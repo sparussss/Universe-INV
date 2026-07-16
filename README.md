@@ -1,6 +1,6 @@
-# Universe Invoice PWA v0.10.4
+# Universe Invoice PWA v0.11.0
 
-## v0.10.4 Excel output changes
+## v0.11.0 Excel output changes
 
 - Header layout remains unchanged.
 - Invoice Date is written as fixed English text, for example `15 July, 2026`, so PDF conversion will not localise the month into Chinese.
@@ -130,8 +130,17 @@ UI 改善：
 - Footer page break uses the same before-block logic.
 
 
-## v0.10.4 Consignment test
+## v0.11.0 Consignment test
 - Added Invoice / Consignment document type switch.
 - Separate INV and CON number sequences.
 - Consignment preview and Excel labels use Sales Consign / Consign Date.
 - Confirming Consignment exports Available Stock and Consignment Out workbooks.
+
+## v0.11.0 測試重點
+
+- 新增 Invoice / Consignment / Quotation 三種文件類型與獨立流水號。
+- 新增「匯入展覽資料包」：辨認 jmsdata、客戶表、Stone List、Invoice Template、選用 Article Mapping 及 Pictures。
+- 預覽自動更新並顯示產品圖片；恢復 PDF 列印／儲存功能。
+- 貨品清單改為精簡卡片，右側拖曳把手可改變預覽及輸出次序。
+- Excel 產品圖片放大至完整四行圖片區。
+- Remark 支援分行，Discount 支援括號顯示。

@@ -1,13 +1,13 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],stoneAliases:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1}};
+const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],stoneAliases:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1}};
 const norm=v=>String(v??'').trim(),normCode=v=>String(v??'').replace(/\s+/g,'').toUpperCase(),normArt=v=>norm(v).toUpperCase();
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>{const d=new Date(),y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`};$('#invoiceDate').value=today();
 function englishInvoiceDate(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return String(iso||'');const months=['January','February','March','April','May','June','July','August','September','October','November','December'];return `${Number(m[3])} ${months[Number(m[2])-1]}, ${m[1]}`;}
 function discountDisplay(value){const n=Math.max(0,Number(value)||0);return n>0?`(${fmt(n)})`:fmt(0)}
 function invoiceYear(){return String(new Date().getFullYear()).slice(-2)}
-function documentPrefix(type=state.documentType){return type==='consignment'?'CON':'INV'}
-function documentSequenceKey(type=state.documentType,yy=invoiceYear()){return `universe${type==='consignment'?'Consign':'Invoice'}Seq_${yy}`}
+function documentPrefix(type=state.documentType){return type==='consignment'?'CON':type==='quotation'?'QUO':'INV'}
+function documentSequenceKey(type=state.documentType,yy=invoiceYear()){const key=type==='consignment'?'Consign':type==='quotation'?'Quotation':'Invoice';return `universe${key}Seq_${yy}`}
 function getNextDocumentSequence(type=state.documentType,yy=invoiceYear()){
   const saved=Number(localStorage.getItem(documentSequenceKey(type,yy))||1);
   return Number.isInteger(saved)&&saved>0?saved:1;
@@ -30,8 +30,10 @@ function advanceDocumentSequence(confirmedNo,type=state.documentType){
 }
 function advanceInvoiceSequence(confirmedNo){advanceDocumentSequence(confirmedNo,'invoice')}
 setDefaultInvoiceNo();
+let previewTimer=null;
+function schedulePreview(){clearTimeout(previewTimer);previewTimer=setTimeout(()=>{renderPreview();const el=$('#previewUpdatedAt');if(el)el.textContent='最後更新：'+new Date().toLocaleTimeString('zh-HK',{hour:'2-digit',minute:'2-digit',second:'2-digit'});},180)}
 function status(id,msg,type=''){const el=$(id);el.textContent=msg;el.className='notice'+(type?' '+type:'')}
-function documentLabels(type=state.documentType){return type==='consignment'?{type:'consignment',title:'Sales Consign',short:'Consignment',date:'Consign Date',no:'Consign No.',items:'Consignment 貨品',confirm:'Confirm Consignment 並匯出 Available Stock',export:'匯出 Excel Consignment'}:{type:'invoice',title:'Sales Invoice',short:'Invoice',date:'Invoice Date',no:'Invoice No.',items:'Invoice 貨品',confirm:'Confirm Invoice 並匯出 Remaining Stock',export:'匯出 Excel Invoice'}}
+function documentLabels(type=state.documentType){if(type==='consignment')return{type:'consignment',title:'Sales Consign',short:'Consignment',date:'Consign Date',no:'Consign No.',items:'Consignment 貨品',confirm:'Confirm Consignment 並匯出 Available Stock',export:'匯出 Excel Consignment'};if(type==='quotation')return{type:'quotation',title:'Quotation',short:'Quotation',date:'Quotation Date',no:'Quotation No.',items:'Quotation 貨品',confirm:'Confirm Quotation（不扣庫存）',export:'匯出 Excel Quotation'};return{type:'invoice',title:'Sales Invoice',short:'Invoice',date:'Invoice Date',no:'Invoice No.',items:'Invoice 貨品',confirm:'Confirm Invoice 並匯出 Remaining Stock',export:'匯出 Excel Invoice'}}
 function updateDocumentTypeUI(){
   const l=documentLabels();
   $('#documentDataHeading').textContent=`客人 ${l.short} 資料`;
@@ -40,6 +42,7 @@ function updateDocumentTypeUI(){
   $('#documentItemsHeading').textContent=l.items;
   $('#confirmInvoiceBtn').textContent=l.confirm;
   $('#exportExcelBtn').textContent=l.export;
+  const pdfBtn=$('#exportPdfBtn');if(pdfBtn)pdfBtn.textContent=`輸出 PDF ${l.short}`;
   $('#invoiceNo').placeholder=`${documentPrefix()}YY0001`;
   setDefaultInvoiceNo(true);
   renderPreview();
@@ -50,11 +53,28 @@ $$('.import-toggle').forEach(btn=>btn.addEventListener('click',()=>{const card=b
 function field(row,names){const keys=Object.keys(row);for(const n of names){const k=keys.find(x=>x.trim().toUpperCase()===n);if(k)return row[k]}return''}
 function fmt(v){return new Intl.NumberFormat('en-US',{style:'currency',currency:$('#currency').value||'USD',minimumFractionDigits:2}).format(Number(v)||0)}
 function totals(){const qty=state.items.reduce((a,x)=>a+x.qty,0),sub=state.items.reduce((a,x)=>a+x.qty*x.unitPrice,0),discount=Math.max(0,Number($('#discountAmount').value)||0);return{qty,sub,discount,total:Math.max(0,sub-discount)}}
-function updateTotals(){const t=totals();$('#totalQty').textContent=t.qty;$('#subtotal').textContent=fmt(t.sub);$('#discountDisplay').textContent=fmt(t.discount);$('#grandTotal').textContent=fmt(t.total);$('#productCount').textContent=state.products.size;$('#customerCount').textContent=state.customers.size;$('#invoiceCount').textContent=state.items.length;$('#headerTotal').textContent=fmt(t.total)}
+function updateTotals(){const t=totals();$('#totalQty').textContent=t.qty;$('#subtotal').textContent=fmt(t.sub);$('#discountDisplay').textContent=discountDisplay(t.discount);$('#grandTotal').textContent=fmt(t.total);$('#productCount').textContent=state.products.size;$('#customerCount').textContent=state.customers.size;$('#invoiceCount').textContent=state.items.length;$('#headerTotal').textContent=fmt(t.total);schedulePreview()}
 $$('.tab').forEach(b=>b.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.tab-panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.tab).classList.add('active');if(b.dataset.tab==='invoice')renderCustomerSummary();if(b.dataset.tab==='preview')renderPreview()});
 async function readWB(file){if(typeof XLSX==='undefined')throw new Error('Excel 程式未載入');return XLSX.read(await file.arrayBuffer(),{type:'array'})}
-$('#stockInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{defval:''});state.stockRows=rows;state.stockHeaders=Object.keys(rows[0]||{});const map=new Map();for(const r of rows){const lot=norm(field(r,['LOTNO']));const art=normArt(field(r,['ARTNO']));const price=Number(field(r,['PRICE']));if(!lot||!art||!Number.isFinite(price))continue;const desc=[];for(let i=1;i<=6;i++){const v=norm(field(r,[`DESC${i}`]));if(v)desc.push(v)}map.set(lot,{lotNo:lot,artNo:art,price,unit:norm(field(r,['UNIT']))||'PC',article:norm(field(r,['ARTICLE']))||'',descriptions:desc,desc2:norm(field(r,['DESC2']))})}state.products=map;status('#stockStatus',`已匯入 ${f.name}：${map.size} 件貨品。`,'ok');setImportCollapsed('stock',true);updateTotals()}catch(err){status('#stockStatus','匯入失敗：'+err.message,'error');setImportCollapsed('stock',false)}};
-$('#customerInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();for(const r of rows){const code=normCode(r[0]),company=norm(r[1]);if(!code||!company||code.includes('CUSTOMER'))continue;const raw=r[11],num=Number(raw),rate=(raw===''||!Number.isFinite(num))?0.34:num;map.set(code,{code,company,address:[r[2],r[3],r[4]].map(norm).filter(Boolean).join('\n'),rate,terms:norm(r[10])})}state.customers=map;status('#customerStatus',`已匯入 ${f.name}：${map.size} 位客戶。`,'ok');setImportCollapsed('customer',true);updateTotals()}catch(err){status('#customerStatus','匯入失敗：'+err.message,'error');setImportCollapsed('customer',false)}};
+async function importStockFile(f){
+  const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+  state.stockRows=rows;state.stockHeaders=Object.keys(rows[0]||{});const map=new Map();
+  for(const r of rows){const lot=norm(field(r,['LOTNO']));const art=normArt(field(r,['ARTNO']));const price=Number(field(r,['PRICE']));if(!lot||!art||!Number.isFinite(price))continue;const desc=[];for(let i=1;i<=6;i++){const v=norm(field(r,[`DESC${i}`]));if(v)desc.push(v)}map.set(lot,{lotNo:lot,artNo:art,price,unit:norm(field(r,['UNIT']))||'PC',article:norm(field(r,['ARTICLE']))||'',descriptions:desc,desc2:norm(field(r,['DESC2']))})}
+  if(!map.size)throw new Error('找不到有效 LOTNO / ARTNO / PRICE');state.products=map;return map.size;
+}
+async function importCustomerFile(f){
+  const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();
+  for(const r of rows){const code=normCode(r[0]),company=norm(r[1]);if(!code||!company||code.includes('CUSTOMER'))continue;const raw=r[11],num=Number(raw),rate=(raw===''||!Number.isFinite(num))?0.34:num;map.set(code,{code,company,address:[r[2],r[3],r[4]].map(norm).filter(Boolean).join('\n'),rate,terms:norm(r[10])})}
+  if(!map.size)throw new Error('找不到有效客戶資料');state.customers=map;return map.size;
+}
+async function importStoneFile(f){
+  const wb=await readWB(f);const sheetName=wb.SheetNames.find(n=>n.trim().toUpperCase()==='STONE LIST')||wb.SheetNames[0];const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:''});const headerIndex=rows.findIndex(r=>r.some(v=>String(v).trim().toUpperCase()==='BREAKDOWN')&&r.some(v=>String(v).trim().toUpperCase()==='QUOTATION'));if(headerIndex<0)throw new Error('找不到 BREAKDOWN / QUOTATION 欄位');const header=rows[headerIndex].map(v=>String(v).trim().toUpperCase());const bCol=header.indexOf('BREAKDOWN'),qCol=header.indexOf('QUOTATION');const aliases=new Map();for(const r of rows.slice(headerIndex+1)){const breakdown=norm(r[bCol]),quotation=norm(r[qCol]);if(!breakdown||!quotation)continue;for(const code of breakdown.split(/[,，]/).map(norm).filter(Boolean))aliases.set(code.toUpperCase(),quotation.toUpperCase())}if(!aliases.size)throw new Error('對照表沒有有效資料');state.stoneAliases=aliases;state.stoneMappingName=f.name;return aliases.size;
+}
+async function importArticleFile(f){const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();for(const row of rows){const prefix=normCode(row[0]),description=norm(row[1]);if(!prefix||!description||prefix==='PREFIX')continue;map.set(prefix,description)}if(!map.size)throw new Error('找不到 Prefix / Article Description 對照');state.articleMap=map;state.articleMappingName=f.name;return map.size}
+async function importTemplateFile(f){const buf=await f.arrayBuffer();if(typeof ExcelJS==='undefined')throw new Error('Excel 範本程式未載入');const test=new ExcelJS.Workbook();await test.xlsx.load(buf.slice(0));if(!test.worksheets.length)throw new Error('範本沒有工作表');state.invoiceTemplateBuffer=buf;state.invoiceTemplateName=f.name;return true}
+function importImageFiles(files){const map=new Map();for(const f of files){if(!String(f.type).startsWith('image/')&&!/\.(jpe?g|png|webp)$/i.test(f.name))continue;const p=parseImage(f);if(!p)continue;const key=p.art+'|'+p.variant.toUpperCase(),existing=map.get(key);if(!existing||p.dup<existing.dup)map.set(key,p)}state.imageFiles=new Map();for(const p of map.values()){const arr=state.imageFiles.get(p.art)||[];arr.push({variant:p.variant,url:URL.createObjectURL(p.file),fileName:p.file.name,file:p.file});state.imageFiles.set(p.art,arr)}for(const arr of state.imageFiles.values())arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));return {images:[...files].filter(f=>String(f.type).startsWith('image/')||/\.(jpe?g|png|webp)$/i.test(f.name)).length,matched:state.imageFiles.size}}
+$('#stockInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importStockFile(f);status('#stockStatus',`已匯入 ${f.name}：${count} 件貨品。`,'ok');setImportCollapsed('stock',true);updateTotals()}catch(err){status('#stockStatus','匯入失敗：'+err.message,'error');setImportCollapsed('stock',false)}};
+$('#customerInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importCustomerFile(f);status('#customerStatus',`已匯入 ${f.name}：${count} 位客戶。`,'ok');setImportCollapsed('customer',true);updateTotals()}catch(err){status('#customerStatus','匯入失敗：'+err.message,'error');setImportCollapsed('customer',false)}};
 const FALLBACK_STONE_ALIASES=new Map([
   ['SKY BTO','SKY BT'],['SKY BT','SKY BT'],['QAM','AM'],['YCT','CT'],['BTO','BT'],['LBT','L.BT'],['MG','MG'],['AQ','AQ'],['PAM','P.AM'],['PTQ','PTR'],['GPD','PD'],['GPS','G.AM'],['GAM','G.AM'],['TZ','TZ']
 ]);
@@ -74,64 +94,47 @@ function articleDescriptionFor(item){
 }
 
 function activeStoneAliases(){return state.stoneAliases.size?state.stoneAliases:FALLBACK_STONE_ALIASES}
-$('#stoneMappingInput').onchange=async e=>{
-  const f=e.target.files[0];if(!f)return;
-  try{
-    const wb=await readWB(f);
-    const sheetName=wb.SheetNames.find(n=>n.trim().toUpperCase()==='STONE LIST')||wb.SheetNames[0];
-    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:''});
-    const headerIndex=rows.findIndex(r=>r.some(v=>String(v).trim().toUpperCase()==='BREAKDOWN')&&r.some(v=>String(v).trim().toUpperCase()==='QUOTATION'));
-    if(headerIndex<0)throw new Error('找不到 BREAKDOWN / QUOTATION 欄位');
-    const header=rows[headerIndex].map(v=>String(v).trim().toUpperCase());
-    const bCol=header.indexOf('BREAKDOWN'),qCol=header.indexOf('QUOTATION');
-    const aliases=new Map();
-    for(const r of rows.slice(headerIndex+1)){
-      const breakdown=norm(r[bCol]),quotation=norm(r[qCol]);
-      if(!breakdown||!quotation)continue;
-      for(const code of breakdown.split(/[,，]/).map(norm).filter(Boolean))aliases.set(code.toUpperCase(),quotation.toUpperCase());
-    }
-    if(!aliases.size)throw new Error('對照表沒有有效資料');
-    state.stoneAliases=aliases;state.stoneMappingName=f.name;
-    status('#stoneMappingStatus',`已匯入 ${f.name}：${aliases.size} 個石種代碼對照。`,'ok');setImportCollapsed('stone',true);
-    for(const item of state.items){item.imageVariant=chooseVariant(item)}
-    renderItems();
-  }catch(err){status('#stoneMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('stone',false)}
-};
-$('#articleMappingInput').onchange=async e=>{
-  const f=e.target.files[0];if(!f)return;
-  try{
-    const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-    const map=new Map();
-    for(const row of rows){
-      const prefix=normCode(row[0]);
-      const description=norm(row[1]);
-      if(!prefix||!description||prefix==='PREFIX')continue;
-      map.set(prefix,description);
-    }
-    if(!map.size)throw new Error('找不到 Prefix / Article Description 對照。');
-    state.articleMap=map;state.articleMappingName=f.name;
-    status('#articleMappingStatus',`已匯入 ${f.name}：${map.size} 個 Article 對照。`,'ok');setImportCollapsed('article',true);
-  }catch(err){status('#articleMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('article',false)}
-};
-
-$('#invoiceTemplateInput').onchange=async e=>{
-  const f=e.target.files[0];if(!f)return;
-  try{
-    const buf=await f.arrayBuffer();
-    if(typeof ExcelJS==='undefined')throw new Error('Excel 範本程式未載入');
-    const test=new ExcelJS.Workbook();await test.xlsx.load(buf.slice(0));
-    if(!test.worksheets.length)throw new Error('範本沒有工作表');
-    state.invoiceTemplateBuffer=buf;state.invoiceTemplateName=f.name;
-    status('#invoiceTemplateStatus',`已匯入 ${f.name}；匯出 Excel Invoice 時會套用此範本。`,'ok');setImportCollapsed('template',true);
-  }catch(err){state.invoiceTemplateBuffer=null;status('#invoiceTemplateStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('template',false)}
-};
+$('#stoneMappingInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importStoneFile(f);status('#stoneMappingStatus',`已匯入 ${f.name}：${count} 個石種代碼對照。`,'ok');setImportCollapsed('stone',true);for(const item of state.items)item.imageVariant=chooseVariant(item);renderItems()}catch(err){status('#stoneMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('stone',false)}};
+$('#articleMappingInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importArticleFile(f);status('#articleMappingStatus',`已匯入 ${f.name}：${count} 個 Article 對照。`,'ok');setImportCollapsed('article',true);schedulePreview()}catch(err){status('#articleMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('article',false)}};
+$('#invoiceTemplateInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{await importTemplateFile(f);status('#invoiceTemplateStatus',`已匯入 ${f.name}；匯出文件時會套用此範本。`,'ok');setImportCollapsed('template',true)}catch(err){state.invoiceTemplateBuffer=null;status('#invoiceTemplateStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('template',false)}};
 
 function parseImage(file){const stem=file.name.replace(/\.[^.]+$/,'').trim();const arts=[...new Set([...state.products.values()].map(x=>x.artNo))].sort((a,b)=>b.length-a.length);const art=arts.find(a=>stem.toUpperCase()===a||stem.toUpperCase().startsWith(a+' '));if(!art)return null;let variant=stem.slice(art.length).trim().replace(/\s*\(\d+\)$/,'').trim()||'Default';const dup=(stem.match(/\((\d+)\)$/)||[])[1];return{art,variant,dup:dup?Number(dup):0,file}}
-$('#imageFolderInput').onchange=e=>{const map=new Map();for(const f of e.target.files){const p=parseImage(f);if(!p)continue;const key=p.art+'|'+p.variant.toUpperCase(),existing=map.get(key);if(!existing||p.dup<existing.dup)map.set(key,p)}state.imageFiles=new Map();for(const p of map.values()){const arr=state.imageFiles.get(p.art)||[];arr.push({variant:p.variant,url:URL.createObjectURL(p.file),fileName:p.file.name,file:p.file});state.imageFiles.set(p.art,arr)}for(const arr of state.imageFiles.values())arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));status('#imageStatus',`已選擇圖片 Folder：${e.target.files.length} 張圖片，配對 ${state.imageFiles.size} 個款號。`,'ok');setImportCollapsed('images',true);renderItems()};
+$('#imageFolderInput').onchange=e=>{const result=importImageFiles(e.target.files);status('#imageStatus',`已選擇圖片 Folder：${result.images} 張圖片，配對 ${result.matched} 個款號。`,'ok');setImportCollapsed('images',true);renderItems()};
+$('#exhibitionPackageInput').onchange=async e=>{
+  const files=[...e.target.files];if(!files.length)return;
+  const root=(files[0].webkitRelativePath||'').split('/')[0]||'Exhibition Package';state.packageName=root;
+  const excels=files.filter(f=>/\.(xlsx?|xls)$/i.test(f.name));
+  const byName=(re)=>excels.find(f=>re.test(f.name));
+  let stock=byName(/^jmsdata(?:\s.*)?\.(xls|xlsx)$/i)||byName(/jmsdata/i);
+  let customer=byName(/customer/i);
+  let stone=byName(/stone\s*list.*shape.*cutting/i);
+  let article=byName(/article\s*mapping/i);
+  let template=byName(/invoice\s*(master\s*)?template/i)||byName(/template/i);
+  const imageFiles=files.filter(f=>String(f.type).startsWith('image/')||/\.(jpe?g|png|webp)$/i.test(f.name));
+  const lines=[];let errors=[];
+  status('#packageStatus',`正在讀取 ${root}…`);
+  try{
+    if(!stock)errors.push('找不到 jmsdata.xls / jmsdata.xlsx');else{const n=await importStockFile(stock);lines.push(`✓ ${stock.name} · ${n} 件貨品 · ${new Date(stock.lastModified).toLocaleString('zh-HK')}`)}
+    if(!customer)errors.push('找不到客戶 Excel');else{const n=await importCustomerFile(customer);lines.push(`✓ ${customer.name} · ${n} 位客戶`)}
+    if(!stone)errors.push('找不到 Stone List & Shape & Cutting.xlsx');else{const n=await importStoneFile(stone);lines.push(`✓ ${stone.name} · ${n} 個石種代碼`)}
+    if(!template)errors.push('找不到 Invoice Template.xlsx');else{await importTemplateFile(template);lines.push(`✓ ${template.name} · Template 已載入`)}
+    if(article){const n=await importArticleFile(article);lines.push(`✓ ${article.name} · ${n} 個 Article 對照`)}else lines.push('○ Article Mapping 未提供（不顯示 Article）');
+    if(!imageFiles.length)errors.push('找不到 Pictures 內的圖片');else{const r=importImageFiles(imageFiles);lines.push(`✓ Pictures · ${r.images} 張圖片 · 配對 ${r.matched} 個款號`)}
+    $('#packageSummary').innerHTML=lines.map(x=>`<div>${esc(x)}</div>`).join('')+(errors.length?`<div class="package-errors">${errors.map(x=>'✕ '+esc(x)).join('<br>')}</div>`:'');
+    if(errors.length)status('#packageStatus',`${root} 未完整載入，請補回缺少的資料。`,'error');else{status('#packageStatus',`${root} 已完成匯入，可以開始建立文件。`,'ok');document.querySelector('.advanced-imports').open=false}
+    status('#stockStatus',stock?`已由資料包匯入 ${stock.name}：${state.products.size} 件貨品。`:'尚未匯入倉存。',stock?'ok':'error');
+    status('#customerStatus',customer?`已由資料包匯入 ${customer.name}：${state.customers.size} 位客戶。`:'尚未匯入客戶。',customer?'ok':'error');
+    status('#imageStatus',imageFiles.length?`已由資料包匯入 Pictures：${imageFiles.length} 張圖片，配對 ${state.imageFiles.size} 個款號。`:'尚未匯入圖片。',imageFiles.length?'ok':'error');
+    if(stone)status('#stoneMappingStatus',`已由資料包匯入 ${stone.name}。`,'ok');
+    if(template)status('#invoiceTemplateStatus',`已由資料包匯入 ${template.name}。`,'ok');
+    if(article)status('#articleMappingStatus',`已由資料包匯入 ${article.name}。`,'ok');
+    updateTotals();renderItems();
+  }catch(err){console.error(err);status('#packageStatus','資料包匯入失敗：'+(err.message||err),'error')}
+};
+
 function searchCustomers(q){const s=norm(q).toUpperCase(),c=normCode(q);return [...state.customers.values()].filter(x=>x.code.includes(c)||x.company.toUpperCase().includes(s)).slice(0,10)}
 function showMatches(){const box=$('#customerMatches'),m=searchCustomers($('#customerSearch').value);box.innerHTML='';if(!m.length){box.innerHTML='<div class="notice">找不到客戶。</div>';return}m.forEach(c=>{const b=document.createElement('button');b.className='customer-match';b.innerHTML=`<span><strong>${esc(c.code)} · ${esc(c.company)}</strong><small>${esc(c.address).replace(/\n/g,' · ')}</small></span><span>${c.rate}</span>`;b.onclick=()=>selectCustomer(c);box.appendChild(b)})}
-function selectCustomer(c){$('#customerCode').value=c.code;$('#customerName').value=c.company;$('#customerAddress').value=c.address;$('#salesRate').value=c.rate;$('#customerTerms').value=c.terms;$('#customerMatches').innerHTML='';$('#customerSearch').value='';reprice();renderCustomerSummary()}
+function selectCustomer(c){$('#customerCode').value=c.code;$('#customerName').value=c.company;$('#customerAddress').value=c.address;$('#salesRate').value=c.rate;$('#customerTerms').value=c.terms;$('#customerMatches').innerHTML='';$('#customerSearch').value='';reprice();renderCustomerSummary();schedulePreview()}
 $('#findCustomerBtn').onclick=showMatches;
 let customerSearchTimer=null;
 $('#customerSearch').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();showMatches()}};
@@ -179,7 +182,7 @@ function addLot(raw){
   if(!p){status('#addMessage',`找不到 LOTNO ${lot}。`,'error');refocusLotInput(true);return false}
   if(state.items.some(x=>x.lotNo===lot)){status('#addMessage',`LOTNO ${lot} 已在 Invoice。`,'error');refocusLotInput(true);return false}
   const rate=Number($('#salesRate').value)||0;
-  state.items.push({...p,id:Date.now()+Math.random(),seq:state.items.length+1,qty:1,unitPrice:Math.ceil(p.price*rate),imageVariant:chooseVariant(p)});
+  state.items.unshift({...p,id:Date.now()+Math.random(),seq:state.items.length+1,qty:1,unitPrice:Math.ceil(p.price*rate),imageVariant:chooseVariant(p)});
   $('#lotInput').value='';
   status('#addMessage',`已加入 ${p.artNo} / LOTNO ${lot}`,'ok');
   renderItems();
@@ -192,9 +195,30 @@ $('#lotInput').oninput=e=>{e.target.value=e.target.value.replace(/[，,。\.\-�
 $('#lotInput').onfocus=e=>setTimeout(()=>e.target.select(),50);
 function getImg(item){const arr=state.imageFiles.get(item.artNo)||[];return arr.find(x=>x.variant===item.imageVariant)||arr[0]}
 function placeholder(t){return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="#f1f5f9"/><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="18" fill="#64748b">${t}</text></svg>`)}`}
-function renderItems(){const box=$('#invoiceItems');box.innerHTML='';if(!state.items.length){box.className='invoice-items empty-state';box.textContent='尚未加入貨品。';updateTotals();return}box.className='invoice-items';[...state.items].reverse().forEach(item=>{const node=$('#itemTemplate').content.firstElementChild.cloneNode(true);$('.item-seq',node).textContent=item.seq;$('.item-artno',node).textContent=item.artNo;$('.item-lot',node).textContent=`LOTNO ${item.lotNo}`;$('.item-desc',node).textContent=item.descriptions.join('\n');$('.item-price-note',node).textContent=`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(item.unitPrice)}`;$('.item-thumb',node).src=getImg(item)?.url||placeholder(item.artNo);const sel=$('.variant-select',node),arr=state.imageFiles.get(item.artNo)||[];if(arr.length){arr.forEach(x=>{const o=document.createElement('option');o.value=x.variant;o.textContent='圖片：'+x.variant;o.selected=x.variant===item.imageVariant;sel.appendChild(o)});sel.onchange=e=>{item.imageVariant=e.target.value;renderItems()}}else{sel.innerHTML='<option>沒有圖片</option>';sel.disabled=true}$('.qty-input',node).value=item.qty;$('.price-input',node).value=item.unitPrice;$('.qty-input',node).onchange=e=>{item.qty=Math.max(1,Number(e.target.value)||1);updateTotals()};$('.price-input',node).onchange=e=>{item.unitPrice=Math.max(0,Math.ceil(Number(e.target.value)||0));updateTotals()};$('.delete-item',node).onclick=()=>{if(confirm(`刪除 ${item.artNo}？`)){state.items=state.items.filter(x=>x.id!==item.id);state.items.forEach((x,i)=>x.seq=i+1);renderItems()}};box.appendChild(node)});updateTotals()}
+function renderItems(){
+  const box=$('#invoiceItems');box.innerHTML='';
+  if(!state.items.length){box.className='invoice-items empty-state';box.textContent='尚未加入貨品。';updateTotals();return}
+  box.className='invoice-items';
+  state.items.forEach(item=>{
+    const node=$('#itemTemplate').content.firstElementChild.cloneNode(true);node.dataset.itemId=String(item.id);
+    $('.item-seq',node).textContent=item.seq;$('.item-artno',node).textContent=item.artNo;$('.item-lot',node).textContent=`LOTNO ${item.lotNo}`;
+    $('.item-desc',node).textContent=item.descriptions.slice(0,2).join('\n');$('.item-price-note',node).textContent=`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(item.unitPrice)}`;
+    $('.item-thumb',node).src=getImg(item)?.url||placeholder(item.artNo);
+    const controls=$('.item-controls',node),toggle=$('.item-edit-toggle',node);toggle.onclick=()=>{const open=controls.classList.toggle('open');toggle.textContent=open?'完成 ▴':'編輯 ▾'};
+    const sel=$('.variant-select',node),arr=state.imageFiles.get(item.artNo)||[];
+    if(arr.length){arr.forEach(x=>{const o=document.createElement('option');o.value=x.variant;o.textContent='圖片：'+x.variant;o.selected=x.variant===item.imageVariant;sel.appendChild(o)});sel.onchange=e=>{item.imageVariant=e.target.value;renderItems()}}else{sel.innerHTML='<option>沒有圖片</option>';sel.disabled=true}
+    $('.qty-input',node).value=item.qty;$('.price-input',node).value=item.unitPrice;
+    $('.qty-input',node).onchange=e=>{item.qty=Math.max(1,Number(e.target.value)||1);updateTotals()};
+    $('.price-input',node).onchange=e=>{item.unitPrice=Math.max(0,Math.ceil(Number(e.target.value)||0));updateTotals()};
+    $('.delete-item',node).onclick=()=>{if(confirm(`刪除 ${item.artNo}？`)){state.items=state.items.filter(x=>x.id!==item.id);state.items.forEach((x,i)=>x.seq=i+1);renderItems()}};
+    box.appendChild(node)
+  });
+  if(state.sortable){try{state.sortable.destroy()}catch{}}
+  if(typeof Sortable!=='undefined')state.sortable=Sortable.create(box,{animation:160,handle:'.drag-handle',draggable:'.invoice-item',ghostClass:'drag-ghost',onEnd:()=>{const ids=[...box.querySelectorAll('.invoice-item')].map(n=>n.dataset.itemId);const displayOrder=ids.map(id=>state.items.find(x=>String(x.id)===id)).filter(Boolean);state.items=displayOrder;state.items.forEach((x,i)=>x.seq=state.items.length-i);renderItems()}});
+  updateTotals()
+}
 $('#scrollLatestBtn').onclick=()=>$('#invoiceItems').scrollTo({top:0,behavior:'smooth'});$('#clearInvoiceBtn').onclick=()=>{if(confirm('清空目前 Invoice？')){state.items=[];renderItems()}};
-function reprice(){const r=Number($('#salesRate').value)||0;state.items.forEach(x=>x.unitPrice=Math.ceil(x.price*r));renderItems()}$('#salesRate').onchange=reprice;$('#currency').onchange=()=>{renderItems();renderCustomerSummary()};$('#discountAmount').oninput=updateTotals;
+function reprice(){const r=Number($('#salesRate').value)||0;state.items.forEach(x=>x.unitPrice=Math.ceil(x.price*r));renderItems()}$('#salesRate').onchange=reprice;$('#currency').onchange=()=>{renderItems();renderCustomerSummary();schedulePreview()};$('#discountAmount').oninput=updateTotals;['invoiceNo','invoiceDate','shipmentMethod','customerCode','customerName','customerAddress','customerTerms','remark'].forEach(id=>$('#'+id)?.addEventListener('input',schedulePreview));
 function words(n){return String(Math.floor(n))}
 function numberToWords(value){
   let n=Math.floor(Number(value)||0);
@@ -229,7 +253,12 @@ function numberToWords(value){
 function currencyWords(code){
   return ({USD:'US DOLLARS',EUR:'EUROS',JPY:'JAPANESE YEN',HKD:'HONG KONG DOLLARS'})[String(code||'').toUpperCase()]||String(code||'').toUpperCase();
 }
-function renderPreview(){const t=totals(),rows=state.items.map((x,i)=>`<tr><td>${i+1}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="num">${x.qty}</td><td>${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`).join('');$('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Quantity</th><th>Unit</th><th class="num">Unit Price</th><th class="num">Amount</th></tr><tr><th colspan="7">F.O.B. Value</th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p><strong>Remark :</strong> ${esc($('#remark').value)}</p></div>`}
+function renderPreview(){
+  const t=totals();
+  const rows=state.items.map((x,i)=>{const img=getImg(x)?.url||placeholder('No Image');return `<tr><td>${i+1}</td><td class="preview-picture"><img src="${esc(img)}" alt="${esc(x.artNo)}"></td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="qty-cell">${x.qty}</td><td class="unit-cell">${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`}).join('');
+  $('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Picture</th><th>Article No.</th><th>Description</th><th class="qty-head">Quantity</th><th class="unit-head">Unit</th><th class="num">Unit Price</th><th class="num amount-head"><span>Amount</span><small>F.O.B. Value</small></th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p class="remark-preview"><strong>Remark :</strong><br>${esc($('#remark').value).replace(/\n/g,'<br>')}</p></div>`;
+}
+
 
 function setExcelExportStatus(message,type=''){
   const el=$('#excelExportStatus');
@@ -295,13 +324,13 @@ async function exportInvoiceFromTemplate(){
 
   const docLabels=documentLabels();
   // Convert the imported Invoice template into Consignment when selected.
-  if(state.documentType==='consignment'){
+  if(state.documentType==='consignment'||state.documentType==='quotation'){
     ws.eachRow(row=>row.eachCell(cell=>{
       if(typeof cell.value==='string'){
         cell.value=cell.value
-          .replace(/Sales Invoice/gi,'Sales Consign')
-          .replace(/Invoice Date/gi,'Consign Date')
-          .replace(/Invoice No\.?/gi,'Consign No.');
+          .replace(/Sales Invoice/gi,state.documentType==='quotation'?'Quotation':'Sales Consign')
+          .replace(/Invoice Date/gi,state.documentType==='quotation'?'Quotation Date':'Consign Date')
+          .replace(/Invoice No\.?/gi,state.documentType==='quotation'?'Quotation No.':'Consign No.');
       }
     }));
   }
@@ -520,8 +549,8 @@ async function exportInvoiceFromTemplate(){
         let boxW=0,boxH=0;
         for(let c=imageStartColNo;c<=imageEndColNo;c++)boxW+=excelColPixels(ws,c);
         for(let r=start;r<=imageEndRow;r++)boxH+=excelRowPixels(ws,r);
-        const pad=6,maxW=Math.max(20,boxW-pad*2),maxH=Math.max(20,boxH-pad*2);
-        const scale=Math.min(maxW/asset.width,maxH/asset.height,1);
+        const pad=1,maxW=Math.max(20,boxW-pad*2),maxH=Math.max(20,boxH-pad*2);
+        const scale=Math.min(maxW/asset.width,maxH/asset.height);
         const width=Math.max(20,Math.round(asset.width*scale));
         const height=Math.max(20,Math.round(asset.height*scale));
         const xOffset=(boxW-width)/2,yOffset=(boxH-height)/2;
@@ -589,7 +618,7 @@ async function exportInvoiceFromTemplate(){
   ws.headerFooter=ws.headerFooter||{};ws.headerFooter.oddFooter='Page &P of &N';
 
   if(mapWs)wb.removeWorksheet(mapWs.id);
-  ws.name=state.documentType==='consignment'?'Consignment':'Invoice';
+  ws.name=state.documentType==='consignment'?'Consignment':state.documentType==='quotation'?'Quotation':'Invoice';
   const buffer=await wb.xlsx.writeBuffer();
   downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`${inv}.xlsx`);
   setExcelExportStatus(`已依 Template Map 輸出 ${state.invoiceTemplateName}${missingImages?`；${missingImages} 款沒有圖片`:''}。`,'ok');
@@ -627,12 +656,12 @@ async function exportInvoiceExcel(){
     const headers=['No.','Picture','Article No.','Description','Quantity','Unit','Unit Price','Amount'];
     headers.forEach((h,i)=>{const c=ws.getCell(headerRow,i+1);c.value=h;c.font={name:'Arial',size:10,bold:true};c.alignment={horizontal:'center',vertical:'middle',wrapText:true};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE5E7EB'}};applyThinBorder(c)});
     ws.getRow(headerRow).height=24;
-    ws.mergeCells(`A${headerRow+1}:H${headerRow+1}`);const fob=ws.getCell(headerRow+1,1);fob.value='F.O.B. Value';fob.font={name:'Arial',size:10,bold:true};fob.alignment={vertical:'middle'};applyThinBorder(fob);ws.getRow(headerRow+1).height=21;
+    ws.mergeCells(`A${headerRow+1}:G${headerRow+1}`);const fob=ws.getCell(headerRow+1,8);fob.value='F.O.B. Value';fob.font={name:'Arial',size:10,bold:true};fob.alignment={vertical:'middle',horizontal:'right'};applyThinBorder(fob);ws.getRow(headerRow+1).height=21;
     let row=headerRow+2;
     let missingImages=0;
     for(let i=0;i<state.items.length;i++){
-      const item=state.items[i],start=row,end=row+5;
-      for(let r=start;r<=end;r++)ws.getRow(r).height=18;
+      const item=state.items[i],start=row,end=row+4;
+      for(let r=start;r<=end;r++)ws.getRow(r).height=10.5;
       ws.mergeCells(`A${start}:A${end}`);ws.getCell(`A${start}`).value=i+1;
       ws.getCell(`A${start}`).alignment={horizontal:'center',vertical:'middle'};
       ws.mergeCells(`B${start}:B${end}`);
@@ -648,7 +677,7 @@ async function exportInvoiceExcel(){
         try{
           const dataUrl=await imageFileToJpegDataUrl(selected.file);
           const imageId=wb.addImage({base64:dataUrl,extension:'jpeg'});
-          ws.addImage(imageId,{tl:{col:1.08,row:start-1+.12},br:{col:1.92,row:end-.12},editAs:'oneCell'});
+          ws.addImage(imageId,{tl:{col:1.01,row:start-1+.01},br:{col:1.99,row:start+3.99},editAs:'oneCell'});
         }catch{missingImages++}
       }else missingImages++;
       row=end+1;
@@ -663,7 +692,7 @@ async function exportInvoiceExcel(){
     row++;
     ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value=`Total : (${norm($('#currency').value)})`;ws.getCell(`A${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).value=t.total;ws.getCell(`G${row}`).numFmt='$#,##0.00';ws.getCell(`G${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).alignment={horizontal:'right'};
     row+=2;
-    merge(`A${row}:H${row}`,`Remark : ${norm($('#remark').value)}`,10);
+    ws.mergeCells(`A${row}:H${row+2}`);const remarkCell=ws.getCell(`A${row}`);remarkCell.value=`Remark :\n${norm($('#remark').value)}`;remarkCell.alignment={vertical:'top',wrapText:true};remarkCell.font={name:'Arial',size:10};row+=2;
     row+=2;merge(`A${row}:D${row}`,'Vender Signature : ______________________',10);merge(`E${row}:H${row}`,'Accept By : ______________________',10,false,'right');
     ws.headerFooter.oddFooter='Page &P of &N';
     ws.pageSetup.printArea=`A1:H${row}`;
@@ -676,7 +705,7 @@ async function exportInvoiceExcel(){
   finally{btn.disabled=false}
 }
 
-$('#refreshPreviewBtn').onclick=renderPreview;$('#exportExcelBtn').onclick=exportInvoiceExcel;
+$('#exportExcelBtn').onclick=exportInvoiceExcel;$('#exportPdfBtn').onclick=()=>{renderPreview();setTimeout(()=>window.print(),80)};
 function updateZoomButtons(){
   $$('.zoom-btn').forEach(btn=>{
     const z=Number(btn.dataset.zoom);
@@ -754,6 +783,7 @@ $('#scanBtn').onclick=startScanner;$('#closeScannerBtn').onclick=stopScanner;
 function exportCurrentStockAfterConfirm(){
   if(!state.items.length)return alert(`${documentLabels().short} 沒有貨品。`);
   const type=state.documentType;
+  if(type==='quotation'){const doc=norm($('#invoiceNo').value)||formatDocumentNo();state.items=[];advanceDocumentSequence(doc,type);renderItems();status('#addMessage',`Quotation ${doc} 已 Confirm（庫存沒有扣除）；下一張為 ${$('#invoiceNo').value}。`,'ok');return;}
   const used=new Set(state.items.map(x=>x.lotNo));
   const available=state.stockRows.filter(r=>!used.has(norm(field(r,['LOTNO']))));
   const inv=norm($('#invoiceNo').value)||formatDocumentNo();
@@ -788,4 +818,4 @@ function exportCurrentStockAfterConfirm(){
 }
 function exportRemaining(){exportCurrentStockAfterConfirm()}
 $('#confirmInvoiceBtn').onclick=()=>{const l=documentLabels();if(confirm(`${l.confirm}？`))exportCurrentStockAfterConfirm()};
-updateDocumentTypeUI();renderCustomerSummary();renderItems();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+updateDocumentTypeUI();renderCustomerSummary();renderItems();schedulePreview();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});

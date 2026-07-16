@@ -16,14 +16,14 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.10.4</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.11.0</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
 
 <main>
   <section class="card hero">
-    <div><h2>展覽 Invoice 工作台</h2></div>
+    <div><h2>展覽文件工作台</h2></div>
     <div class="status-grid">
       <div><span>產品</span><strong id="productCount">0</strong></div>
       <div><span>客戶</span><strong id="customerCount">0</strong></div>
@@ -34,11 +34,19 @@
 
   <nav class="tabs">
     <button class="tab active" data-tab="setup">資料匯入</button>
-    <button class="tab" data-tab="invoice">建立 Invoice</button>
-    <button class="tab" data-tab="preview">Invoice 預覽</button>
+    <button class="tab" data-tab="invoice">建立文件</button>
+    <button class="tab" data-tab="preview">文件預覽</button>
   </nav>
 
   <section id="setup" class="tab-panel active">
+    <article class="card package-card">
+      <div class="section-title-row"><div><h3>匯入展覽資料包</h3><p class="muted">選擇包含 jmsdata、客戶表、Stone List、Template、Pictures 的展覽 Folder。</p></div></div>
+      <label class="file-picker package-picker">選擇展覽資料包 Folder
+        <input id="exhibitionPackageInput" type="file" multiple webkitdirectory directory>
+      </label>
+      <div id="packageStatus" class="notice">尚未選擇展覽資料包。</div>
+      <div id="packageSummary" class="package-summary"></div>
+      <details class="advanced-imports"><summary>個別匯入／更換單一資料</summary>
     <div class="two-col">
       <article class="card import-card" data-import-card="stock">
         <div class="import-card-head">
@@ -126,8 +134,9 @@
       </article>
     </div>
 
+      </details>
     <article class="card">
-      <h3>7. 選擇客戶</h3>
+      <h3>選擇客戶</h3>
       <div class="search-row">
         <input id="customerSearch" placeholder="輸入 Customer Code 或公司名稱" autocomplete="off">
         <button id="findCustomerBtn">搜尋</button>
@@ -153,12 +162,13 @@
         <span>Document Type</span>
         <label><input type="radio" name="documentType" value="invoice" checked> Invoice</label>
         <label><input type="radio" name="documentType" value="consignment"> Consignment</label>
+        <label><input type="radio" name="documentType" value="quotation"> Quotation</label>
       </div>
       <div class="form-grid">
         <label><span id="documentNoLabel">Invoice No.</span><input id="invoiceNo" value="" placeholder="INVYY0001"></label>
         <label><span id="documentDateLabel">Invoice Date</span><input id="invoiceDate" inputmode="numeric" placeholder="YYYY-MM-DD"></label>
         <label>Discount Amount<input id="discountAmount" type="number" min="0" step="1" value="0"></label>
-        <label>Remark<input id="remark" value=""></label>
+        <label>Remark<textarea id="remark" rows="3" placeholder="可分行輸入"></textarea></label>
       </div>
 
       <div class="divider"></div>
@@ -191,8 +201,8 @@
 
   <section id="preview" class="tab-panel">
     <article class="card preview-actions no-print">
-      <button id="refreshPreviewBtn">更新預覽</button>
-      <button id="exportExcelBtn">匯出 Excel Invoice</button>
+      <div class="preview-status"><strong>預覽會自動更新</strong><span id="previewUpdatedAt">尚未更新</span></div>
+      <div class="preview-export-buttons"><button id="exportExcelBtn">匯出 Excel Invoice</button><button id="exportPdfBtn">輸出 PDF</button></div>
       <div id="excelExportStatus" class="notice hidden"></div>
     </article>
     <article id="invoiceDocument" class="invoice-document"></article>
@@ -213,26 +223,29 @@
 </dialog>
 
 <template id="itemTemplate">
-  <div class="invoice-item">
+  <div class="invoice-item compact-item">
     <div class="item-seq"></div>
     <img class="item-thumb" alt="產品圖片">
     <div class="item-main">
       <div class="item-title-row"><strong class="item-artno"></strong><span class="item-lot"></span></div>
-      <div class="item-desc"></div>
+      <div class="item-desc compact-desc"></div>
       <div class="item-price-note"></div>
+      <button type="button" class="item-edit-toggle ghost">編輯 ▾</button>
+      <div class="item-controls compact-controls">
+        <select class="variant-select"></select>
+        <label>Qty<input class="qty-input" type="number" min="1" step="1"></label>
+        <label>Unit Price<input class="price-input" type="number" min="0" step="1"></label>
+        <button class="delete-item danger">刪除</button>
+      </div>
     </div>
-    <div class="item-controls">
-      <select class="variant-select"></select>
-      <label>Qty<input class="qty-input" type="number" min="1" step="1"></label>
-      <label>Unit Price<input class="price-input" type="number" min="0" step="1"></label>
-      <button class="delete-item danger">刪除</button>
-    </div>
+    <button type="button" class="drag-handle" aria-label="拖曳排序">≡</button>
   </div>
 </template>
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
