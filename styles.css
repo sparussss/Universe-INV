@@ -162,7 +162,7 @@ button{width:auto}
 @media(max-width:520px){.compact-controls.open{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.compact-controls label{grid-template-columns:none}.compact-controls label input{font-size:16px}}
 
 .drag-handle{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}.invoice-item.drag-active{position:relative;z-index:30;box-shadow:0 8px 22px rgba(23,32,51,.18);background:#f8fbff;border-radius:12px}.drag-handle.dragging{background:#eaf2ff;border-color:#8fb1dc}
-/* v0.11.4 compact document entry + editable totals */
+/* v0.11.5 compact document entry + editable totals */
 .document-meta-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
 .discount-row{align-items:center!important;gap:14px}.discount-row label{margin:0;color:#172033;font-size:inherit}.discount-input{width:150px;max-width:48%;text-align:right;padding:8px 10px}
 .bottom-remark{margin-top:18px;padding-top:16px;border-top:1px solid #e5e9f0}.bottom-remark textarea{width:100%;min-height:96px;resize:vertical}
