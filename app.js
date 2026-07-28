@@ -1,5 +1,8 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],stoneAliases:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1}};
+function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
+function displayItems(){return formalItems().reverse()}
+function normalizeItemSequence(){state.items=formalItems();state.items.forEach((item,i)=>item.seq=i+1)}
 const norm=v=>String(v??'').trim(),normCode=v=>String(v??'').replace(/\s+/g,'').toUpperCase(),normArt=v=>norm(v).toUpperCase();
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>{const d=new Date(),y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`};$('#invoiceDate').value=today();
@@ -182,7 +185,7 @@ function addLot(raw){
   if(!p){status('#addMessage',`找不到 LOTNO ${lot}。`,'error');refocusLotInput(true);return false}
   if(state.items.some(x=>x.lotNo===lot)){status('#addMessage',`LOTNO ${lot} 已在 Invoice。`,'error');refocusLotInput(true);return false}
   const rate=Number($('#salesRate').value)||0;
-  state.items.unshift({...p,id:Date.now()+Math.random(),seq:state.items.length+1,qty:1,unitPrice:Math.ceil(p.price*rate),imageVariant:chooseVariant(p)});
+  state.items.push({...p,id:Date.now()+Math.random(),seq:state.items.length+1,qty:1,unitPrice:Math.ceil(p.price*rate),imageVariant:chooseVariant(p)});
   $('#lotInput').value='';
   status('#addMessage',`已加入 ${p.artNo} / LOTNO ${lot}`,'ok');
   renderItems();
@@ -199,7 +202,7 @@ function renderItems(){
   const box=$('#invoiceItems');box.innerHTML='';
   if(!state.items.length){box.className='invoice-items empty-state';box.textContent='尚未加入貨品。';updateTotals();return}
   box.className='invoice-items';
-  state.items.forEach(item=>{
+  displayItems().forEach(item=>{
     const node=$('#itemTemplate').content.firstElementChild.cloneNode(true);node.dataset.itemId=String(item.id);
     $('.item-seq',node).textContent=item.seq;$('.item-artno',node).textContent=item.artNo;$('.item-lot',node).textContent=`LOTNO ${item.lotNo}`;
     const nonEmptyDescriptions=(item.descriptions||[]).map(x=>norm(x)).filter(Boolean);
@@ -213,11 +216,11 @@ function renderItems(){
     $('.qty-input',node).value=item.qty;$('.price-input',node).value=item.unitPrice;
     $('.qty-input',node).onchange=e=>{item.qty=Math.max(1,Number(e.target.value)||1);updateTotals()};
     $('.price-input',node).onchange=e=>{item.unitPrice=Math.max(0,Math.ceil(Number(e.target.value)||0));updateTotals()};
-    $('.delete-item',node).onclick=()=>{if(confirm(`刪除 ${item.artNo}？`)){state.items=state.items.filter(x=>x.id!==item.id);state.items.forEach((x,i)=>x.seq=i+1);renderItems()}};
+    $('.delete-item',node).onclick=()=>{if(confirm(`刪除 ${item.artNo}？`)){state.items=state.items.filter(x=>x.id!==item.id);normalizeItemSequence();renderItems()}};
     box.appendChild(node)
   });
   if(state.sortable){try{state.sortable.destroy()}catch{}}
-  if(typeof Sortable!=='undefined')state.sortable=Sortable.create(box,{animation:160,handle:'.drag-handle',draggable:'.invoice-item',ghostClass:'drag-ghost',onEnd:()=>{const ids=[...box.querySelectorAll('.invoice-item')].map(n=>n.dataset.itemId);const displayOrder=ids.map(id=>state.items.find(x=>String(x.id)===id)).filter(Boolean);state.items=displayOrder;state.items.forEach((x,i)=>x.seq=state.items.length-i);renderItems()}});
+  if(typeof Sortable!=='undefined')state.sortable=Sortable.create(box,{animation:160,handle:'.drag-handle',draggable:'.invoice-item',ghostClass:'drag-ghost',onEnd:()=>{const ids=[...box.querySelectorAll('.invoice-item')].map(n=>n.dataset.itemId);const displayOrder=ids.map(id=>state.items.find(x=>String(x.id)===id)).filter(Boolean);state.items=[...displayOrder].reverse();normalizeItemSequence();renderItems()}});
   updateTotals()
 }
 $('#scrollLatestBtn').onclick=()=>$('#invoiceItems').scrollTo({top:0,behavior:'smooth'});$('#clearInvoiceBtn').onclick=()=>{if(confirm('清空目前 Invoice？')){state.items=[];renderItems()}};
@@ -258,7 +261,7 @@ function currencyWords(code){
 }
 function renderPreview(){
   const t=totals();
-  const rows=state.items.map((x,i)=>{const img=getImg(x)?.url||placeholder('No Image');return `<tr><td>${i+1}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${(x.descriptions||[]).filter(Boolean).map(esc).join('<br>')}</td><td class="preview-picture"><img src="${esc(img)}" alt="${esc(x.artNo)}"></td><td class="qty-cell">${x.qty}</td><td class="unit-cell">${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`}).join('');
+  const rows=formalItems().map((x,i)=>{const img=getImg(x)?.url||placeholder('No Image');return `<tr><td>${i+1}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${(x.descriptions||[]).filter(Boolean).map(esc).join('<br>')}</td><td class="preview-picture"><img src="${esc(img)}" alt="${esc(x.artNo)}"></td><td class="qty-cell">${x.qty}</td><td class="unit-cell">${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`}).join('');
   $('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid screen-preview"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta print-only print-banker"><strong>Vendor's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Picture</th><th class="qty-head">Quantity</th><th class="unit-head">Unit</th><th class="num">Unit Price</th><th class="num amount-head"><span>Amount</span><small>F.O.B. Value</small></th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p class="remark-preview"><strong>Remark :</strong><br>${esc($('#remark').value).replace(/\n/g,'<br>')}</p></div>`;
 }
 
@@ -420,7 +423,7 @@ async function exportInvoiceFromTemplate(){
 
   // Each item uses at least 4 content rows. Extra DESC rows extend only the text area.
   // One additional 10.5 pt separator row follows every item; the image remains fixed to the first 4 rows.
-  const itemPlans=state.items.map(item=>{
+  const itemPlans=formalItems().map(item=>{
     const lines=[articleDescriptionFor(item),...(item.descriptions||[])].map(norm).filter(Boolean);
     const contentRows=Math.max(4,lines.length);
     return {item,lines,contentRows,totalRows:contentRows+1};
@@ -662,8 +665,9 @@ async function exportInvoiceExcel(){
     ws.mergeCells(`A${headerRow+1}:G${headerRow+1}`);const fob=ws.getCell(headerRow+1,8);fob.value='F.O.B. Value';fob.font={name:'Arial',size:10,bold:true};fob.alignment={vertical:'middle',horizontal:'right'};applyThinBorder(fob);ws.getRow(headerRow+1).height=21;
     let row=headerRow+2;
     let missingImages=0;
-    for(let i=0;i<state.items.length;i++){
-      const item=state.items[i],start=row,end=row+4;
+    const exportItems=formalItems();
+    for(let i=0;i<exportItems.length;i++){
+      const item=exportItems[i],start=row,end=row+4;
       for(let r=start;r<=end;r++)ws.getRow(r).height=10.5;
       ws.mergeCells(`A${start}:A${end}`);ws.getCell(`A${start}`).value=i+1;
       ws.getCell(`A${start}`).alignment={horizontal:'center',vertical:'middle'};
@@ -787,7 +791,7 @@ function exportCurrentStockAfterConfirm(){
   if(!state.items.length)return alert(`${documentLabels().short} 沒有貨品。`);
   const type=state.documentType;
   if(type==='quotation'){const doc=norm($('#invoiceNo').value)||formatDocumentNo();state.items=[];advanceDocumentSequence(doc,type);renderItems();status('#addMessage',`Quotation ${doc} 已 Confirm（庫存沒有扣除）；下一張為 ${$('#invoiceNo').value}。`,'ok');return;}
-  const used=new Set(state.items.map(x=>x.lotNo));
+  const used=new Set(formalItems().map(x=>x.lotNo));
   const available=state.stockRows.filter(r=>!used.has(norm(field(r,['LOTNO']))));
   const inv=norm($('#invoiceNo').value)||formatDocumentNo();
   const dateStamp=today().replaceAll('-','');
@@ -800,7 +804,7 @@ function exportCurrentStockAfterConfirm(){
 
   if(type==='consignment'){
     const customerCode=norm($('#customerCode').value),customer=norm($('#customerName').value),docDate=norm($('#invoiceDate').value);
-    const outRows=state.items.map(x=>({
+    const outRows=formalItems().map(x=>({
       CONSIGN_NO:inv,CONSIGN_DATE:docDate,CUSTOMER_CODE:customerCode,CUSTOMER:customer,
       LOTNO:x.lotNo,ARTNO:x.artNo,DESCRIPTION:(x.descriptions||[]).join(' | '),QTY:x.qty,UNIT:x.unit,
       UNIT_PRICE:x.unitPrice,AMOUNT:x.qty*x.unitPrice,STATUS:'CONSIGNED'

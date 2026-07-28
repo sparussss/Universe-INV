@@ -1,4 +1,4 @@
-# Universe Invoice PWA v0.11.1
+# Universe Invoice PWA v0.11.2
 
 ## v0.11.0 Excel output changes
 
@@ -151,3 +151,10 @@ UI 改善：
 - Delete action moved below the product image and only appears while editing; drag handle remains on the right.
 - On-screen preview hides Vendor's Banker. Print/PDF shows the banker block on the right of the invoice/customer information.
 - Preview/output table order is now No. / Article No. / Description / Picture / Quantity / Unit / Unit Price / Amount.
+
+
+## v0.11.2 item sequence refinements
+- Formal document order follows scan order: first scanned item is No. 1.
+- The working list still shows the newest item at the top.
+- Delete/re-add and drag reorder now renumber consistently across working list, preview, Excel and PDF.
+- Qty label renamed to Quantity and Quantity / Unit Price edit inputs enlarged.

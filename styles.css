@@ -152,3 +152,11 @@ button{width:auto}
   .doc-grid.screen-preview{display:grid;grid-template-columns:1fr 1fr;gap:20px}
   .doc-grid.screen-preview .print-banker{grid-column:2;grid-row:1}
 }
+
+
+/* v0.11.2 item ordering + wider edit fields */
+.compact-controls.open{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px}
+.compact-controls label{display:flex;flex-direction:column;align-items:stretch;gap:5px;min-width:0}
+.compact-controls label input{width:100%;min-width:0;padding:9px 10px;font-size:16px}
+.compact-controls .variant-select{grid-column:1/-1;width:100%}
+@media(max-width:520px){.compact-controls.open{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.compact-controls label{grid-template-columns:none}.compact-controls label input{font-size:16px}}
