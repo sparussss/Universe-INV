@@ -1,4 +1,4 @@
-# Universe Invoice PWA v0.11.2
+# Universe Invoice PWA v0.11.3
 
 ## v0.11.0 Excel output changes
 
@@ -153,7 +153,7 @@ UI 改善：
 - Preview/output table order is now No. / Article No. / Description / Picture / Quantity / Unit / Unit Price / Amount.
 
 
-## v0.11.2 item sequence refinements
+## v0.11.3 item sequence refinements
 - Formal document order follows scan order: first scanned item is No. 1.
 - The working list still shows the newest item at the top.
 - Delete/re-add and drag reorder now renumber consistently across working list, preview, Excel and PDF.
