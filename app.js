@@ -219,66 +219,23 @@ function renderItems(){
     $('.delete-item',node).onclick=()=>{if(confirm(`刪除 ${item.artNo}？`)){state.items=state.items.filter(x=>x.id!==item.id);normalizeItemSequence();renderItems()}};
     box.appendChild(node)
   });
-  if(state.sortable){try{state.sortable.destroy()}catch{};state.sortable=null}
-  // Desktop / non-touch fallback via SortableJS. iPhone Safari uses the native pointer reordering below.
-  if(typeof Sortable!=='undefined' && !window.matchMedia('(pointer: coarse)').matches){
-    state.sortable=Sortable.create(box,{animation:160,handle:'.drag-handle',draggable:'.invoice-item',ghostClass:'drag-ghost',onEnd:()=>commitDisplayedOrder(box)});
-  }
-  installMobileDragReorder(box);
-  updateTotals()
-}
-function commitDisplayedOrder(box){
-  const ids=[...box.querySelectorAll('.invoice-item')].map(n=>n.dataset.itemId);
-  const displayOrder=ids.map(id=>state.items.find(x=>String(x.id)===id)).filter(Boolean);
-  // UI is newest/highest sequence first; formal output is the reverse.
-  state.items=[...displayOrder].reverse();
-  state.items.forEach((item,i)=>item.seq=i+1);
-  renderItems();
-  schedulePreview();
-}
-function installMobileDragReorder(box){
-  let dragged=null,startY=0,lastY=0,active=false;
-  const handles=[...box.querySelectorAll('.drag-handle')];
-  handles.forEach(handle=>{
-    handle.addEventListener('pointerdown',e=>{
-      if(e.pointerType==='mouse')return;
-      dragged=handle.closest('.invoice-item');
-      if(!dragged)return;
-      active=true;startY=lastY=e.clientY;
-      dragged.classList.add('drag-active');
-      handle.classList.add('dragging');
-      try{handle.setPointerCapture(e.pointerId)}catch{}
-      e.preventDefault();
-    });
-    handle.addEventListener('pointermove',e=>{
-      if(!active||!dragged)return;
-      lastY=e.clientY;
-      const el=document.elementFromPoint(e.clientX,e.clientY);
-      const target=el&&el.closest&&el.closest('.invoice-item');
-      if(!target||target===dragged||target.parentElement!==box)return;
-      const r=target.getBoundingClientRect();
-      const before=e.clientY < r.top + r.height/2;
-      if(before)box.insertBefore(dragged,target); else box.insertBefore(dragged,target.nextSibling);
-      // auto-scroll the item viewport when dragging near its edges
-      const br=box.getBoundingClientRect(),edge=70;
-      if(e.clientY<br.top+edge)box.scrollTop-=18;
-      else if(e.clientY>br.bottom-edge)box.scrollTop+=18;
-      e.preventDefault();
-    });
-    const finish=e=>{
-      if(!active||!dragged)return;
-      active=false;
-      dragged.classList.remove('drag-active');
-      handle.classList.remove('dragging');
-      try{handle.releasePointerCapture(e.pointerId)}catch{}
-      const moved=Math.abs(lastY-startY)>6;
-      dragged=null;
-      if(moved)commitDisplayedOrder(box);
-      e.preventDefault();
+  // iPhone-friendly ordering: tap ≡ and choose the target position instead of free dragging.
+  box.querySelectorAll('.drag-handle').forEach(handle=>{
+    handle.onclick=()=>{
+      const node=handle.closest('.invoice-item');
+      const item=state.items.find(x=>String(x.id)===node?.dataset.itemId);
+      if(!item)return;
+      const current=Number(item.seq)||1,total=state.items.length;
+      const raw=prompt(`移動 ${item.artNo}\n目前正式次序：${current} / ${total}\n請輸入新位置 1-${total}`,String(current));
+      if(raw===null)return;
+      const target=Math.max(1,Math.min(total,Math.floor(Number(raw)||0)));
+      if(!target){alert('請輸入有效位置。');return}
+      const ordered=formalItems().filter(x=>x.id!==item.id);
+      ordered.splice(target-1,0,item);
+      state.items=ordered;normalizeItemSequence();renderItems();schedulePreview();
     };
-    handle.addEventListener('pointerup',finish);
-    handle.addEventListener('pointercancel',finish);
   });
+  updateTotals()
 }
 $('#scrollLatestBtn').onclick=()=>$('#invoiceItems').scrollTo({top:0,behavior:'smooth'});$('#clearInvoiceBtn').onclick=()=>{if(confirm('清空目前 Invoice？')){state.items=[];renderItems()}};
 function reprice(){const r=Number($('#salesRate').value)||0;state.items.forEach(x=>x.unitPrice=Math.ceil(x.price*r));renderItems()}$('#salesRate').onchange=reprice;$('#currency').onchange=()=>{renderItems();renderCustomerSummary();schedulePreview()};$('#discountAmount').oninput=updateTotals;['invoiceNo','invoiceDate','shipmentMethod','customerCode','customerName','customerAddress','customerTerms','remark'].forEach(id=>$('#'+id)?.addEventListener('input',schedulePreview));

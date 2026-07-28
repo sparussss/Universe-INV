@@ -163,11 +163,9 @@
         <label><input type="radio" name="documentType" value="consignment"> Consignment</label>
         <label><input type="radio" name="documentType" value="quotation"> Quotation</label>
       </div>
-      <div class="form-grid">
+      <div class="form-grid document-meta-grid">
         <label><span id="documentNoLabel">Invoice No.</span><input id="invoiceNo" value="" placeholder="INVYY0001"></label>
         <label><span id="documentDateLabel">Invoice Date</span><input id="invoiceDate" inputmode="numeric" placeholder="YYYY-MM-DD"></label>
-        <label>Discount Amount<input id="discountAmount" type="number" min="0" step="1" value="0"></label>
-        <label>Remark<textarea id="remark" rows="3" placeholder="可分行輸入"></textarea></label>
       </div>
 
       <div class="divider"></div>
@@ -191,9 +189,10 @@
       <div class="totals">
         <div><span>Total Quantity</span><strong id="totalQty">0</strong></div>
         <div><span>Sub Total</span><strong id="subtotal">$0.00</strong></div>
-        <div><span>Discount</span><strong id="discountDisplay">$0.00</strong></div>
+        <div class="discount-row"><label for="discountAmount">Discount</label><input id="discountAmount" class="discount-input" type="number" min="0" step="1" value="0" inputmode="decimal"></div>
         <div class="grand"><span>Total</span><strong id="grandTotal">$0.00</strong></div>
       </div>
+      <div class="bottom-remark"><label>Remark<textarea id="remark" rows="3" placeholder="可分行輸入"></textarea></label></div>
       <div class="confirm-row"><button id="confirmInvoiceBtn" class="primary">Confirm Invoice 並匯出 Remaining Stock</button></div>
     </article>
   </section>
@@ -240,7 +239,7 @@
         <label>Unit Price<input class="price-input" type="number" min="0" step="1"></label>
       </div>
     </div>
-    <button type="button" class="drag-handle" aria-label="拖曳排序">≡</button>
+    <button type="button" class="drag-handle" aria-label="排序">≡</button>
   </div>
 </template>
 
