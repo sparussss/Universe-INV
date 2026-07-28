@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.11.0</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.11.1</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -159,7 +159,6 @@
       <h3 id="documentDataHeading">客人 Invoice 資料</h3>
       <div id="selectedCustomerSummary" class="selected-customer"></div>
       <div class="document-type-switch" role="group" aria-label="Document Type">
-        <span>Document Type</span>
         <label><input type="radio" name="documentType" value="invoice" checked> Invoice</label>
         <label><input type="radio" name="documentType" value="consignment"> Consignment</label>
         <label><input type="radio" name="documentType" value="quotation"> Quotation</label>
@@ -225,17 +224,20 @@
 <template id="itemTemplate">
   <div class="invoice-item compact-item">
     <div class="item-seq"></div>
-    <img class="item-thumb" alt="產品圖片">
+    <div class="item-thumb-stack">
+      <img class="item-thumb" alt="產品圖片">
+      <button type="button" class="delete-item danger ghost">刪除</button>
+    </div>
     <div class="item-main">
       <div class="item-title-row"><strong class="item-artno"></strong><span class="item-lot"></span></div>
       <div class="item-desc compact-desc"></div>
+      <div class="item-full-desc"></div>
       <div class="item-price-note"></div>
       <button type="button" class="item-edit-toggle ghost">編輯 ▾</button>
       <div class="item-controls compact-controls">
         <select class="variant-select"></select>
         <label>Qty<input class="qty-input" type="number" min="1" step="1"></label>
         <label>Unit Price<input class="price-input" type="number" min="0" step="1"></label>
-        <button class="delete-item danger">刪除</button>
       </div>
     </div>
     <button type="button" class="drag-handle" aria-label="拖曳排序">≡</button>

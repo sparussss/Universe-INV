@@ -202,9 +202,12 @@ function renderItems(){
   state.items.forEach(item=>{
     const node=$('#itemTemplate').content.firstElementChild.cloneNode(true);node.dataset.itemId=String(item.id);
     $('.item-seq',node).textContent=item.seq;$('.item-artno',node).textContent=item.artNo;$('.item-lot',node).textContent=`LOTNO ${item.lotNo}`;
-    $('.item-desc',node).textContent=item.descriptions.slice(0,2).join('\n');$('.item-price-note',node).textContent=`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(item.unitPrice)}`;
+    const nonEmptyDescriptions=(item.descriptions||[]).map(x=>norm(x)).filter(Boolean);
+    $('.item-desc',node).textContent=nonEmptyDescriptions.slice(0,2).join('\n');
+    $('.item-full-desc',node).textContent=nonEmptyDescriptions.join('\n');
+    $('.item-price-note',node).textContent=`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(item.unitPrice)}`;
     $('.item-thumb',node).src=getImg(item)?.url||placeholder(item.artNo);
-    const controls=$('.item-controls',node),toggle=$('.item-edit-toggle',node);toggle.onclick=()=>{const open=controls.classList.toggle('open');toggle.textContent=open?'完成 ▴':'編輯 ▾'};
+    const controls=$('.item-controls',node),toggle=$('.item-edit-toggle',node);toggle.onclick=()=>{const open=controls.classList.toggle('open');node.classList.toggle('editing',open);toggle.textContent=open?'完成 ▴':'編輯 ▾'};
     const sel=$('.variant-select',node),arr=state.imageFiles.get(item.artNo)||[];
     if(arr.length){arr.forEach(x=>{const o=document.createElement('option');o.value=x.variant;o.textContent='圖片：'+x.variant;o.selected=x.variant===item.imageVariant;sel.appendChild(o)});sel.onchange=e=>{item.imageVariant=e.target.value;renderItems()}}else{sel.innerHTML='<option>沒有圖片</option>';sel.disabled=true}
     $('.qty-input',node).value=item.qty;$('.price-input',node).value=item.unitPrice;
@@ -255,8 +258,8 @@ function currencyWords(code){
 }
 function renderPreview(){
   const t=totals();
-  const rows=state.items.map((x,i)=>{const img=getImg(x)?.url||placeholder('No Image');return `<tr><td>${i+1}</td><td class="preview-picture"><img src="${esc(img)}" alt="${esc(x.artNo)}"></td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${x.descriptions.map(esc).join('<br>')}</td><td class="qty-cell">${x.qty}</td><td class="unit-cell">${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`}).join('');
-  $('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta"><strong>Vender's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Picture</th><th>Article No.</th><th>Description</th><th class="qty-head">Quantity</th><th class="unit-head">Unit</th><th class="num">Unit Price</th><th class="num amount-head"><span>Amount</span><small>F.O.B. Value</small></th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p class="remark-preview"><strong>Remark :</strong><br>${esc($('#remark').value).replace(/\n/g,'<br>')}</p></div>`;
+  const rows=state.items.map((x,i)=>{const img=getImg(x)?.url||placeholder('No Image');return `<tr><td>${i+1}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${(x.descriptions||[]).filter(Boolean).map(esc).join('<br>')}</td><td class="preview-picture"><img src="${esc(img)}" alt="${esc(x.artNo)}"></td><td class="qty-cell">${x.qty}</td><td class="unit-cell">${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`}).join('');
+  $('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid screen-preview"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta print-only print-banker"><strong>Vendor's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Picture</th><th class="qty-head">Quantity</th><th class="unit-head">Unit</th><th class="num">Unit Price</th><th class="num amount-head"><span>Amount</span><small>F.O.B. Value</small></th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p class="remark-preview"><strong>Remark :</strong><br>${esc($('#remark').value).replace(/\n/g,'<br>')}</p></div>`;
 }
 
 
@@ -634,7 +637,7 @@ async function exportInvoiceExcel(){
     const ws=wb.addWorksheet(documentLabels().title,{pageSetup:{paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.25,right:.25,top:.35,bottom:.35,header:.15,footer:.15}}});
     ws.views=[{showGridLines:false}];
     ws.columns=[
-      {key:'no',width:5},{key:'image',width:15},{key:'article',width:17},{key:'description',width:34},
+      {key:'no',width:5},{key:'article',width:17},{key:'description',width:34},{key:'image',width:15},
       {key:'qty',width:9},{key:'unit',width:8},{key:'unitPrice',width:14},{key:'amount',width:14}
     ];
     const merge=(range,value,size=10,bold=false,align='left')=>{ws.mergeCells(range);const c=ws.getCell(range.split(':')[0]);c.value=value;c.font={name:'Arial',size,bold};c.alignment={vertical:'middle',horizontal:align,wrapText:true};return c};
@@ -650,10 +653,10 @@ async function exportInvoiceExcel(){
     merge('A8:D8',`Shipment Method : ${norm($('#shipmentMethod').value)}`,10);
     merge('E8:H8',`Customer Code : ${norm($('#customerCode').value)}`,10,false,'right');
     merge('A9:D11',`Customer : ${norm($('#customerName').value)}\n${norm($('#customerAddress').value)}`,10,true);
-    merge('E9:H11',"Vender's Banker\nThe Hong Kong & Shanghai Banking Corporation Ltd.\nAddress : 41 Ma Tau Wai Road, Hung Hom, Kowloon, Hong Kong\nA/C # : 012-593570-001\nA/C Name : Universe Gems & Jewellery Co.",9,false,'left');
+    merge('E9:H11',"Vendor's Banker\nThe Hong Kong & Shanghai Banking Corporation Ltd.\nAddress : 41 Ma Tau Wai Road, Hung Hom, Kowloon, Hong Kong\nA/C # : 012-593570-001\nA/C Name : Universe Gems & Jewellery Co.",9,false,'left');
     [9,10,11].forEach(r=>ws.getRow(r).height=20);
     const headerRow=13;
-    const headers=['No.','Picture','Article No.','Description','Quantity','Unit','Unit Price','Amount'];
+    const headers=['No.','Article No.','Description','Picture','Quantity','Unit','Unit Price','Amount'];
     headers.forEach((h,i)=>{const c=ws.getCell(headerRow,i+1);c.value=h;c.font={name:'Arial',size:10,bold:true};c.alignment={horizontal:'center',vertical:'middle',wrapText:true};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE5E7EB'}};applyThinBorder(c)});
     ws.getRow(headerRow).height=24;
     ws.mergeCells(`A${headerRow+1}:G${headerRow+1}`);const fob=ws.getCell(headerRow+1,8);fob.value='F.O.B. Value';fob.font={name:'Arial',size:10,bold:true};fob.alignment={vertical:'middle',horizontal:'right'};applyThinBorder(fob);ws.getRow(headerRow+1).height=21;
@@ -664,9 +667,9 @@ async function exportInvoiceExcel(){
       for(let r=start;r<=end;r++)ws.getRow(r).height=10.5;
       ws.mergeCells(`A${start}:A${end}`);ws.getCell(`A${start}`).value=i+1;
       ws.getCell(`A${start}`).alignment={horizontal:'center',vertical:'middle'};
-      ws.mergeCells(`B${start}:B${end}`);
-      ws.mergeCells(`C${start}:C${end}`);ws.getCell(`C${start}`).value=`Lot.No. : ${item.lotNo}\n${item.artNo}`;ws.getCell(`C${start}`).font={name:'Arial',size:10,bold:false};ws.getCell(`C${start}`).alignment={vertical:'top',wrapText:true};
-      ws.mergeCells(`D${start}:D${end}`);ws.getCell(`D${start}`).value=[articleDescriptionFor(item),...item.descriptions].filter(Boolean).join('\n');ws.getCell(`D${start}`).alignment={vertical:'top',wrapText:true};ws.getCell(`D${start}`).font={name:'Arial',size:10};
+      ws.mergeCells(`B${start}:B${end}`);ws.getCell(`B${start}`).value=`Lot.No. : ${item.lotNo}\n${item.artNo}`;ws.getCell(`B${start}`).font={name:'Arial',size:10,bold:false};ws.getCell(`B${start}`).alignment={vertical:'top',wrapText:true};
+      ws.mergeCells(`C${start}:C${end}`);ws.getCell(`C${start}`).value=[articleDescriptionFor(item),...item.descriptions].filter(Boolean).join('\n');ws.getCell(`C${start}`).alignment={vertical:'top',wrapText:true};ws.getCell(`C${start}`).font={name:'Arial',size:10};
+      ws.mergeCells(`D${start}:D${end}`);
       ws.mergeCells(`E${start}:E${end}`);ws.getCell(`E${start}`).value=item.qty;ws.getCell(`E${start}`).alignment={horizontal:'center',vertical:'middle'};
       ws.mergeCells(`F${start}:F${end}`);ws.getCell(`F${start}`).value=item.unit;ws.getCell(`F${start}`).alignment={horizontal:'center',vertical:'middle'};
       ws.mergeCells(`G${start}:G${end}`);ws.getCell(`G${start}`).value=item.unitPrice;ws.getCell(`G${start}`).numFmt='$#,##0.00';ws.getCell(`G${start}`).alignment={horizontal:'right',vertical:'middle'};
@@ -677,7 +680,7 @@ async function exportInvoiceExcel(){
         try{
           const dataUrl=await imageFileToJpegDataUrl(selected.file);
           const imageId=wb.addImage({base64:dataUrl,extension:'jpeg'});
-          ws.addImage(imageId,{tl:{col:1.01,row:start-1+.01},br:{col:1.99,row:start+3.99},editAs:'oneCell'});
+          ws.addImage(imageId,{tl:{col:3.01,row:start-1+.01},br:{col:3.99,row:start+3.99},editAs:'oneCell'});
         }catch{missingImages++}
       }else missingImages++;
       row=end+1;

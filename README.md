@@ -1,4 +1,4 @@
-# Universe Invoice PWA v0.11.0
+# Universe Invoice PWA v0.11.1
 
 ## v0.11.0 Excel output changes
 
@@ -144,3 +144,10 @@ UI 改善：
 - 貨品清單改為精簡卡片，右側拖曳把手可改變預覽及輸出次序。
 - Excel 產品圖片放大至完整四行圖片區。
 - Remark 支援分行，Discount 支援括號顯示。
+
+## v0.11.1 UI refinements
+- Removed the visible “Document Type” label and kept Invoice / Consignment / Quotation on one row.
+- Compact item cards now place LOTNO beside ARTNO; expanded editing shows every non-empty DESC1–DESC6 line.
+- Delete action moved below the product image and only appears while editing; drag handle remains on the right.
+- On-screen preview hides Vendor's Banker. Print/PDF shows the banker block on the right of the invoice/customer information.
+- Preview/output table order is now No. / Article No. / Description / Picture / Quantity / Unit / Unit Price / Amount.
