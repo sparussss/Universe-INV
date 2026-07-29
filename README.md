@@ -1,4 +1,4 @@
-# Universe Invoice PWA v0.11.5
+# Universe Invoice PWA v0.11.6
 
 ## v0.11.0 Excel output changes
 
@@ -153,8 +153,15 @@ UI 改善：
 - Preview/output table order is now No. / Article No. / Description / Picture / Quantity / Unit / Unit Price / Amount.
 
 
-## v0.11.5 item sequence refinements
+## v0.11.6 item sequence refinements
 - Formal document order follows scan order: first scanned item is No. 1.
 - The working list still shows the newest item at the top.
 - Delete/re-add and drag reorder now renumber consistently across working list, preview, Excel and PDF.
 - Qty label renamed to Quantity and Quantity / Unit Price edit inputs enlarged.
+
+
+## v0.11.6
+- Added GBP and CNY currency choices.
+- Added online USD-based reference FX rates using Frankfurter v2, with cached/offline fallback and manual override.
+- Foreign-currency prices are calculated from the USD selling price after Sales Rate.
+- Excel/preview totals use the selected currency.

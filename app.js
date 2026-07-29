@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],stoneAliases:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1}};
+const state={products:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],stoneAliases:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false}};
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
 function displayItems(){return formalItems().reverse()}
 function normalizeItemSequence(){state.items=formalItems();state.items.forEach((item,i)=>item.seq=i+1)}
@@ -54,8 +54,77 @@ $$('input[name="documentType"]').forEach(r=>r.addEventListener('change',e=>{stat
 function setImportCollapsed(key,collapsed=true){const card=document.querySelector(`[data-import-card="${key}"]`);if(!card)return;card.classList.toggle('collapsed',collapsed);const btn=card.querySelector('.import-toggle');if(btn){btn.textContent=collapsed?'展開':'收合';btn.setAttribute('aria-expanded',String(!collapsed))}}
 $$('.import-toggle').forEach(btn=>btn.addEventListener('click',()=>{const card=btn.closest('.import-card');setImportCollapsed(card?.dataset.importCard,!card.classList.contains('collapsed'))}));
 function field(row,names){const keys=Object.keys(row);for(const n of names){const k=keys.find(x=>x.trim().toUpperCase()===n);if(k)return row[k]}return''}
-function fmt(v){return new Intl.NumberFormat('en-US',{style:'currency',currency:$('#currency').value||'USD',minimumFractionDigits:2}).format(Number(v)||0)}
-function totals(){const qty=state.items.reduce((a,x)=>a+x.qty,0),sub=state.items.reduce((a,x)=>a+x.qty*x.unitPrice,0),discount=Math.max(0,Number($('#discountAmount').value)||0);return{qty,sub,discount,total:Math.max(0,sub-discount)}}
+const FX_API='https://api.frankfurter.dev/v2/rate';
+function currencyCode(){return norm($('#currency')?.value||'USD').toUpperCase()||'USD'}
+function currencyDigits(code=currencyCode()){return code==='JPY'?0:2}
+function roundCurrency(v,code=currencyCode()){const p=10**currencyDigits(code);return Math.round((Number(v)||0)*p+Number.EPSILON)/p}
+function fmt(v,code=currencyCode()){return new Intl.NumberFormat('en-US',{style:'currency',currency:code,minimumFractionDigits:currencyDigits(code),maximumFractionDigits:currencyDigits(code)}).format(Number(v)||0)}
+function currencyExcelFormat(code=currencyCode(),negative=false){
+  const formats={USD:'$#,##0.00',EUR:'€#,##0.00',GBP:'£#,##0.00',CNY:'"CNY" #,##0.00',JPY:'¥#,##0',HKD:'"HK$" #,##0.00'};
+  const positive=formats[code]||`"${code}" #,##0.00`;
+  if(!negative)return positive;
+  const body=positive.replace(/^([^#0]*)(.*)$/,'$1$2');
+  return `(${body});(${body});${positive}`;
+}
+function fxCacheKey(code){return `universeFx_USD_${code}`}
+function currentFxRate(){if(currencyCode()==='USD')return 1;const v=Number($('#fxRate')?.value);return Number.isFinite(v)&&v>0?v:0}
+function fxPricingReady(){return currencyCode()==='USD'||currentFxRate()>0}
+function baseUsdPrice(item){const stored=Number(item.usdUnitPrice);return Number.isFinite(stored)&&stored>=0?stored:Math.max(0,Number(item.unitPrice)||0)}
+function convertedFromUsd(usd){const code=currencyCode();if(code==='USD')return roundCurrency(usd,'USD');const rate=currentFxRate();return rate>0?roundCurrency(usd*rate,code):0}
+function syncEffectivePrices({clearCurrentOverride=false}={}){
+  const code=currencyCode();
+  for(const item of state.items){
+    item.currencyPrices=item.currencyPrices||{};
+    if(clearCurrentOverride)delete item.currencyPrices[code];
+    const manual=Number(item.currencyPrices[code]);
+    item.unitPrice=Number.isFinite(manual)&&manual>=0?manual:convertedFromUsd(baseUsdPrice(item));
+  }
+}
+function setFxStatus(text,type=''){const el=$('#fxStatus');if(!el)return;el.textContent=text;el.className='fx-status'+(type?' '+type:'')}
+function saveFxCache(code,rate,date){try{localStorage.setItem(fxCacheKey(code),JSON.stringify({rate,date,fetchedAt:Date.now()}))}catch{}}
+function loadFxCache(code){try{const x=JSON.parse(localStorage.getItem(fxCacheKey(code))||'null');return x&&Number(x.rate)>0?x:null}catch{return null}}
+function updateFxPanel(){
+  const code=currencyCode(),panel=$('#fxPanel');if(!panel)return;
+  $('#fxQuoteCurrency').textContent=code;
+  if(code==='USD'){panel.classList.add('hidden');state.fx={rate:1,date:'',source:'usd',fetching:false};syncEffectivePrices();return}
+  panel.classList.remove('hidden');
+}
+function applyFxRate(rate,date='',source='manual',message=''){
+  const code=currencyCode(),n=Number(rate);if(code==='USD')return;
+  if(!(Number.isFinite(n)&&n>0))return;
+  $('#fxRate').value=String(n);
+  state.fx={rate:n,date,source,fetching:false};
+  syncEffectivePrices({clearCurrentOverride:true});
+  renderItems();renderCustomerSummary();schedulePreview();
+  if(message)setFxStatus(message,source==='online'?'ok':source==='cache'?'warn':'');
+}
+async function fetchReferenceFxRate({silent=false}={}){
+  const code=currencyCode();updateFxPanel();if(code==='USD')return;
+  if(state.fx.fetching)return;
+  state.fx.fetching=true;$('#refreshFxBtn').disabled=true;
+  if(!silent)setFxStatus(`正在取得 USD → ${code} 參考匯率…`);
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+  try{
+    const res=await fetch(`${FX_API}/USD/${encodeURIComponent(code)}`,{cache:'no-store',signal:controller.signal});
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    const data=await res.json(),rate=Number(data.rate);
+    if(!(Number.isFinite(rate)&&rate>0))throw new Error('回傳匯率無效');
+    const date=norm(data.date);saveFxCache(code,rate,date);
+    applyFxRate(rate,date,'online',`線上參考匯率 · ${date||'最新工作日'} · Frankfurter`);
+  }catch(err){
+    const cached=loadFxCache(code);
+    if(cached){applyFxRate(cached.rate,cached.date,'cache',`未能更新；沿用上次參考匯率 · ${cached.date||new Date(cached.fetchedAt).toLocaleDateString('zh-HK')}`)}
+    else{state.fx={rate:0,date:'',source:'error',fetching:false};$('#fxRate').value='';syncEffectivePrices({clearCurrentOverride:true});renderItems();updateTotals();setFxStatus('無法取得最新匯率，請手動輸入 FX Rate。','error')}
+  }finally{clearTimeout(timer);state.fx.fetching=false;$('#refreshFxBtn').disabled=false}
+}
+async function handleCurrencyChange(){
+  const code=currencyCode();updateFxPanel();
+  if(code==='USD'){syncEffectivePrices();renderItems();renderCustomerSummary();schedulePreview();return}
+  const cached=loadFxCache(code);
+  if(cached){applyFxRate(cached.rate,cached.date,'cache',`使用上次參考匯率 · ${cached.date||''}`)}else{$('#fxRate').value='';state.fx={rate:0,date:'',source:'pending',fetching:false};syncEffectivePrices({clearCurrentOverride:true});renderItems();updateTotals();setFxStatus(`正在取得 USD → ${code} 參考匯率…`)}
+  await fetchReferenceFxRate({silent:!!cached});
+}
+function totals(){const qty=state.items.reduce((a,x)=>a+x.qty,0),sub=state.items.reduce((a,x)=>a+x.qty*(Number(x.unitPrice)||0),0),discount=Math.max(0,Number($('#discountAmount').value)||0);return{qty,sub,discount,total:Math.max(0,sub-discount)}}
 function updateTotals(){const t=totals();$('#totalQty').textContent=t.qty;$('#subtotal').textContent=fmt(t.sub);const discountEl=$('#discountDisplay');if(discountEl)discountEl.textContent=discountDisplay(t.discount);$('#grandTotal').textContent=fmt(t.total);$('#productCount').textContent=state.products.size;$('#customerCount').textContent=state.customers.size;$('#invoiceCount').textContent=state.items.length;$('#headerTotal').textContent=fmt(t.total);schedulePreview()}
 $$('.tab').forEach(b=>b.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.tab-panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.tab).classList.add('active');if(b.dataset.tab==='invoice')renderCustomerSummary();if(b.dataset.tab==='preview')renderPreview()});
 async function readWB(file){if(typeof XLSX==='undefined')throw new Error('Excel 程式未載入');return XLSX.read(await file.arrayBuffer(),{type:'array'})}
@@ -147,7 +216,7 @@ $('#customerSearch').oninput=e=>{
   if(q.length<2){$('#customerMatches').innerHTML='';return}
   customerSearchTimer=setTimeout(showMatches,120);
 };
-function renderCustomerSummary(){const code=$('#customerCode').value,name=$('#customerName').value;$('#selectedCustomerSummary').innerHTML=code||name?`<strong>${esc(code)} · ${esc(name)}</strong><span>Sales Rate ${esc($('#salesRate').value)} · ${esc($('#currency').value)}</span>`:'尚未選擇客戶。'}
+function renderCustomerSummary(){const code=$('#customerCode').value,name=$('#customerName').value,currency=currencyCode(),fx=currency==='USD'?'':(currentFxRate()>0?` · FX 1 USD = ${currentFxRate()} ${currency}`:' · FX 未設定');$('#selectedCustomerSummary').innerHTML=code||name?`<strong>${esc(code)} · ${esc(name)}</strong><span>Sales Rate ${esc($('#salesRate').value)} · ${esc(currency)}${esc(fx)}</span>`:'尚未選擇客戶。'}
 function chooseVariant(p){
   const imgs=state.imageFiles.get(p.artNo)||[];if(!imgs.length)return'Default';
   const d=(p.desc2||'').toUpperCase();
@@ -185,7 +254,7 @@ function addLot(raw){
   if(!p){status('#addMessage',`找不到 LOTNO ${lot}。`,'error');refocusLotInput(true);return false}
   if(state.items.some(x=>x.lotNo===lot)){status('#addMessage',`LOTNO ${lot} 已在 Invoice。`,'error');refocusLotInput(true);return false}
   const rate=Number($('#salesRate').value)||0;
-  state.items.push({...p,id:Date.now()+Math.random(),seq:state.items.length+1,qty:1,unitPrice:Math.ceil(p.price*rate),imageVariant:chooseVariant(p)});
+  const usdUnitPrice=Math.ceil(p.price*rate);state.items.push({...p,id:Date.now()+Math.random(),seq:state.items.length+1,qty:1,usdUnitPrice,currencyPrices:{},unitPrice:convertedFromUsd(usdUnitPrice),imageVariant:chooseVariant(p)});
   $('#lotInput').value='';
   status('#addMessage',`已加入 ${p.artNo} / LOTNO ${lot}`,'ok');
   renderItems();
@@ -208,14 +277,14 @@ function renderItems(){
     const nonEmptyDescriptions=(item.descriptions||[]).map(x=>norm(x)).filter(Boolean);
     $('.item-desc',node).textContent=nonEmptyDescriptions.slice(0,2).join('\n');
     $('.item-full-desc',node).textContent=nonEmptyDescriptions.join('\n');
-    $('.item-price-note',node).textContent=`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(item.unitPrice)}`;
+    const usd=baseUsdPrice(item),code=currencyCode();$('.item-price-note',node).textContent=code==='USD'?`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')}`:(fxPricingReady()?`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')} × ${currentFxRate()} → ${fmt(item.unitPrice,code)}`:`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')} · 等待 FX Rate`);
     $('.item-thumb',node).src=getImg(item)?.url||placeholder(item.artNo);
     const controls=$('.item-controls',node),toggle=$('.item-edit-toggle',node);toggle.onclick=()=>{const open=controls.classList.toggle('open');node.classList.toggle('editing',open);toggle.textContent=open?'完成 ▴':'編輯 ▾'};
     const sel=$('.variant-select',node),arr=state.imageFiles.get(item.artNo)||[];
     if(arr.length){arr.forEach(x=>{const o=document.createElement('option');o.value=x.variant;o.textContent='圖片：'+x.variant;o.selected=x.variant===item.imageVariant;sel.appendChild(o)});sel.onchange=e=>{item.imageVariant=e.target.value;renderItems()}}else{sel.innerHTML='<option>沒有圖片</option>';sel.disabled=true}
     $('.qty-input',node).value=item.qty;$('.price-input',node).value=item.unitPrice;
     $('.qty-input',node).onchange=e=>{item.qty=Math.max(1,Number(e.target.value)||1);updateTotals()};
-    $('.price-input',node).onchange=e=>{item.unitPrice=Math.max(0,Math.ceil(Number(e.target.value)||0));updateTotals()};
+    $('.price-input',node).onchange=e=>{const code=currencyCode(),raw=Math.max(0,Number(e.target.value)||0),value=roundCurrency(raw,code);item.currencyPrices=item.currencyPrices||{};item.currencyPrices[code]=value;item.unitPrice=value;if(code==='USD')item.usdUnitPrice=value;updateTotals()};
     $('.delete-item',node).onclick=()=>{if(confirm(`刪除 ${item.artNo}？`)){state.items=state.items.filter(x=>x.id!==item.id);normalizeItemSequence();renderItems()}};
     box.appendChild(node)
   });
@@ -238,7 +307,7 @@ function renderItems(){
   updateTotals()
 }
 $('#scrollLatestBtn').onclick=()=>$('#invoiceItems').scrollTo({top:0,behavior:'smooth'});$('#clearInvoiceBtn').onclick=()=>{if(confirm('清空目前 Invoice？')){state.items=[];renderItems()}};
-function reprice(){const r=Number($('#salesRate').value)||0;state.items.forEach(x=>x.unitPrice=Math.ceil(x.price*r));renderItems()}$('#salesRate').onchange=reprice;$('#currency').onchange=()=>{renderItems();renderCustomerSummary();schedulePreview()};$('#discountAmount').oninput=updateTotals;['invoiceNo','invoiceDate','shipmentMethod','customerCode','customerName','customerAddress','customerTerms','remark'].forEach(id=>$('#'+id)?.addEventListener('input',schedulePreview));
+function reprice(){const r=Number($('#salesRate').value)||0;state.items.forEach(x=>{x.usdUnitPrice=Math.ceil(x.price*r);x.currencyPrices={}});syncEffectivePrices();renderItems()}$('#salesRate').onchange=reprice;$('#currency').onchange=handleCurrencyChange;$('#refreshFxBtn').onclick=()=>fetchReferenceFxRate();let fxInputTimer=null;$('#fxRate').oninput=e=>{clearTimeout(fxInputTimer);fxInputTimer=setTimeout(()=>{const n=Number(e.target.value);if(Number.isFinite(n)&&n>0){state.fx={rate:n,date:'',source:'manual',fetching:false};syncEffectivePrices({clearCurrentOverride:true});renderItems();renderCustomerSummary();setFxStatus('使用手動 FX Rate。','warn')}else{syncEffectivePrices({clearCurrentOverride:true});renderItems();setFxStatus('請輸入大於 0 的 FX Rate。','error')}},160)};$('#discountAmount').oninput=updateTotals;['invoiceNo','invoiceDate','shipmentMethod','customerCode','customerName','customerAddress','customerTerms','remark'].forEach(id=>$('#'+id)?.addEventListener('input',schedulePreview));
 function words(n){return String(Math.floor(n))}
 function numberToWords(value){
   let n=Math.floor(Number(value)||0);
@@ -271,7 +340,7 @@ function numberToWords(value){
   return parts.join(' ');
 }
 function currencyWords(code){
-  return ({USD:'US DOLLARS',EUR:'EUROS',JPY:'JAPANESE YEN',HKD:'HONG KONG DOLLARS'})[String(code||'').toUpperCase()]||String(code||'').toUpperCase();
+  return ({USD:'US DOLLARS',EUR:'EUROS',GBP:'BRITISH POUNDS',CNY:'CHINESE YUAN',JPY:'JAPANESE YEN',HKD:'HONG KONG DOLLARS'})[String(code||'').toUpperCase()]||String(code||'').toUpperCase();
 }
 function renderPreview(){
   const t=totals();
@@ -555,9 +624,9 @@ async function exportInvoiceFromTemplate(){
     ws.getCell(`${qtyCol}${start}`).numFmt='0';
     ws.getCell(`${unitCol}${start}`).value=item.unit;
     ws.getCell(`${unitPriceCol}${start}`).value=item.unitPrice;
-    ws.getCell(`${unitPriceCol}${start}`).numFmt='$#,##0.00';
+    ws.getCell(`${unitPriceCol}${start}`).numFmt=currencyExcelFormat();
     ws.getCell(`${amountCol}${start}`).value=item.qty*item.unitPrice;
-    ws.getCell(`${amountCol}${start}`).numFmt='$#,##0.00';
+    ws.getCell(`${amountCol}${start}`).numFmt=currencyExcelFormat();
 
     const selected=getImg(item);
     if(selected?.file){
@@ -601,9 +670,9 @@ async function exportInvoiceFromTemplate(){
   const discountAddr=shiftedAddress('Discount','I28');
   const totalAddr=shiftedAddress('Total','I30');
   ws.getCell(totalQtyAddr).value=t.qty;ws.getCell(totalQtyAddr).numFmt='0';
-  ws.getCell(subAddr).value=t.sub;ws.getCell(subAddr).numFmt='$#,##0.00';
-  ws.getCell(discountAddr).value=t.discount;ws.getCell(discountAddr).numFmt='($#,##0.00);($#,##0.00);$0.00';
-  ws.getCell(totalAddr).value=t.total;ws.getCell(totalAddr).numFmt='$#,##0.00';
+  ws.getCell(subAddr).value=t.sub;ws.getCell(subAddr).numFmt=currencyExcelFormat();
+  ws.getCell(discountAddr).value=t.discount;ws.getCell(discountAddr).numFmt=currencyExcelFormat(currencyCode(),true);
+  ws.getCell(totalAddr).value=t.total;ws.getCell(totalAddr).numFmt=currencyExcelFormat();
 
   // Fill text fields in the footer by label, so changing rows in the template remains safe.
   const findLabelRow=(text)=>{
@@ -644,6 +713,7 @@ async function exportInvoiceFromTemplate(){
   setExcelExportStatus(`已依 Template Map 輸出 ${state.invoiceTemplateName}${missingImages?`；${missingImages} 款沒有圖片`:''}。`,'ok');
 }
 async function exportInvoiceExcel(){
+  if(!fxPricingReady())return alert(`請先取得或輸入 USD → ${currencyCode()} 的 FX Rate。`);
   if(!state.items.length){alert('Invoice 沒有貨品。');return}
   if(typeof ExcelJS==='undefined'){setExcelExportStatus('Excel 輸出程式未載入，請連接網絡後重新開啟。','error');return}
   const btn=$('#exportExcelBtn');btn.disabled=true;setExcelExportStatus('正在建立 Excel Invoice…');
@@ -690,8 +760,8 @@ async function exportInvoiceExcel(){
       ws.mergeCells(`D${start}:D${end}`);
       ws.mergeCells(`E${start}:E${end}`);ws.getCell(`E${start}`).value=item.qty;ws.getCell(`E${start}`).alignment={horizontal:'center',vertical:'middle'};
       ws.mergeCells(`F${start}:F${end}`);ws.getCell(`F${start}`).value=item.unit;ws.getCell(`F${start}`).alignment={horizontal:'center',vertical:'middle'};
-      ws.mergeCells(`G${start}:G${end}`);ws.getCell(`G${start}`).value=item.unitPrice;ws.getCell(`G${start}`).numFmt='$#,##0.00';ws.getCell(`G${start}`).alignment={horizontal:'right',vertical:'middle'};
-      ws.mergeCells(`H${start}:H${end}`);ws.getCell(`H${start}`).value={formula:`E${start}*G${start}`,result:item.qty*item.unitPrice};ws.getCell(`H${start}`).numFmt='$#,##0.00';ws.getCell(`H${start}`).alignment={horizontal:'right',vertical:'middle'};
+      ws.mergeCells(`G${start}:G${end}`);ws.getCell(`G${start}`).value=item.unitPrice;ws.getCell(`G${start}`).numFmt=currencyExcelFormat();ws.getCell(`G${start}`).alignment={horizontal:'right',vertical:'middle'};
+      ws.mergeCells(`H${start}:H${end}`);ws.getCell(`H${start}`).value={formula:`E${start}*G${start}`,result:item.qty*item.unitPrice};ws.getCell(`H${start}`).numFmt=currencyExcelFormat();ws.getCell(`H${start}`).alignment={horizontal:'right',vertical:'middle'};
       for(let r=start;r<=end;r++)for(let c=1;c<=8;c++)applyThinBorder(ws.getCell(r,c));
       const selected=getImg(item);
       if(selected?.file){
@@ -707,11 +777,11 @@ async function exportInvoiceExcel(){
     const t=totals();
     ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value='Total Quantity';ws.getCell(`A${row}`).font={bold:true};ws.getCell(`G${row}`).value=t.qty;ws.getCell(`G${row}`).font={bold:true};ws.getCell(`G${row}`).alignment={horizontal:'right'};
     row++;
-    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value='Sub Total';ws.getCell(`A${row}`).font={bold:true};ws.getCell(`G${row}`).value=t.sub;ws.getCell(`G${row}`).numFmt='$#,##0.00';ws.getCell(`G${row}`).font={bold:true};ws.getCell(`G${row}`).alignment={horizontal:'right'};
+    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value='Sub Total';ws.getCell(`A${row}`).font={bold:true};ws.getCell(`G${row}`).value=t.sub;ws.getCell(`G${row}`).numFmt=currencyExcelFormat();ws.getCell(`G${row}`).font={bold:true};ws.getCell(`G${row}`).alignment={horizontal:'right'};
     row++;
-    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value='Discount Amount';ws.getCell(`G${row}`).value=t.discount;ws.getCell(`G${row}`).numFmt='($#,##0.00);($#,##0.00);$0.00';ws.getCell(`G${row}`).alignment={horizontal:'right'};
+    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value='Discount Amount';ws.getCell(`G${row}`).value=t.discount;ws.getCell(`G${row}`).numFmt=currencyExcelFormat(currencyCode(),true);ws.getCell(`G${row}`).alignment={horizontal:'right'};
     row++;
-    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value=`Total : (${norm($('#currency').value)})`;ws.getCell(`A${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).value=t.total;ws.getCell(`G${row}`).numFmt='$#,##0.00';ws.getCell(`G${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).alignment={horizontal:'right'};
+    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value=`Total : (${norm($('#currency').value)})`;ws.getCell(`A${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).value=t.total;ws.getCell(`G${row}`).numFmt=currencyExcelFormat();ws.getCell(`G${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).alignment={horizontal:'right'};
     row+=2;
     ws.mergeCells(`A${row}:H${row+2}`);const remarkCell=ws.getCell(`A${row}`);remarkCell.value=`Remark :\n${norm($('#remark').value)}`;remarkCell.alignment={vertical:'top',wrapText:true};remarkCell.font={name:'Arial',size:10};row+=2;
     row+=2;merge(`A${row}:D${row}`,'Vender Signature : ______________________',10);merge(`E${row}:H${row}`,'Accept By : ______________________',10,false,'right');
@@ -803,6 +873,7 @@ async function stopScanner(){if(state.scannerBusy)return;state.scannerBusy=true;
 $('#scanBtn').onclick=startScanner;$('#closeScannerBtn').onclick=stopScanner;
 function exportCurrentStockAfterConfirm(){
   if(!state.items.length)return alert(`${documentLabels().short} 沒有貨品。`);
+  if(!fxPricingReady())return alert(`請先取得或輸入 USD → ${currencyCode()} 的 FX Rate。`);
   const type=state.documentType;
   if(type==='quotation'){const doc=norm($('#invoiceNo').value)||formatDocumentNo();state.items=[];advanceDocumentSequence(doc,type);renderItems();status('#addMessage',`Quotation ${doc} 已 Confirm（庫存沒有扣除）；下一張為 ${$('#invoiceNo').value}。`,'ok');return;}
   const used=new Set(formalItems().map(x=>x.lotNo));
@@ -821,7 +892,7 @@ function exportCurrentStockAfterConfirm(){
     const outRows=formalItems().map(x=>({
       CONSIGN_NO:inv,CONSIGN_DATE:docDate,CUSTOMER_CODE:customerCode,CUSTOMER:customer,
       LOTNO:x.lotNo,ARTNO:x.artNo,DESCRIPTION:(x.descriptions||[]).join(' | '),QTY:x.qty,UNIT:x.unit,
-      UNIT_PRICE:x.unitPrice,AMOUNT:x.qty*x.unitPrice,STATUS:'CONSIGNED'
+      CURRENCY:currencyCode(),FX_RATE:currencyCode()==='USD'?1:currentFxRate(),UNIT_PRICE:x.unitPrice,AMOUNT:x.qty*x.unitPrice,STATUS:'CONSIGNED'
     }));
     const outWs=XLSX.utils.json_to_sheet(outRows);
     const outWb=XLSX.utils.book_new();
@@ -839,4 +910,4 @@ function exportCurrentStockAfterConfirm(){
 }
 function exportRemaining(){exportCurrentStockAfterConfirm()}
 $('#confirmInvoiceBtn').onclick=()=>{const l=documentLabels();if(confirm(`${l.confirm}？`))exportCurrentStockAfterConfirm()};
-updateDocumentTypeUI();renderCustomerSummary();renderItems();schedulePreview();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+updateFxPanel();updateDocumentTypeUI();renderCustomerSummary();renderItems();schedulePreview();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
