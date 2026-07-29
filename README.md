@@ -1,4 +1,25 @@
-# Universe Invoice PWA v0.11.6
+# Universe Invoice PWA v0.11.9
+
+
+## v0.11.9 Footer-aware pagination
+
+- Keeps the approved Template print geometry from v0.11.8.
+- Treats the Item area as 52 available rows on pages that do not contain the Footer.
+- The Footer reserves 16 rows, so a final page that also contains the Footer may use up to 36 Item rows.
+- If the final Item page needs more than 36 rows, the Footer is forced to the next page and the previous page may use the full 52 Item rows.
+- Item separator rows count toward the Item-row total; Header and Footer do not.
+- An Item is never split across a page break.
+
+## v0.11.8 Template print lock
+
+- Sales Rate is shown above Currency in the customer section.
+- Template-based Excel export locks Item row height to 10.2 pt, including separator rows.
+- Each printed page allows at most 36 Item rows; the separator row counts, Header and Footer do not.
+- Items are kept intact and move to the next page if they would exceed the 36-row Item area.
+- A:I column widths are locked to 13 / 18.71 / 28 / 8.57 / 8.57 / 10.86 / 7.29 / 12 / 12.14.
+- A4 portrait export uses 100% scale instead of Fit-to-Width.
+- Print margins are locked to the approved Template values: top/bottom 1.7 cm, left/right 0 cm, header/footer 0.8 cm.
+
 
 ## v0.11.0 Excel output changes
 
@@ -153,15 +174,21 @@ UI 改善：
 - Preview/output table order is now No. / Article No. / Description / Picture / Quantity / Unit / Unit Price / Amount.
 
 
-## v0.11.6 item sequence refinements
+## v0.11.7 item sequence refinements
 - Formal document order follows scan order: first scanned item is No. 1.
 - The working list still shows the newest item at the top.
 - Delete/re-add and drag reorder now renumber consistently across working list, preview, Excel and PDF.
 - Qty label renamed to Quantity and Quantity / Unit Price edit inputs enlarged.
 
 
-## v0.11.6
+## v0.11.7
 - Added GBP and CNY currency choices.
 - Added online USD-based reference FX rates using Frankfurter v2, with cached/offline fallback and manual override.
 - Foreign-currency prices are calculated from the USD selling price after Sales Rate.
 - Excel/preview totals use the selected currency.
+
+
+## v0.11.7 FX reliability fix
+- Service Worker now ignores cross-origin requests so iPhone/Safari fetches the FX API directly instead of routing it through the PWA cache handler.
+- Frankfurter v2 remains the primary source, with Frankfurter v1 as a fallback.
+- FX request timeout increased to 12 seconds.

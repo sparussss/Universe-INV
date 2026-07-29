@@ -169,5 +169,5 @@ button{width:auto}
 .drag-handle{touch-action:manipulation!important;cursor:pointer!important}
 @media(max-width:520px){.document-meta-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:10px}.document-meta-grid input{min-width:0}.discount-input{width:170px;max-width:55%}}
 
-/* v0.11.6 online reference FX rates */
+/* v0.11.7 online reference FX rates */
 .fx-panel{grid-column:1/-1;border:1px solid #d7dde7;border-radius:12px;padding:12px;background:#f8fafc}.fx-panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.fx-panel-head>div{display:flex;flex-direction:column;gap:2px}.fx-panel-head span{font-size:12px;color:#667085}.fx-panel-head button{width:auto;flex:0 0 auto}.fx-rate-row{display:grid;grid-template-columns:auto minmax(120px,220px) auto;gap:8px;align-items:center;margin-top:10px}.fx-rate-row input{padding:9px 10px;text-align:right}.fx-status{margin-top:8px;font-size:12px;color:#667085}.fx-status.ok{color:#067647}.fx-status.warn{color:#b54708}.fx-status.error{color:#b42318}@media(max-width:520px){.fx-panel-head{align-items:flex-start}.fx-rate-row{grid-template-columns:auto minmax(0,1fr) auto}.fx-panel-head button{padding:8px 10px}}

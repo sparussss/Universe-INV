@@ -55,6 +55,7 @@ function setImportCollapsed(key,collapsed=true){const card=document.querySelecto
 $$('.import-toggle').forEach(btn=>btn.addEventListener('click',()=>{const card=btn.closest('.import-card');setImportCollapsed(card?.dataset.importCard,!card.classList.contains('collapsed'))}));
 function field(row,names){const keys=Object.keys(row);for(const n of names){const k=keys.find(x=>x.trim().toUpperCase()===n);if(k)return row[k]}return''}
 const FX_API='https://api.frankfurter.dev/v2/rate';
+const FX_API_V1='https://api.frankfurter.dev/v1/latest';
 function currencyCode(){return norm($('#currency')?.value||'USD').toUpperCase()||'USD'}
 function currencyDigits(code=currencyCode()){return code==='JPY'?0:2}
 function roundCurrency(v,code=currencyCode()){const p=10**currencyDigits(code);return Math.round((Number(v)||0)*p+Number.EPSILON)/p}
@@ -103,18 +104,29 @@ async function fetchReferenceFxRate({silent=false}={}){
   if(state.fx.fetching)return;
   state.fx.fetching=true;$('#refreshFxBtn').disabled=true;
   if(!silent)setFxStatus(`正在取得 USD → ${code} 參考匯率…`);
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
   try{
-    const res=await fetch(`${FX_API}/USD/${encodeURIComponent(code)}`,{cache:'no-store',signal:controller.signal});
-    if(!res.ok)throw new Error(`HTTP ${res.status}`);
-    const data=await res.json(),rate=Number(data.rate);
-    if(!(Number.isFinite(rate)&&rate>0))throw new Error('回傳匯率無效');
-    const date=norm(data.date);saveFxCache(code,rate,date);
-    applyFxRate(rate,date,'online',`線上參考匯率 · ${date||'最新工作日'} · Frankfurter`);
+    let rate=0,date='',sourceLabel='Frankfurter v2';
+    try{
+      const res=await fetch(`${FX_API}/USD/${encodeURIComponent(code)}`,{cache:'no-store',signal:controller.signal});
+      if(!res.ok)throw new Error(`v2 HTTP ${res.status}`);
+      const data=await res.json();
+      rate=Number(data.rate);date=norm(data.date);
+      if(!(Number.isFinite(rate)&&rate>0))throw new Error('v2 回傳匯率無效');
+    }catch(v2err){
+      const res=await fetch(`${FX_API_V1}?base=USD&symbols=${encodeURIComponent(code)}`,{cache:'no-store',signal:controller.signal});
+      if(!res.ok)throw new Error(`v1 HTTP ${res.status}; ${v2err?.message||v2err}`);
+      const data=await res.json();
+      rate=Number(data?.rates?.[code]);date=norm(data.date);sourceLabel='Frankfurter v1 fallback';
+      if(!(Number.isFinite(rate)&&rate>0))throw new Error(`v1 回傳匯率無效; ${v2err?.message||v2err}`);
+    }
+    saveFxCache(code,rate,date);
+    applyFxRate(rate,date,'online',`線上參考匯率 · ${date||'最新工作日'} · ${sourceLabel}`);
   }catch(err){
     const cached=loadFxCache(code);
+    console.warn('FX fetch failed',code,err);
     if(cached){applyFxRate(cached.rate,cached.date,'cache',`未能更新；沿用上次參考匯率 · ${cached.date||new Date(cached.fetchedAt).toLocaleDateString('zh-HK')}`)}
-    else{state.fx={rate:0,date:'',source:'error',fetching:false};$('#fxRate').value='';syncEffectivePrices({clearCurrentOverride:true});renderItems();updateTotals();setFxStatus('無法取得最新匯率，請手動輸入 FX Rate。','error')}
+    else{state.fx={rate:0,date:'',source:'error',fetching:false};$('#fxRate').value='';syncEffectivePrices({clearCurrentOverride:true});renderItems();updateTotals();setFxStatus(`無法取得 ${code} 最新匯率，請手動輸入 FX Rate。`,'error')}
   }finally{clearTimeout(timer);state.fx.fetching=false;$('#refreshFxBtn').disabled=false}
 }
 async function handleCurrencyChange(){
@@ -480,6 +492,11 @@ async function exportInvoiceFromTemplate(){
   const separatorSourceRow=firstItemRow+baseContentRows;
   const columnCount=Math.max(9,ws.columnCount||9);
 
+  // Approved Template column widths (A:I). Re-apply on every export so
+  // edits made by Excel on iPhone / Mac / Windows do not change pagination.
+  const templateColumnWidths={A:13,B:18.71,C:28,D:8.57,E:8.57,F:10.86,G:7.29,H:12,I:12.14};
+  for(const [col,width] of Object.entries(templateColumnWidths))ws.getColumn(col).width=width;
+
   const captureCell=(cell)=>({
     value:cell.value,style:cloneStyle(cell.style),numFmt:cell.numFmt,
     alignment:cloneStyle(cell.alignment),border:cloneStyle(cell.border),
@@ -489,8 +506,9 @@ async function exportInvoiceFromTemplate(){
   for(let c=1;c<=columnCount;c++)contentStyle.push(captureCell(ws.getRow(firstItemRow).getCell(c)));
   const separatorStyle=[];
   for(let c=1;c<=columnCount;c++)separatorStyle.push(captureCell(ws.getRow(separatorSourceRow).getCell(c)));
-  const contentHeight=10.5;
-  const separatorHeight=10.5;
+  // Locked to the approved Invoice Template print geometry.
+  const contentHeight=10.2;
+  const separatorHeight=10.2;
 
   const footerRows=[];
   for(let r=footerBaseRow;r<=originalFooterEnd;r++){
@@ -505,7 +523,7 @@ async function exportInvoiceFromTemplate(){
   }
 
   // Each item uses at least 4 content rows. Extra DESC rows extend only the text area.
-  // One additional 10.5 pt separator row follows every item; the image remains fixed to the first 4 rows.
+  // One additional 10.2 pt separator row follows every item; the image remains fixed to the first 4 rows.
   const itemPlans=formalItems().map(item=>{
     const lines=[articleDescriptionFor(item),...(item.descriptions||[])].map(norm).filter(Boolean);
     const contentRows=Math.max(4,lines.length);
@@ -549,50 +567,40 @@ async function exportInvoiceFromTemplate(){
   const unitPriceCol=colLetter('Unit Price','H');
   const amountCol=colLetter('Amount','I');
 
-  function buildSmartPagePlan(plans,normalCapacity,footerCapacity,maxItems){
-    const n=plans.length;
-    const heights=plans.map(x=>x.contentRows*contentHeight+separatorHeight);
-    const memo=new Map();
-    function solve(i){
-      if(i>=n)return {score:0,pages:[]};
-      if(memo.has(i))return memo.get(i);
-      let best=null,sum=0;
-      for(let count=1;count<=maxItems&&i+count<=n;count++){
-        sum+=heights[i+count-1];
-        const isLast=i+count===n;
-        const cap=isLast?footerCapacity:normalCapacity;
-        if(sum>cap+0.01)break;
-        const tail=solve(i+count);
-        if(!tail)continue;
-        const unused=Math.max(0,cap-sum);
-        // First minimise page count, then balance the unused space across pages.
-        const score=1000000+unused*unused+tail.score;
-        const candidate={score,pages:[{start:i,end:i+count-1,used:sum,capacity:cap},...tail.pages]};
-        if(!best||candidate.score<best.score)best=candidate;
+  function buildFixedRowPagePlan(plans,maxItemRows=52){
+    const pages=[];
+    if(!plans.length)return {pages};
+    let start=0,usedRows=0;
+    for(let i=0;i<plans.length;i++){
+      const rows=plans[i].totalRows;
+      if(usedRows>0&&usedRows+rows>maxItemRows){
+        pages.push({start,end:i-1,usedRows});
+        start=i;usedRows=0;
       }
-      memo.set(i,best);return best;
+      usedRows+=rows;
     }
-    return solve(0);
+    pages.push({start,end:plans.length-1,usedRows});
+    return {pages};
   }
 
   let rowCursor=firstItemRow;
   let missingImages=0;
-  const pageHeightPts=841.89; // A4 portrait
-  const marginTopPts=25.2,marginBottomPts=25.2;
-  const repeatedHeaderPts=rowRangeHeightPoints(ws,1,Math.max(1,firstItemRow-1));
-  const pageBodyCapacityPts=Math.max(220,pageHeightPts-marginTopPts-marginBottomPts-repeatedHeaderPts);
-  const footerHeightPts=footerRows.reduce((sum,x)=>sum+(Number(x.height)||15),0);
-  const finalPageItemCapacityPts=Math.max(0,pageBodyCapacityPts-footerHeightPts);
-  const maxItemsPerPage=10;
-  let smartPlan=buildSmartPagePlan(itemPlans,pageBodyCapacityPts,finalPageItemCapacityPts,maxItemsPerPage);
-  let footerNeedsOwnPage=false;
-  if(!smartPlan){
-    // If the template footer is too tall to share a page with even one item,
-    // paginate the items normally and move the complete footer to its own page.
-    smartPlan=buildSmartPagePlan(itemPlans,pageBodyCapacityPts,pageBodyCapacityPts,maxItemsPerPage);
-    footerNeedsOwnPage=true;
-  }
-  const pageStartIndexes=new Set((smartPlan?.pages||[]).slice(1).map(p=>p.start));
+  // Pagination rule (Template row model):
+  // - Header and Footer are outside the Item-row count.
+  // - A page without the Footer may use up to 52 Item rows.
+  // - The Footer reserves 16 rows. Therefore, when it shares the final page,
+  //   that page may use up to 36 Item rows (52 - 16).
+  // - If the final Item page uses more than 36 rows, the Footer starts on a
+  //   new page and the previous page is allowed to use the full 52 Item rows.
+  // - An Item (including its separator row) is never split across pages.
+  const fullItemRowsPerPage=52;
+  const footerReservedRows=16;
+  const finalItemRowsWithFooter=fullItemRowsPerPage-footerReservedRows; // 36
+  const fixedRowPlan=buildFixedRowPagePlan(itemPlans,fullItemRowsPerPage);
+  const itemPages=fixedRowPlan.pages||[];
+  const pageStartIndexes=new Set(itemPages.slice(1).map(p=>p.start));
+  const lastItemPage=itemPages.length?itemPages[itemPages.length-1]:null;
+  const footerNeedsOwnPage=!!lastItemPage&&lastItemPage.usedRows>finalItemRowsWithFooter;
 
   for(let i=0;i<itemPlans.length;i++){
     const {item,lines,contentRows,totalRows}=itemPlans[i];
@@ -651,7 +659,14 @@ async function exportInvoiceFromTemplate(){
     setExcelExportStatus(`正在依 Template Map 建立 Excel… ${i+1}/${state.items.length}`);
   }
 
-  if(footerNeedsOwnPage){try{ws.getRow(Math.max(firstItemRow,footerStart-1)).addPageBreak()}catch{}}
+
+  // When the final Item page exceeds the 36-row Item allowance available
+  // beside the 16-row Footer, force the Footer onto its own page. The final
+  // Item page can then use the full 52-row Item capacity instead of leaving
+  // the Footer's 16-row reservation blank.
+  if(footerNeedsOwnPage&&totalItemRows>0){
+    try{ws.getRow(Math.max(firstItemRow,footerStart-1)).addPageBreak()}catch{}
+  }
 
   for(let offset=0;offset<footerRows.length;offset++){
     const targetRow=footerStart+offset,captured=footerRows[offset],row=ws.getRow(targetRow);
@@ -698,12 +713,23 @@ async function exportInvoiceFromTemplate(){
     cell.alignment={...cloneStyle(cell.alignment),vertical:'middle',wrapText:false};
   }
   ws.pageSetup=ws.pageSetup||{};
-  ws.pageSetup.paperSize=9;ws.pageSetup.orientation='portrait';ws.pageSetup.fitToPage=true;
-  ws.pageSetup.fitToWidth=1;ws.pageSetup.fitToHeight=0;ws.pageSetup.printArea=`A1:I${requiredEnd}`;
-  ws.pageSetup.scale=undefined;
+  ws.pageSetup.paperSize=9;
+  ws.pageSetup.orientation='portrait';
+  // Use the approved Template's true 100% scale. Do not combine this with
+  // Fit-to-Width because Excel may silently rescale and change page breaks.
+  ws.pageSetup.fitToPage=false;
+  ws.pageSetup.fitToWidth=undefined;
+  ws.pageSetup.fitToHeight=undefined;
+  ws.pageSetup.scale=100;
+  ws.pageSetup.printArea=`A1:I${requiredEnd}`;
   ws.pageSetup.printTitlesRow=`1:${Math.max(1,firstItemRow-1)}`;
-  ws.pageSetup.horizontalCentered=true;ws.pageSetup.verticalCentered=false;
-  ws.pageSetup.margins={left:.35,right:.35,top:.35,bottom:.35,header:.15,footer:.15};
+  // Template margin values are entered in cm; ExcelJS stores inches.
+  const cmToIn=1/2.54;
+  ws.pageSetup.margins={
+    left:0,right:0,
+    top:1.7*cmToIn,bottom:1.7*cmToIn,
+    header:0.8*cmToIn,footer:0.8*cmToIn
+  };
   ws.headerFooter=ws.headerFooter||{};ws.headerFooter.oddFooter='Page &P of &N';
 
   if(mapWs)wb.removeWorksheet(mapWs.id);
