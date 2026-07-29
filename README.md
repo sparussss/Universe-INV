@@ -1,4 +1,15 @@
-# Universe Invoice PWA v0.11.11
+# Universe Invoice PWA v0.11.12
+
+## v0.11.12 iPhone 100% pagination / width trial
+
+- Built from v0.11.11; v0.11.9 remains the stable fallback baseline.
+- Keeps true 100% Excel print scale and 1.0 cm margins.
+- Uses the iPhone Excel column widths confirmed from INV260003: A 48 pt, B 69.75 pt, C 123.75 pt, D 24.75 pt, E 24.75 pt, F 48.75 pt, G 33.75 pt, H 50.25 pt, I 61.5 pt.
+- Reduces Item-page capacity from 56 to 54 rows to match the observed iPhone Excel 100% physical page height.
+- Footer reserves 16 rows, so a final page sharing the Footer allows up to 38 Item rows; otherwise the Item page may use the full 54 rows.
+- Moves `Page &P of &N` from the centre footer to the right footer.
+- Row heights are unchanged.
+
 
 
 ## v0.11.11 1.0 cm side-margin trial

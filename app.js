@@ -492,10 +492,9 @@ async function exportInvoiceFromTemplate(){
   const separatorSourceRow=firstItemRow+baseContentRows;
   const columnCount=Math.max(9,ws.columnCount||9);
 
-  // Trial A:I widths for 100% A4 printing; this build tests 1.0 cm left/right margins.
-  // Picture columns D:E and Unit Price H are preserved; compact columns absorb
-  // most of the width reduction so text and images are not globally scaled.
-  const templateColumnWidths={A:7.5,B:14.7,C:24,D:8.57,E:8.57,F:9.5,G:6.5,H:12,I:11.9};
+  // A:I widths matched to the user-approved iPhone Excel widths from INV260003.
+  // Keep true 100% scale and 1.0 cm side margins; do not globally shrink text/images.
+  const templateColumnWidths={A:9.2890625,B:13.49609375,C:23.94921875,D:4.7890625,E:4.7890625,F:9.43359375,G:6.53125,H:9.72265625,I:11.90234375};
   for(const [col,width] of Object.entries(templateColumnWidths))ws.getColumn(col).width=width;
 
   const captureCell=(cell)=>({
@@ -568,7 +567,7 @@ async function exportInvoiceFromTemplate(){
   const unitPriceCol=colLetter('Unit Price','H');
   const amountCol=colLetter('Amount','I');
 
-  function buildFixedRowPagePlan(plans,maxItemRows=56){
+  function buildFixedRowPagePlan(plans,maxItemRows=54){
     const pages=[];
     if(!plans.length)return {pages};
     let start=0,usedRows=0;
@@ -588,15 +587,15 @@ async function exportInvoiceFromTemplate(){
   let missingImages=0;
   // Pagination rule (Template row model):
   // - Header and Footer are outside the Item-row count.
-  // - A page without the Footer may use up to 56 Item rows.
+  // - A page without the Footer may use up to 54 Item rows.
   // - The Footer reserves 16 rows. Therefore, when it shares the final page,
-  //   that page may use up to 40 Item rows (56 - 16).
-  // - If the final Item page uses more than 40 rows, the Footer starts on a
-  //   new page and the previous page is allowed to use the full 56 Item rows.
+  //   that page may use up to 38 Item rows (54 - 16).
+  // - If the final Item page uses more than 38 rows, the Footer starts on a
+  //   new page and the previous page is allowed to use the full 54 Item rows.
   // - An Item (including its separator row) is never split across pages.
-  const fullItemRowsPerPage=56;
+  const fullItemRowsPerPage=54;
   const footerReservedRows=16;
-  const finalItemRowsWithFooter=fullItemRowsPerPage-footerReservedRows; // 40
+  const finalItemRowsWithFooter=fullItemRowsPerPage-footerReservedRows; // 38
   const fixedRowPlan=buildFixedRowPagePlan(itemPlans,fullItemRowsPerPage);
   const itemPages=fixedRowPlan.pages||[];
   const pageStartIndexes=new Set(itemPages.slice(1).map(p=>p.start));
@@ -661,9 +660,9 @@ async function exportInvoiceFromTemplate(){
   }
 
 
-  // When the final Item page exceeds the 40-row Item allowance available
+  // When the final Item page exceeds the 38-row Item allowance available
   // beside the 16-row Footer, force the Footer onto its own page. The final
-  // Item page can then use the full 56-row Item capacity instead of leaving
+  // Item page can then use the full 54-row Item capacity instead of leaving
   // the Footer's 16-row reservation blank.
   if(footerNeedsOwnPage&&totalItemRows>0){
     try{ws.getRow(Math.max(firstItemRow,footerStart-1)).addPageBreak()}catch{}
@@ -724,8 +723,8 @@ async function exportInvoiceFromTemplate(){
   ws.pageSetup.scale=100;
   ws.pageSetup.printArea=`A1:I${requiredEnd}`;
   ws.pageSetup.printTitlesRow=`1:${Math.max(1,firstItemRow-1)}`;
-  // Trial print geometry: keep true 100% scale and the existing row height,
-  // create four extra Item rows vertically, and use 1.0 cm left/right print margins.
+  // Print geometry: keep true 100% scale, existing row heights,
+  // 1.0 cm margins, and a 54-row physical Item-page capacity.
   // ExcelJS stores margins in inches.
   const cmToIn=1/2.54;
   ws.pageSetup.margins={
@@ -733,7 +732,7 @@ async function exportInvoiceFromTemplate(){
     top:1.0*cmToIn,bottom:1.0*cmToIn,
     header:0.8*cmToIn,footer:0.8*cmToIn
   };
-  ws.headerFooter=ws.headerFooter||{};ws.headerFooter.oddFooter='Page &P of &N';
+  ws.headerFooter=ws.headerFooter||{};ws.headerFooter.oddFooter='&RPage &P of &N';
 
   if(mapWs)wb.removeWorksheet(mapWs.id);
   ws.name=state.documentType==='consignment'?'Consignment':state.documentType==='quotation'?'Quotation':'Invoice';
@@ -814,7 +813,7 @@ async function exportInvoiceExcel(){
     row+=2;
     ws.mergeCells(`A${row}:H${row+2}`);const remarkCell=ws.getCell(`A${row}`);remarkCell.value=`Remark :\n${norm($('#remark').value)}`;remarkCell.alignment={vertical:'top',wrapText:true};remarkCell.font={name:'Arial',size:10};row+=2;
     row+=2;merge(`A${row}:D${row}`,'Vender Signature : ______________________',10);merge(`E${row}:H${row}`,'Accept By : ______________________',10,false,'right');
-    ws.headerFooter.oddFooter='Page &P of &N';
+    ws.headerFooter.oddFooter='&RPage &P of &N';
     ws.pageSetup.printArea=`A1:H${row}`;
     ws.autoFilter={from:{row:headerRow,column:1},to:{row:headerRow,column:8}};
     const buffer=await wb.xlsx.writeBuffer();
