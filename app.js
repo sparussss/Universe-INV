@@ -492,9 +492,10 @@ async function exportInvoiceFromTemplate(){
   const separatorSourceRow=firstItemRow+baseContentRows;
   const columnCount=Math.max(9,ws.columnCount||9);
 
-  // Approved Template column widths (A:I). Re-apply on every export so
-  // edits made by Excel on iPhone / Mac / Windows do not change pagination.
-  const templateColumnWidths={A:13,B:18.71,C:28,D:8.57,E:8.57,F:10.86,G:7.29,H:12,I:12.14};
+  // Trial A:I widths for 100% A4 printing with ~1.4 cm left/right margins.
+  // Picture columns D:E and Unit Price H are preserved; compact columns absorb
+  // most of the width reduction so text and images are not globally scaled.
+  const templateColumnWidths={A:7.5,B:14.7,C:24,D:8.57,E:8.57,F:9.5,G:6.5,H:12,I:11.9};
   for(const [col,width] of Object.entries(templateColumnWidths))ws.getColumn(col).width=width;
 
   const captureCell=(cell)=>({
@@ -567,7 +568,7 @@ async function exportInvoiceFromTemplate(){
   const unitPriceCol=colLetter('Unit Price','H');
   const amountCol=colLetter('Amount','I');
 
-  function buildFixedRowPagePlan(plans,maxItemRows=52){
+  function buildFixedRowPagePlan(plans,maxItemRows=56){
     const pages=[];
     if(!plans.length)return {pages};
     let start=0,usedRows=0;
@@ -587,15 +588,15 @@ async function exportInvoiceFromTemplate(){
   let missingImages=0;
   // Pagination rule (Template row model):
   // - Header and Footer are outside the Item-row count.
-  // - A page without the Footer may use up to 52 Item rows.
+  // - A page without the Footer may use up to 56 Item rows.
   // - The Footer reserves 16 rows. Therefore, when it shares the final page,
-  //   that page may use up to 36 Item rows (52 - 16).
-  // - If the final Item page uses more than 36 rows, the Footer starts on a
-  //   new page and the previous page is allowed to use the full 52 Item rows.
+  //   that page may use up to 40 Item rows (56 - 16).
+  // - If the final Item page uses more than 40 rows, the Footer starts on a
+  //   new page and the previous page is allowed to use the full 56 Item rows.
   // - An Item (including its separator row) is never split across pages.
-  const fullItemRowsPerPage=52;
+  const fullItemRowsPerPage=56;
   const footerReservedRows=16;
-  const finalItemRowsWithFooter=fullItemRowsPerPage-footerReservedRows; // 36
+  const finalItemRowsWithFooter=fullItemRowsPerPage-footerReservedRows; // 40
   const fixedRowPlan=buildFixedRowPagePlan(itemPlans,fullItemRowsPerPage);
   const itemPages=fixedRowPlan.pages||[];
   const pageStartIndexes=new Set(itemPages.slice(1).map(p=>p.start));
@@ -660,9 +661,9 @@ async function exportInvoiceFromTemplate(){
   }
 
 
-  // When the final Item page exceeds the 36-row Item allowance available
+  // When the final Item page exceeds the 40-row Item allowance available
   // beside the 16-row Footer, force the Footer onto its own page. The final
-  // Item page can then use the full 52-row Item capacity instead of leaving
+  // Item page can then use the full 56-row Item capacity instead of leaving
   // the Footer's 16-row reservation blank.
   if(footerNeedsOwnPage&&totalItemRows>0){
     try{ws.getRow(Math.max(firstItemRow,footerStart-1)).addPageBreak()}catch{}
@@ -723,11 +724,13 @@ async function exportInvoiceFromTemplate(){
   ws.pageSetup.scale=100;
   ws.pageSetup.printArea=`A1:I${requiredEnd}`;
   ws.pageSetup.printTitlesRow=`1:${Math.max(1,firstItemRow-1)}`;
-  // Template margin values are entered in cm; ExcelJS stores inches.
+  // Trial print geometry: keep true 100% scale and the existing row height,
+  // create four extra Item rows vertically, and add ~1.4 cm side breathing room.
+  // ExcelJS stores margins in inches.
   const cmToIn=1/2.54;
   ws.pageSetup.margins={
-    left:0,right:0,
-    top:1.7*cmToIn,bottom:1.7*cmToIn,
+    left:1.4*cmToIn,right:1.4*cmToIn,
+    top:1.0*cmToIn,bottom:1.0*cmToIn,
     header:0.8*cmToIn,footer:0.8*cmToIn
   };
   ws.headerFooter=ws.headerFooter||{};ws.headerFooter.oddFooter='Page &P of &N';

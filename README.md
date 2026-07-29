@@ -1,5 +1,16 @@
-# Universe Invoice PWA v0.11.9
+# Universe Invoice PWA v0.11.10
 
+
+## v0.11.10 100% print-space trial
+
+- Keeps v0.11.9 as the stable fallback baseline.
+- Keeps true 100% Excel print scale; Fit-to-Width is still disabled.
+- Keeps the existing v0.11.9 item/separator row-height setting unchanged.
+- Increases full Item-page capacity from 52 to 56 rows.
+- Footer still reserves 16 rows, so a final page sharing the Footer allows up to 40 Item rows.
+- If the Footer cannot fit, it moves to the next page and the Item page can use the full 56 rows.
+- Print margins: top/bottom 1.0 cm, left/right 1.4 cm, header/footer 0.8 cm.
+- A:I widths are rebalanced to 7.5 / 14.7 / 24 / 8.57 / 8.57 / 9.5 / 6.5 / 12 / 11.9. Picture columns D:E remain unchanged and Unit Price H remains 12.
 
 ## v0.11.9 Footer-aware pagination
 
