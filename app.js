@@ -36,7 +36,7 @@ setDefaultInvoiceNo();
 let previewTimer=null;
 function schedulePreview(){clearTimeout(previewTimer);previewTimer=setTimeout(()=>{renderPreview();const el=$('#previewUpdatedAt');if(el)el.textContent='最後更新：'+new Date().toLocaleTimeString('zh-HK',{hour:'2-digit',minute:'2-digit',second:'2-digit'});},180)}
 function status(id,msg,type=''){const el=$(id);el.textContent=msg;el.className='notice'+(type?' '+type:'')}
-function documentLabels(type=state.documentType){if(type==='consignment')return{type:'consignment',title:'Sales Consign',short:'Consignment',date:'Consign Date',no:'Consign No.',items:'Consignment 貨品',confirm:'Confirm Consignment 並匯出 Available Stock',export:'匯出 Excel Consignment'};if(type==='quotation')return{type:'quotation',title:'Quotation',short:'Quotation',date:'Quotation Date',no:'Quotation No.',items:'Quotation 貨品',confirm:'Confirm Quotation（不扣庫存）',export:'匯出 Excel Quotation'};return{type:'invoice',title:'Sales Invoice',short:'Invoice',date:'Invoice Date',no:'Invoice No.',items:'Invoice 貨品',confirm:'Confirm Invoice 並匯出 Remaining Stock',export:'匯出 Excel Invoice'}}
+function documentLabels(type=state.documentType){if(type==='consignment')return{type:'consignment',title:'Sales Consign',short:'Consignment',date:'Date',no:'Consign No.',items:'Consignment 貨品',confirm:'Confirm Consignment 並匯出 Available Stock',export:'匯出 Excel Consignment'};if(type==='quotation')return{type:'quotation',title:'Quotation',short:'Quotation',date:'Date',no:'Quotation No.',items:'Quotation 貨品',confirm:'Confirm Quotation（不扣庫存）',export:'匯出 Excel Quotation'};return{type:'invoice',title:'Sales Invoice',short:'Invoice',date:'Date',no:'Invoice No.',items:'Invoice 貨品',confirm:'Confirm Invoice 並匯出 Remaining Stock',export:'匯出 Excel Invoice'}}
 function updateDocumentTypeUI(){
   const l=documentLabels();
   $('#documentDataHeading').textContent=`客人 ${l.short} 資料`;
@@ -357,7 +357,7 @@ function currencyWords(code){
 function renderPreview(){
   const t=totals();
   const rows=formalItems().map((x,i)=>{const img=getImg(x)?.url||placeholder('No Image');return `<tr><td>${i+1}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${(x.descriptions||[]).filter(Boolean).map(esc).join('<br>')}</td><td class="preview-picture"><img src="${esc(img)}" alt="${esc(x.artNo)}"></td><td class="qty-cell">${x.qty}</td><td class="unit-cell">${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`}).join('');
-  $('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid screen-preview"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta print-only print-banker"><strong>Vendor's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Picture</th><th class="qty-head">Quantity</th><th class="unit-head">Unit</th><th class="num">Unit Price</th><th class="num amount-head"><span>Amount</span><small>F.O.B. Value</small></th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc($('#currency').value)})</span><strong>${fmt(t.total)}</strong></div></div><p class="remark-preview"><strong>Remark :</strong><br>${esc($('#remark').value).replace(/\n/g,'<br>')}</p></div>`;
+  $('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid screen-preview"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta print-only print-banker"><strong>Vendor's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Picture</th><th class="qty-head">Quantity</th><th class="unit-head">Unit</th><th class="num">Unit Price</th><th class="num amount-head"><span>Amount</span><small>F.O.B. Value</small></th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc(currencyCode())})</span><strong>${fmt(t.total)}</strong></div></div><p class="remark-preview"><strong>Remark :</strong><br>${esc($('#remark').value).replace(/\n/g,'<br>')}</p></div>`;
 }
 
 
@@ -424,17 +424,22 @@ async function exportInvoiceFromTemplate(){
   if(!ws)throw new Error('範本沒有 Invoice 工作表');
 
   const docLabels=documentLabels();
-  // Convert the imported Invoice template into Consignment when selected.
+  // Convert the imported Invoice template title / document number when selected.
   if(state.documentType==='consignment'||state.documentType==='quotation'){
     ws.eachRow(row=>row.eachCell(cell=>{
       if(typeof cell.value==='string'){
         cell.value=cell.value
           .replace(/Sales Invoice/gi,state.documentType==='quotation'?'Quotation':'Sales Consign')
-          .replace(/Invoice Date/gi,state.documentType==='quotation'?'Quotation Date':'Consign Date')
           .replace(/Invoice No\.?/gi,state.documentType==='quotation'?'Quotation No.':'Consign No.');
       }
     }));
   }
+  // All document types use the same concise date label in preview and exports.
+  ws.eachRow(row=>row.eachCell(cell=>{
+    if(typeof cell.value==='string'){
+      cell.value=cell.value.replace(/(?:Invoice Date|Consign Date|Consignment Date|Quotation Date)/gi,'Date');
+    }
+  }));
 
   const map=new Map();
   if(mapWs){
@@ -689,6 +694,14 @@ async function exportInvoiceFromTemplate(){
   ws.getCell(discountAddr).value=t.discount;ws.getCell(discountAddr).numFmt=currencyExcelFormat(currencyCode(),true);
   ws.getCell(totalAddr).value=t.total;ws.getCell(totalAddr).numFmt=currencyExcelFormat();
 
+  // Keep the visible Total currency code synchronized with the selected USD / EUR.
+  // This updates the template label (for example, Total : (USD)) without touching Total Amount.
+  const totalCurrencyLabel=`Total : (${currencyCode()})`;
+  for(let r=footerStart;r<=requiredEnd;r++)for(let c=1;c<=columnCount;c++){
+    const cell=ws.getRow(r).getCell(c),text=norm(cell.value);
+    if(/^total\s*:\s*(?:\(\s*[A-Z]{3}\s*\))?\s*$/i.test(text))cell.value=totalCurrencyLabel;
+  }
+
   // Fill text fields in the footer by label, so changing rows in the template remains safe.
   const findLabelRow=(text)=>{
     const needle=text.toLowerCase();
@@ -809,7 +822,7 @@ async function exportInvoiceExcel(){
     row++;
     ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value='Discount Amount';ws.getCell(`G${row}`).value=t.discount;ws.getCell(`G${row}`).numFmt=currencyExcelFormat(currencyCode(),true);ws.getCell(`G${row}`).alignment={horizontal:'right'};
     row++;
-    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value=`Total : (${norm($('#currency').value)})`;ws.getCell(`A${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).value=t.total;ws.getCell(`G${row}`).numFmt=currencyExcelFormat();ws.getCell(`G${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).alignment={horizontal:'right'};
+    ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value=`Total : (${currencyCode()})`;ws.getCell(`A${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).value=t.total;ws.getCell(`G${row}`).numFmt=currencyExcelFormat();ws.getCell(`G${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).alignment={horizontal:'right'};
     row+=2;
     ws.mergeCells(`A${row}:H${row+2}`);const remarkCell=ws.getCell(`A${row}`);remarkCell.value=`Remark :\n${norm($('#remark').value)}`;remarkCell.alignment={vertical:'top',wrapText:true};remarkCell.font={name:'Arial',size:10};row+=2;
     row+=2;merge(`A${row}:D${row}`,'Vender Signature : ______________________',10);merge(`E${row}:H${row}`,'Accept By : ______________________',10,false,'right');

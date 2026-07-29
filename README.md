@@ -1,4 +1,18 @@
-# Universe Invoice PWA v0.11.12
+# Universe Invoice PWA v0.11.14
+
+
+## v0.11.14 Work-trial finishing touches
+
+- Invoice, Consignment and Quotation now use the concise `Date :` label in the form, document preview and exported Excel/PDF output.
+- The visible Total label follows the selected currency consistently: `Total : (USD)` or `Total : (EUR)` in preview and Excel/PDF output.
+- All v0.11.13 layout, 100% scale, row height, approved column widths, margins, pagination and right-aligned page numbering are otherwise unchanged.
+
+## v0.11.13 Currency cleanup
+
+- Currency selector now only offers USD and EUR.
+- GBP, CNY, JPY, and HKD have been removed from the selectable currency list.
+- All v0.11.12 invoice layout, 100% scaling, row height, column widths, margins, pagination, and bottom-right page numbering remain unchanged.
+- v0.11.9 remains the stable fallback baseline.
 
 ## v0.11.12 iPhone 100% pagination / width trial
 
