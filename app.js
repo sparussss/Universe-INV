@@ -277,8 +277,46 @@ $('#addLotBtn').onclick=()=>addLot($('#lotInput').value);
 $('#lotInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();addLot(e.target.value)}};
 $('#lotInput').oninput=e=>{e.target.value=e.target.value.replace(/[，,。\.\-–—_]/g,' ')};
 $('#lotInput').onfocus=e=>setTimeout(()=>e.target.select(),50);
-function getImg(item){const arr=state.imageFiles.get(item.artNo)||[];return arr.find(x=>x.variant===item.imageVariant)||arr[0]}
+function getImg(item){
+  if(item?.customImage?.file&&item.customImage.url)return item.customImage;
+  const arr=state.imageFiles.get(item.artNo)||[];
+  return arr.find(x=>x.variant===item.imageVariant)||arr[0];
+}
 function placeholder(t){return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="#f1f5f9"/><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="18" fill="#64748b">${t}</text></svg>`)}`}
+function revokeCustomImage(item){
+  const url=item?.customImage?.url;
+  if(url&&String(url).startsWith('blob:')){try{URL.revokeObjectURL(url)}catch{}}
+  if(item)item.customImage=null;
+}
+function releaseCustomImages(items=state.items){for(const item of items||[])revokeCustomImage(item)}
+async function prepareItemImageFile(file,item,source='upload'){
+  if(!file||!item)return;
+  if(!String(file.type||'').startsWith('image/')&&!/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name||''))throw new Error('請選擇圖片檔案。');
+  let output=file;
+  try{
+    const sourceUrl=URL.createObjectURL(file);
+    try{
+      const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=sourceUrl});
+      const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,maxSide=1400;
+      const scale=Math.min(1,maxSide/Math.max(iw,ih));
+      const w=Math.max(1,Math.round(iw*scale)),h=Math.max(1,Math.round(ih*scale));
+      const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
+      const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.86));
+      if(blob){
+        const safeArt=String(item.artNo||'item').replace(/[^0-9A-Za-z._-]+/g,'_');
+        const safeLot=String(item.lotNo||'').replace(/[^0-9A-Za-z._-]+/g,'_');
+        output=new File([blob],`${safeArt}_${safeLot}_${source==='camera'?'camera':'upload'}.jpg`,{type:'image/jpeg',lastModified:Date.now()});
+      }
+    }finally{URL.revokeObjectURL(sourceUrl)}
+  }catch(err){
+    console.warn('圖片壓縮失敗，改用原圖。',err);
+  }
+  revokeCustomImage(item);
+  item.customImage={file:output,url:URL.createObjectURL(output),fileName:output.name||file.name||'image',source};
+  renderItems();schedulePreview();
+}
+
 function renderItems(){
   const box=$('#invoiceItems');box.innerHTML='';
   if(!state.items.length){box.className='invoice-items empty-state';box.textContent='尚未加入貨品。';updateTotals();return}
@@ -292,12 +330,33 @@ function renderItems(){
     const usd=baseUsdPrice(item),code=currencyCode();$('.item-price-note',node).textContent=code==='USD'?`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')}`:(fxPricingReady()?`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')} × ${currentFxRate()} → ${fmt(item.unitPrice,code)}`:`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')} · 等待 FX Rate`);
     $('.item-thumb',node).src=getImg(item)?.url||placeholder(item.artNo);
     const controls=$('.item-controls',node),toggle=$('.item-edit-toggle',node);toggle.onclick=()=>{const open=controls.classList.toggle('open');node.classList.toggle('editing',open);toggle.textContent=open?'完成 ▴':'編輯 ▾'};
-    const sel=$('.variant-select',node),arr=state.imageFiles.get(item.artNo)||[];
-    if(arr.length){arr.forEach(x=>{const o=document.createElement('option');o.value=x.variant;o.textContent='圖片：'+x.variant;o.selected=x.variant===item.imageVariant;sel.appendChild(o)});sel.onchange=e=>{item.imageVariant=e.target.value;renderItems()}}else{sel.innerHTML='<option>沒有圖片</option>';sel.disabled=true}
+    const sel=$('.variant-select',node),arr=state.imageFiles.get(item.artNo)||[],custom=item.customImage;
+    if(custom){
+      const o=document.createElement('option');o.value='__custom__';o.textContent=custom.source==='camera'?'圖片：即時拍照':'圖片：上傳';o.selected=true;sel.appendChild(o);
+    }
+    if(arr.length){
+      arr.forEach(x=>{const o=document.createElement('option');o.value=x.variant;o.textContent='圖片：'+x.variant;o.selected=!custom&&x.variant===item.imageVariant;sel.appendChild(o)});
+      sel.disabled=false;
+    }else if(!custom){sel.innerHTML='<option>沒有圖片</option>';sel.disabled=true}
+    sel.onchange=e=>{
+      if(e.target.value==='__custom__')return;
+      if(custom)revokeCustomImage(item);
+      item.imageVariant=e.target.value;renderItems();schedulePreview();
+    };
+    const uploadBtn=$('.upload-image-btn',node),cameraBtn=$('.camera-image-btn',node),uploadInput=$('.upload-image-input',node),cameraInput=$('.camera-image-input',node),restoreBtn=$('.restore-db-image',node),customNote=$('.custom-image-note',node);
+    uploadBtn.onclick=()=>uploadInput.click();
+    cameraBtn.onclick=()=>cameraInput.click();
+    uploadInput.onchange=async e=>{const f=e.target.files?.[0];if(!f)return;uploadBtn.disabled=true;uploadBtn.textContent='處理中…';try{await prepareItemImageFile(f,item,'upload')}catch(err){alert(err.message||err)}finally{uploadBtn.disabled=false;uploadBtn.textContent='上傳圖片';e.target.value=''}};
+    cameraInput.onchange=async e=>{const f=e.target.files?.[0];if(!f)return;cameraBtn.disabled=true;cameraBtn.textContent='處理中…';try{await prepareItemImageFile(f,item,'camera')}catch(err){alert(err.message||err)}finally{cameraBtn.disabled=false;cameraBtn.textContent='📷 即時拍照';e.target.value=''}};
+    if(custom){
+      restoreBtn.classList.remove('hidden');restoreBtn.textContent=arr.length?'使用原資料庫圖片':'移除現場圖片';
+      customNote.classList.remove('hidden');customNote.textContent=custom.source==='camera'?'目前使用：即時拍照圖片':'目前使用：上傳圖片';
+      restoreBtn.onclick=()=>{revokeCustomImage(item);renderItems();schedulePreview()};
+    }
     $('.qty-input',node).value=item.qty;$('.price-input',node).value=item.unitPrice;
     $('.qty-input',node).onchange=e=>{item.qty=Math.max(1,Number(e.target.value)||1);updateTotals()};
     $('.price-input',node).onchange=e=>{const code=currencyCode(),raw=Math.max(0,Number(e.target.value)||0),value=roundCurrency(raw,code);item.currencyPrices=item.currencyPrices||{};item.currencyPrices[code]=value;item.unitPrice=value;if(code==='USD')item.usdUnitPrice=value;updateTotals()};
-    $('.delete-item',node).onclick=()=>{if(confirm(`刪除 ${item.artNo}？`)){state.items=state.items.filter(x=>x.id!==item.id);normalizeItemSequence();renderItems()}};
+    $('.delete-item',node).onclick=()=>{if(confirm(`刪除 ${item.artNo}？`)){revokeCustomImage(item);state.items=state.items.filter(x=>x.id!==item.id);normalizeItemSequence();renderItems()}};
     box.appendChild(node)
   });
   // iPhone-friendly ordering: tap ≡ and choose the target position instead of free dragging.
@@ -318,7 +377,7 @@ function renderItems(){
   });
   updateTotals()
 }
-$('#scrollLatestBtn').onclick=()=>$('#invoiceItems').scrollTo({top:0,behavior:'smooth'});$('#clearInvoiceBtn').onclick=()=>{if(confirm('清空目前 Invoice？')){state.items=[];renderItems()}};
+$('#scrollLatestBtn').onclick=()=>$('#invoiceItems').scrollTo({top:0,behavior:'smooth'});$('#clearInvoiceBtn').onclick=()=>{if(confirm('清空目前 Invoice？')){releaseCustomImages();state.items=[];renderItems()}};
 function reprice(){const r=Number($('#salesRate').value)||0;state.items.forEach(x=>{x.usdUnitPrice=Math.ceil(x.price*r);x.currencyPrices={}});syncEffectivePrices();renderItems()}$('#salesRate').onchange=reprice;$('#currency').onchange=handleCurrencyChange;$('#refreshFxBtn').onclick=()=>fetchReferenceFxRate();let fxInputTimer=null;$('#fxRate').oninput=e=>{clearTimeout(fxInputTimer);fxInputTimer=setTimeout(()=>{const n=Number(e.target.value);if(Number.isFinite(n)&&n>0){state.fx={rate:n,date:'',source:'manual',fetching:false};syncEffectivePrices({clearCurrentOverride:true});renderItems();renderCustomerSummary();setFxStatus('使用手動 FX Rate。','warn')}else{syncEffectivePrices({clearCurrentOverride:true});renderItems();setFxStatus('請輸入大於 0 的 FX Rate。','error')}},160)};$('#discountAmount').oninput=updateTotals;['invoiceNo','invoiceDate','shipmentMethod','customerCode','customerName','customerAddress','customerTerms','remark'].forEach(id=>$('#'+id)?.addEventListener('input',schedulePreview));
 function words(n){return String(Math.floor(n))}
 function numberToWords(value){
@@ -916,7 +975,7 @@ function exportCurrentStockAfterConfirm(){
   if(!state.items.length)return alert(`${documentLabels().short} 沒有貨品。`);
   if(!fxPricingReady())return alert(`請先取得或輸入 USD → ${currencyCode()} 的 FX Rate。`);
   const type=state.documentType;
-  if(type==='quotation'){const doc=norm($('#invoiceNo').value)||formatDocumentNo();state.items=[];advanceDocumentSequence(doc,type);renderItems();status('#addMessage',`Quotation ${doc} 已 Confirm（庫存沒有扣除）；下一張為 ${$('#invoiceNo').value}。`,'ok');return;}
+  if(type==='quotation'){const doc=norm($('#invoiceNo').value)||formatDocumentNo();releaseCustomImages();state.items=[];advanceDocumentSequence(doc,type);renderItems();status('#addMessage',`Quotation ${doc} 已 Confirm（庫存沒有扣除）；下一張為 ${$('#invoiceNo').value}。`,'ok');return;}
   const used=new Set(formalItems().map(x=>x.lotNo));
   const available=state.stockRows.filter(r=>!used.has(norm(field(r,['LOTNO']))));
   const inv=norm($('#invoiceNo').value)||formatDocumentNo();
@@ -942,7 +1001,7 @@ function exportCurrentStockAfterConfirm(){
   }
 
   for(const lot of used)state.products.delete(lot);
-  state.stockRows=available;state.items=[];
+  state.stockRows=available;releaseCustomImages();state.items=[];
   advanceDocumentSequence(inv,type);
   renderItems();
   const msg=type==='consignment'?`Consignment ${inv} 已 Confirm，已輸出 Available Stock 及 Consignment Out；下一張為 ${$('#invoiceNo').value}。`:`Invoice ${inv} 已 Confirm，下一張為 ${$('#invoiceNo').value}。`;

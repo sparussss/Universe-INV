@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.11.14</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.11.15</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -247,6 +247,14 @@
       <button type="button" class="item-edit-toggle ghost">編輯 ▾</button>
       <div class="item-controls compact-controls">
         <select class="variant-select"></select>
+        <div class="item-image-actions">
+          <button type="button" class="upload-image-btn ghost">上傳圖片</button>
+          <button type="button" class="camera-image-btn ghost">📷 即時拍照</button>
+          <input class="upload-image-input" type="file" accept="image/*" hidden>
+          <input class="camera-image-input" type="file" accept="image/*" capture="environment" hidden>
+        </div>
+        <button type="button" class="restore-db-image ghost hidden">使用原資料庫圖片</button>
+        <div class="custom-image-note hidden"></div>
         <label>Quantity<input class="qty-input" type="number" min="1" step="1"></label>
         <label>Unit Price<input class="price-input" type="number" min="0" step="1"></label>
       </div>

@@ -1,4 +1,15 @@
-# Universe Invoice PWA v0.11.14
+# Universe Invoice PWA v0.11.15
+
+
+## v0.11.15 On-site image capture
+
+- Item edit controls now include **上傳圖片** and **📷 即時拍照**.
+- On iPhone, 即時拍照 uses the rear camera (`capture=environment`).
+- Uploaded / captured images immediately replace that item's thumbnail and are used by document preview, Excel export, and PDF output.
+- On-site images are compressed in-browser to JPEG (maximum side about 1400 px) to keep working files manageable while preserving aspect ratio and without cropping.
+- The original Pictures-folder image is not overwritten. When an on-site image is active, **使用原資料庫圖片** restores the original variant; if no database image exists, the button removes the on-site image.
+- On-site image object URLs are released when the item/draft is deleted or the document is confirmed.
+- Existing v0.11.14 page layout, 100% scaling, row heights, column widths, margins, pagination, date label, and USD/EUR logic are unchanged.
 
 
 ## v0.11.14 Work-trial finishing touches
