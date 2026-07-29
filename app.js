@@ -492,7 +492,7 @@ async function exportInvoiceFromTemplate(){
   const separatorSourceRow=firstItemRow+baseContentRows;
   const columnCount=Math.max(9,ws.columnCount||9);
 
-  // Trial A:I widths for 100% A4 printing with ~1.4 cm left/right margins.
+  // Trial A:I widths for 100% A4 printing; this build tests 1.0 cm left/right margins.
   // Picture columns D:E and Unit Price H are preserved; compact columns absorb
   // most of the width reduction so text and images are not globally scaled.
   const templateColumnWidths={A:7.5,B:14.7,C:24,D:8.57,E:8.57,F:9.5,G:6.5,H:12,I:11.9};
@@ -725,11 +725,11 @@ async function exportInvoiceFromTemplate(){
   ws.pageSetup.printArea=`A1:I${requiredEnd}`;
   ws.pageSetup.printTitlesRow=`1:${Math.max(1,firstItemRow-1)}`;
   // Trial print geometry: keep true 100% scale and the existing row height,
-  // create four extra Item rows vertically, and add ~1.4 cm side breathing room.
+  // create four extra Item rows vertically, and use 1.0 cm left/right print margins.
   // ExcelJS stores margins in inches.
   const cmToIn=1/2.54;
   ws.pageSetup.margins={
-    left:1.4*cmToIn,right:1.4*cmToIn,
+    left:1.0*cmToIn,right:1.0*cmToIn,
     top:1.0*cmToIn,bottom:1.0*cmToIn,
     header:0.8*cmToIn,footer:0.8*cmToIn
   };

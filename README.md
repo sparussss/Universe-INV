@@ -1,4 +1,13 @@
-# Universe Invoice PWA v0.11.10
+# Universe Invoice PWA v0.11.11
+
+
+## v0.11.11 1.0 cm side-margin trial
+
+- Built directly from v0.11.10; v0.11.9 remains the stable fallback baseline.
+- Changes only the Excel print left/right margins from 1.4 cm to 1.0 cm for this test.
+- Keeps true 100% Excel print scale; Fit-to-Width remains disabled.
+- Keeps the same A:I column widths, row heights, top/bottom 1.0 cm margins, header/footer 0.8 cm margins, and 56 / 40+16 pagination logic as v0.11.10.
+- Purpose: test whether iPhone Excel can export at 100% without manually choosing “Fit all columns on one page”.
 
 
 ## v0.11.10 100% print-space trial
