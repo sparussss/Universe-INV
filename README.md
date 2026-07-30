@@ -1,4 +1,12 @@
-# Universe Invoice PWA v0.11.16
+# Universe Invoice PWA v0.11.17
+
+
+## v0.11.17 work-trial fixes
+
+- Fixes the iPhone `≡` move-to-position action: after entering a new formal position and tapping OK, the requested order is now preserved and all item sequence numbers are rebuilt continuously.
+- EUR selling prices are rounded to whole euros after all USD / FX / 14K calculations. Preview, item cards, Amount, Sub Total, Discount, Total, Excel and PDF use the same zero-decimal EUR money format. USD behaviour is unchanged.
+- 配套搜尋 款式 and 石頭 filters now support multiple selection. Multiple choices inside one group use OR logic (e.g. ER + PT); the 款式 and 石頭 groups combine with AND logic. `全部` clears that group.
+- Existing v0.11.16 14K Quotation, Kitco Ask lookup and stock-search status logic are otherwise unchanged.
 
 
 ## v0.11.16 14K Quotation reference + companion stock search

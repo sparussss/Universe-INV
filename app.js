@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],stoneAliases:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',kitcoAsk:0,kitcoTime:'',fetching:false,source:''},inventoryHistory:new Map(),stockSearch:{query:'',type:'ALL',stone:'ALL'}};
+const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockHeaders:[],stoneAliases:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',kitcoAsk:0,kitcoTime:'',fetching:false,source:''},inventoryHistory:new Map(),stockSearch:{query:'',types:[],stones:[]}};
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
 function displayItems(){return formalItems().reverse()}
 function normalizeItemSequence(){state.items=formalItems();state.items.forEach((item,i)=>item.seq=i+1)}
@@ -121,11 +121,11 @@ loadInventoryHistory();loadKitcoCache();
 const FX_API='https://api.frankfurter.dev/v2/rate';
 const FX_API_V1='https://api.frankfurter.dev/v1/latest';
 function currencyCode(){return norm($('#currency')?.value||'USD').toUpperCase()||'USD'}
-function currencyDigits(code=currencyCode()){return code==='JPY'?0:2}
+function currencyDigits(code=currencyCode()){return code==='EUR'||code==='JPY'?0:2}
 function roundCurrency(v,code=currencyCode()){const p=10**currencyDigits(code);return Math.round((Number(v)||0)*p+Number.EPSILON)/p}
 function fmt(v,code=currencyCode()){return new Intl.NumberFormat('en-US',{style:'currency',currency:code,minimumFractionDigits:currencyDigits(code),maximumFractionDigits:currencyDigits(code)}).format(Number(v)||0)}
 function currencyExcelFormat(code=currencyCode(),negative=false){
-  const formats={USD:'$#,##0.00',EUR:'€#,##0.00',GBP:'£#,##0.00',CNY:'"CNY" #,##0.00',JPY:'¥#,##0',HKD:'"HK$" #,##0.00'};
+  const formats={USD:'$#,##0.00',EUR:'€#,##0',GBP:'£#,##0.00',CNY:'"CNY" #,##0.00',JPY:'¥#,##0',HKD:'"HK$" #,##0.00'};
   const positive=formats[code]||`"${code}" #,##0.00`;
   if(!negative)return positive;
   const body=positive.replace(/^([^#0]*)(.*)$/,'$1$2');
@@ -200,7 +200,7 @@ async function handleCurrencyChange(){
   if(cached){applyFxRate(cached.rate,cached.date,'cache',`使用上次參考匯率 · ${cached.date||''}`)}else{$('#fxRate').value='';state.fx={rate:0,date:'',source:'pending',fetching:false};syncEffectivePrices({clearCurrentOverride:true});renderItems();updateTotals();setFxStatus(`正在取得 USD → ${code} 參考匯率…`)}
   await fetchReferenceFxRate({silent:!!cached});
 }
-function totals(){const qty=state.items.reduce((a,x)=>a+x.qty,0),sub=state.items.reduce((a,x)=>a+x.qty*(Number(x.unitPrice)||0),0),discount=Math.max(0,Number($('#discountAmount').value)||0);return{qty,sub,discount,total:Math.max(0,sub-discount)}}
+function totals(){const code=currencyCode(),qty=state.items.reduce((a,x)=>a+x.qty,0),sub=roundCurrency(state.items.reduce((a,x)=>a+x.qty*(Number(x.unitPrice)||0),0),code),discount=roundCurrency(Math.max(0,Number($('#discountAmount').value)||0),code),total=roundCurrency(Math.max(0,sub-discount),code);return{qty,sub,discount,total}}
 function updateTotals(){const t=totals();$('#totalQty').textContent=t.qty;$('#subtotal').textContent=fmt(t.sub);const discountEl=$('#discountDisplay');if(discountEl)discountEl.textContent=discountDisplay(t.discount);$('#grandTotal').textContent=fmt(t.total);$('#productCount').textContent=state.products.size;$('#customerCount').textContent=state.customers.size;$('#invoiceCount').textContent=state.items.length;$('#headerTotal').textContent=fmt(t.total);schedulePreview()}
 $$('.tab').forEach(b=>b.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.tab-panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.tab).classList.add('active');if(b.dataset.tab==='invoice')renderCustomerSummary();if(b.dataset.tab==='preview')renderPreview();if(b.dataset.tab==='stockSearch')renderStockSearch()});
 async function readWB(file){if(typeof XLSX==='undefined')throw new Error('Excel 程式未載入');return XLSX.read(await file.arrayBuffer(),{type:'array'})}
@@ -437,7 +437,11 @@ function renderItems(){
       if(!target){alert('請輸入有效位置。');return}
       const ordered=formalItems().filter(x=>x.id!==item.id);
       ordered.splice(target-1,0,item);
-      state.items=ordered;normalizeItemSequence();renderItems();schedulePreview();
+      // Preserve the newly requested formal order. Calling normalizeItemSequence()
+      // here would sort again by the old seq values and silently undo the move.
+      state.items=ordered;
+      state.items.forEach((x,i)=>x.seq=i+1);
+      renderItems();schedulePreview();
     };
   });
   updateTotals()
@@ -1084,12 +1088,21 @@ function articleType(value){const m=normArt(value).match(/^([A-Z]+)/);return m?m
 function stoneCodesForProduct(p){const text=(p.descriptions||[]).join(' ').toUpperCase(),known=new Set([...activeStoneAliases().keys(),'CDM','PSA','MCT','RGT','GGTR','GGT','SAR','BSA']);const out=[];for(const c of [...known].map(x=>norm(x).toUpperCase()).filter(Boolean).sort((a,b)=>b.length-a.length)){if(text.includes(c)&&!out.includes(c))out.push(c)}return out}
 function inventorySearchRecords(){const map=new Map();for(const p of state.stockCatalog.values())map.set(String(p.lotNo),{...productSnapshot(p),status:'AVAILABLE'});for(const p of state.products.values())map.set(String(p.lotNo),{...productSnapshot(p),status:'AVAILABLE'});for(const h of state.inventoryHistory.values())map.set(String(h.lotNo),{...h,status:h.status||'AVAILABLE'});return [...map.values()]}
 function filterButtonHTML(value,label,active){return `<button type="button" class="filter-chip${active?' active':''}" data-value="${esc(value)}">${esc(label)}</button>`}
-function runStockSearch(){const raw=norm($('#stockSearchInput').value),core=articleCore(raw);state.stockSearch.query=core||raw;state.stockSearch.type='ALL';state.stockSearch.stone='ALL';renderStockSearch()}
+function selectedStockFilters(kind){const key=kind==='type'?'types':'stones',v=state.stockSearch[key];return Array.isArray(v)?v:[]}
+function toggleStockFilter(kind,value){
+  const key=kind==='type'?'types':'stones';
+  if(value==='ALL'){state.stockSearch[key]=[];renderStockSearch();return}
+  const selected=new Set(selectedStockFilters(kind));
+  if(selected.has(value))selected.delete(value);else selected.add(value);
+  state.stockSearch[key]=[...selected];renderStockSearch();
+}
+function runStockSearch(){const raw=norm($('#stockSearchInput').value),core=articleCore(raw);state.stockSearch.query=core||raw;state.stockSearch.types=[];state.stockSearch.stones=[];renderStockSearch()}
 function renderStockSearch(){
   const resultsEl=$('#stockSearchResults');if(!resultsEl)return;const q=norm(state.stockSearch.query||$('#stockSearchInput')?.value);if(!q){resultsEl.innerHTML='';$('#stockSearchMessage').textContent='請輸入款號搜尋。';$('#stockTypeFilters').classList.add('hidden');$('#stockStoneFilters').classList.add('hidden');$('#stockSearchSummary').classList.add('hidden');return}
   const core=articleCore(q),all=inventorySearchRecords().filter(x=>articleCore(x.artNo)===core||normArt(x.artNo).includes(normArt(q)));const types=[...new Set(all.map(x=>articleType(x.artNo)))].sort(),stones=[...new Set(all.flatMap(stoneCodesForProduct))].sort();
-  const typeBox=$('#stockTypeFilters'),stoneBox=$('#stockStoneFilters');typeBox.dataset.kind='type';stoneBox.dataset.kind='stone';typeBox.innerHTML=`<div class="filter-chips">${filterButtonHTML('ALL','全部',state.stockSearch.type==='ALL')}${types.map(x=>filterButtonHTML(x,x,state.stockSearch.type===x)).join('')}</div>`;stoneBox.innerHTML=`<div class="filter-chips">${filterButtonHTML('ALL','全部',state.stockSearch.stone==='ALL')}${stones.map(x=>filterButtonHTML(x,x,state.stockSearch.stone===x)).join('')}</div>`;typeBox.classList.toggle('hidden',!types.length);stoneBox.classList.toggle('hidden',!stones.length);typeBox.querySelectorAll('.filter-chip').forEach(b=>b.onclick=()=>{state.stockSearch.type=b.dataset.value;renderStockSearch()});stoneBox.querySelectorAll('.filter-chip').forEach(b=>b.onclick=()=>{state.stockSearch.stone=b.dataset.value;renderStockSearch()});
-  const shown=all.filter(x=>(state.stockSearch.type==='ALL'||articleType(x.artNo)===state.stockSearch.type)&&(state.stockSearch.stone==='ALL'||stoneCodesForProduct(x).includes(state.stockSearch.stone))).sort((a,b)=>articleType(a.artNo).localeCompare(articleType(b.artNo))||a.artNo.localeCompare(b.artNo)||String(a.lotNo).localeCompare(String(b.lotNo)));
+  const selectedTypes=selectedStockFilters('type'),selectedStones=selectedStockFilters('stone');
+  const typeBox=$('#stockTypeFilters'),stoneBox=$('#stockStoneFilters');typeBox.dataset.kind='type';stoneBox.dataset.kind='stone';typeBox.innerHTML=`<div class="filter-chips">${filterButtonHTML('ALL','全部',selectedTypes.length===0)}${types.map(x=>filterButtonHTML(x,x,selectedTypes.includes(x))).join('')}</div>`;stoneBox.innerHTML=`<div class="filter-chips">${filterButtonHTML('ALL','全部',selectedStones.length===0)}${stones.map(x=>filterButtonHTML(x,x,selectedStones.includes(x))).join('')}</div>`;typeBox.classList.toggle('hidden',!types.length);stoneBox.classList.toggle('hidden',!stones.length);typeBox.querySelectorAll('.filter-chip').forEach(b=>b.onclick=()=>toggleStockFilter('type',b.dataset.value));stoneBox.querySelectorAll('.filter-chip').forEach(b=>b.onclick=()=>toggleStockFilter('stone',b.dataset.value));
+  const shown=all.filter(x=>(selectedTypes.length===0||selectedTypes.includes(articleType(x.artNo)))&&(selectedStones.length===0||stoneCodesForProduct(x).some(code=>selectedStones.includes(code)))).sort((a,b)=>articleType(a.artNo).localeCompare(articleType(b.artNo))||a.artNo.localeCompare(b.artNo)||String(a.lotNo).localeCompare(String(b.lotNo)));
   const counts={AVAILABLE:0,CONSIGNED:0,SOLD_ON_HAND:0,SOLD_DELIVERED:0};for(const x of all)counts[x.status]=(counts[x.status]||0)+1;$('#stockSearchMessage').textContent=`搜尋 ${core}：找到 ${all.length} 件，目前顯示 ${shown.length} 件。`;$('#stockSearchSummary').innerHTML=`<span class="stock-summary-chip">Available ${counts.AVAILABLE||0}</span><span class="stock-summary-chip">Consigned ${counts.CONSIGNED||0}</span><span class="stock-summary-chip">Sold - On Hand ${counts.SOLD_ON_HAND||0}</span><span class="stock-summary-chip">Sold - Delivered ${counts.SOLD_DELIVERED||0}</span>`;$('#stockSearchSummary').classList.remove('hidden');
   if(!shown.length){resultsEl.innerHTML='<div class="notice">沒有符合目前款式／石頭篩選的貨品。</div>';return}
   resultsEl.innerHTML='';for(const x of shown){const card=document.createElement('div');card.className='stock-result';const img=(state.imageFiles.get(x.artNo)||[])[0]?.url||placeholder(x.artNo),inDoc=state.items.some(i=>String(i.lotNo)===String(x.lotNo)),canAdd=x.status==='AVAILABLE'||(x.status==='SOLD_ON_HAND'&&state.documentType!=='consignment');card.innerHTML=`<img src="${esc(img)}" alt="${esc(x.artNo)}"><div><h4>${esc(x.artNo)}</h4><div class="lot">LOTNO ${esc(x.lotNo)}</div><div class="desc">${esc((x.descriptions||[]).join('\n'))}</div></div><div class="stock-result-actions"><span class="stock-status ${historyStatusClass(x.status)}">${esc(historyStatusLabel(x.status))}</span>${inDoc?'<span class="stock-current-doc">已在目前文件</span>':''}</div>`;const actions=$('.stock-result-actions',card);if(canAdd&&!inDoc){const b=document.createElement('button');b.type='button';b.textContent=`加入目前 ${documentLabels().short}`;b.onclick=()=>{if(addProductToDocument(x,{fromSearch:true})){b.disabled=true;b.textContent='已加入';renderStockSearch()}};actions.appendChild(b)}if(x.status==='SOLD_ON_HAND'){const d=document.createElement('button');d.type='button';d.className='ghost';d.textContent='標記已交貨';d.onclick=()=>{if(confirm(`${x.artNo} / LOTNO ${x.lotNo}\n標記為 Sold - Delivered？`))markInventoryDelivered(x.lotNo)};actions.appendChild(d)}resultsEl.appendChild(card)}
