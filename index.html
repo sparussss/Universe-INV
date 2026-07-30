@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.11.15</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.11.16</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -36,6 +36,7 @@
     <button class="tab active" data-tab="setup">資料匯入</button>
     <button class="tab" data-tab="invoice">建立文件</button>
     <button class="tab" data-tab="preview">文件預覽</button>
+    <button class="tab" data-tab="stockSearch">配套搜尋</button>
   </nav>
 
   <section id="setup" class="tab-panel active">
@@ -180,6 +181,34 @@
         <label><span id="documentDateLabel">Date</span><input id="invoiceDate" inputmode="numeric" placeholder="YYYY-MM-DD"></label>
       </div>
 
+      <div id="quotationKaratPanel" class="quote-karat-panel hidden">
+        <div class="quote-karat-head">
+          <div><strong>Quotation 報價成色</strong><span>整張 Quotation 統一使用同一成色</span></div>
+        </div>
+        <div class="quote-karat-switch" role="group" aria-label="Quotation Karat">
+          <label><input type="radio" name="quoteKarat" value="18K" checked> 18K 原款</label>
+          <label><input type="radio" name="quoteKarat" value="14K"> 14K 參考報價</label>
+        </div>
+        <div id="goldQuotePanel" class="gold-quote-panel hidden">
+          <div class="gold-quote-head">
+            <div><strong>Kitco Gold Ask</strong><span>USD / troy oz</span></div>
+            <button type="button" id="refreshGoldBtn" class="ghost">線上更新</button>
+          </div>
+          <div class="gold-ask-row">
+            <label>Kitco Ask
+              <input id="kitcoAskInput" type="number" min="0" step="0.01" inputmode="decimal" placeholder="例如 4084.00">
+            </label>
+          </div>
+          <div class="gold-metrics">
+            <div><span>公司報價金價</span><strong id="companyGoldBase">—</strong></div>
+            <div><span>18K 金值 / g</span><strong id="gold18PerGram">—</strong></div>
+            <div><span>14K 金值 / g</span><strong id="gold14PerGram">—</strong></div>
+          </div>
+          <div id="goldQuoteStatus" class="fx-status">選擇 14K 後會線上取得 Kitco Ask。</div>
+          <p class="gold-rule-note">計算：Kitco Ask × 1.01 → 向上取至下一個 USD 10；再加 12% 生產消耗。14K 同款重量按 0.83 估算並每 0.05g 向上進位。</p>
+        </div>
+      </div>
+
       <div class="divider"></div>
       <h3>輸入模式</h3>
       <div class="scan-buttons">
@@ -216,6 +245,23 @@
       <div id="excelExportStatus" class="notice hidden"></div>
     </article>
     <article id="invoiceDocument" class="invoice-document"></article>
+  </section>
+
+  <section id="stockSearch" class="tab-panel">
+    <article class="card">
+      <div class="section-title-row stock-search-title">
+        <div><h3>配套／庫存搜尋</h3><p class="muted">輸入核心款號，例如 34686，可同時查看 RG / PT / ER / BL / NL 等配套及銷售狀態。</p></div>
+      </div>
+      <div class="stock-search-row">
+        <input id="stockSearchInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="輸入 34686 或 RG-34686">
+        <button id="stockSearchBtn" class="primary">搜尋</button>
+      </div>
+      <div id="stockSearchMessage" class="notice">請輸入款號搜尋。</div>
+      <div id="stockTypeFilters" class="filter-group hidden"></div>
+      <div id="stockStoneFilters" class="filter-group hidden"></div>
+      <div id="stockSearchSummary" class="stock-search-summary hidden"></div>
+      <div id="stockSearchResults" class="stock-search-results"></div>
+    </article>
   </section>
 </main>
 

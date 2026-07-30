@@ -1,5 +1,26 @@
-# Universe Invoice PWA v0.11.15
+# Universe Invoice PWA v0.11.16
 
+
+## v0.11.16 14K Quotation reference + companion stock search
+
+### Quotation 14K reference
+- Only **Quotation** shows a document-level karat selector: **18K 原款** (default) or **14K 參考報價**. Invoice and Consignment always stay on original stock data.
+- Choosing 14K automatically requests the current **Kitco Gold Ask** online. The PWA first tries Kitco's live quote gateway and has a Kitco public-page fallback; the latest cached Ask and manual Ask input remain available if the online request is blocked.
+- Company gold quotation rule: `Kitco Ask × 1.01`, rounded upward to the next USD 10. Production gold value then includes 12% consumption.
+- 18K gold value / g: `Company Gold / 31.1034768 × 0.750 × 1.12`.
+- 14K gold value / g: `Company Gold / 31.1034768 × 0.585 × 1.12`.
+- Same-design 14K weight is estimated as `18K weight × 0.83`, then rounded **up** to the next 0.05g. Example: `3.15g → 2.65g`.
+- DESC1 is rewritten only for the 14K Quotation, while preserving the original in brackets, e.g. `3.15Y750 → 2.65Y585 (3.15Y750)`. Preview, Excel and PDF use the same transformed description and reference Unit Price.
+- Returning to Invoice / Consignment immediately restores original DESC1, gold weight, fineness and Unit Price. Stock source data is never rewritten.
+
+### 配套／庫存搜尋
+- Adds a fourth top-level tab after 文件預覽: **配套搜尋**.
+- Search by full ARTNO or core number. Example: `34686` or `RG-34686` finds the whole `34686` family across RG / PT / ER / BL / NL / BR / BG variants.
+- Dynamic chip filters are generated for **款式** and **石頭** from actual matched data.
+- Results preserve all statuses: **Available**, **Consigned**, **Sold - On Hand**, and **Sold - Delivered**. Sold items stay visible for exhibition fulfilment decisions.
+- Invoice confirmation records sold items as Sold - On Hand; Consignment records Consigned. Sold - On Hand can be marked Sold - Delivered from search.
+- Available items, and Sold - On Hand items when appropriate, can be added directly to the current document from the search results.
+- Inventory status history is stored locally on the device so confirmed exhibition movements remain searchable after reopening the PWA.
 
 ## v0.11.15 On-site image capture
 
