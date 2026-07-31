@@ -82,7 +82,7 @@ function effectiveDescriptions(item){const d=[...(item.descriptions||[])];if(!qu
 function goldMetrics(){const ask=Number(state.quote.kitcoAsk)||0;if(!(ask>0))return null;const base=Math.ceil((ask*1.01)/10)*10;const g18=base/TROY_OZ_G*.75*1.12,g14=base/TROY_OZ_G*.585*1.12;return{ask,base,g18,g14}}
 function goldDifferenceUsd(item){const m=goldMetrics(),p=parse18KDesc1((item.descriptions||[])[0]);if(!m||!p)return 0;const w14=roundUpWeight05(p.weight*K14_WEIGHT_FACTOR);return Math.max(0,p.weight*m.g18-w14*m.g14)}
 function quote14KReady(){return !quote14KMode()||!!goldMetrics()}
-function effectiveUsdPrice(item){const base=baseUsdPrice(item);return quote14KMode()&&goldMetrics()?Math.max(0,roundCurrency(base-goldDifferenceUsd(item),'USD')):base}
+function effectiveUsdPrice(item){const base=baseUsdPrice(item);if(!(quote14KMode()&&goldMetrics()))return base;const raw=Math.max(0,base-goldDifferenceUsd(item));return Math.ceil(raw-1e-9)}
 function activePriceOverrides(item){item.currencyPrices=item.currencyPrices||{};item.quote14kCurrencyPrices=item.quote14kCurrencyPrices||{};return quote14KMode()?item.quote14kCurrencyPrices:item.currencyPrices}
 function saveKitcoCache(){try{if(state.quote.kitcoAsk>0)localStorage.setItem(KITCO_CACHE_KEY,JSON.stringify({ask:state.quote.kitcoAsk,time:state.quote.kitcoTime||'',fetchedAt:Date.now()}))}catch{}}
 function loadKitcoCache(){try{const x=JSON.parse(localStorage.getItem(KITCO_CACHE_KEY)||'null');if(x&&Number(x.ask)>0){state.quote.kitcoAsk=Number(x.ask);state.quote.kitcoTime=x.time||'';state.quote.source='cache';return x}}catch{}return null}
@@ -426,7 +426,7 @@ function renderItems(){
     }
     $('.qty-input',node).value=item.qty;$('.price-input',node).value=item.unitPrice;
     $('.qty-input',node).onchange=e=>{item.qty=Math.max(1,Number(e.target.value)||1);updateTotals()};
-    $('.price-input',node).onchange=e=>{const code=currencyCode(),raw=Math.max(0,Number(e.target.value)||0),value=code==='EUR'?Math.round(raw):roundUnitPrice(raw,code),overrides=activePriceOverrides(item);overrides[code]=value;item.unitPrice=value;if(code==='USD'&&!quote14KMode())item.usdUnitPrice=value;updateTotals()};
+    $('.price-input',node).onchange=e=>{const code=currencyCode(),raw=Math.max(0,Number(e.target.value)||0),value=code==='EUR'?Math.round(raw):(code==='USD'&&quote14KMode()?Math.ceil(raw-1e-9):roundUnitPrice(raw,code)),overrides=activePriceOverrides(item);overrides[code]=value;item.unitPrice=value;if(code==='USD'&&!quote14KMode())item.usdUnitPrice=value;e.target.value=value;updateTotals()};
     $('.delete-item',node).onclick=()=>{if(confirm(`刪除 ${item.artNo}？`)){revokeCustomImage(item);state.items=state.items.filter(x=>x.id!==item.id);normalizeItemSequence();renderItems()}};
     box.appendChild(node)
   });
@@ -440,7 +440,7 @@ function syncSortAvailability(box=$('#invoiceItems')){
   box.querySelectorAll('.drag-handle').forEach(handle=>{
     handle.disabled=editing;
     handle.setAttribute('aria-disabled',String(editing));
-    handle.title=editing?'請先按「完成」收起編輯，再拖曳排序':'按住並上下拖曳排序';
+    handle.title=editing?'請先按「完成」收起編輯，再拖曳排序':'長按 ≡ 約 0.3 秒，再上下拖曳排序';
   });
   if(state.sortable&&typeof state.sortable.option==='function')state.sortable.option('disabled',editing);
 }
@@ -456,12 +456,17 @@ function installItemSorting(box){
     draggable:'.invoice-item',
     forceFallback:true,
     fallbackOnBody:true,
-    fallbackTolerance:3,
-    touchStartThreshold:3,
-    swapThreshold:0.55,
+    // iPhone guard rails: require an intentional long press and real movement
+    // before drag starts, then swap only after crossing roughly half a row.
+    delay:300,
+    delayOnTouchOnly:true,
+    fallbackTolerance:10,
+    touchStartThreshold:10,
+    swapThreshold:0.5,
+    invertSwap:false,
     scroll:true,
-    scrollSensitivity:70,
-    scrollSpeed:12,
+    scrollSensitivity:42,
+    scrollSpeed:7,
     chosenClass:'sort-chosen',
     ghostClass:'sort-ghost',
     dragClass:'sort-drag',
@@ -1145,7 +1150,7 @@ function renderStockSearch(){
   const shown=all.filter(x=>(selectedTypes.length===0||selectedTypes.includes(articleType(x.artNo)))&&(selectedStones.length===0||stoneCodesForProduct(x).some(code=>selectedStones.includes(code)))).sort((a,b)=>articleType(a.artNo).localeCompare(articleType(b.artNo))||a.artNo.localeCompare(b.artNo)||String(a.lotNo).localeCompare(String(b.lotNo)));
   const counts={AVAILABLE:0,CONSIGNED:0,SOLD_ON_HAND:0,SOLD_DELIVERED:0};for(const x of all)counts[x.status]=(counts[x.status]||0)+1;$('#stockSearchMessage').textContent=`搜尋 ${core}：找到 ${all.length} 件，目前顯示 ${shown.length} 件。`;$('#stockSearchSummary').innerHTML=`<span class="stock-summary-chip">Avail ${counts.AVAILABLE||0}</span><span class="stock-summary-chip">Consign ${counts.CONSIGNED||0}</span><span class="stock-summary-chip">Sold-OH ${counts.SOLD_ON_HAND||0}</span><span class="stock-summary-chip">Deliv ${counts.SOLD_DELIVERED||0}</span>`;$('#stockSearchSummary').classList.remove('hidden');
   if(!shown.length){resultsEl.innerHTML='<div class="notice">沒有符合目前款式／石頭篩選的貨品。</div>';return}
-  resultsEl.innerHTML='';for(const x of shown){const card=document.createElement('div');card.className='stock-result';const img=(state.imageFiles.get(x.artNo)||[])[0]?.url||placeholder(x.artNo),inDoc=state.items.some(i=>String(i.lotNo)===String(x.lotNo)),canAdd=x.status==='AVAILABLE'||(x.status==='SOLD_ON_HAND'&&state.documentType!=='consignment');card.innerHTML=`<img src="${esc(img)}" alt="${esc(x.artNo)}"><div><h4>${esc(x.artNo)}</h4><div class="lot">LOTNO ${esc(x.lotNo)}</div><div class="desc">${esc((x.descriptions||[]).join('\n'))}</div></div><div class="stock-result-actions"><span class="stock-status ${historyStatusClass(x.status)}">${esc(historyStatusLabel(x.status))}</span>${inDoc?'<span class="stock-current-doc">已在目前文件</span>':''}</div>`;const actions=$('.stock-result-actions',card);if(canAdd&&!inDoc){const b=document.createElement('button');b.type='button';b.textContent=`加入目前 ${documentLabels().short}`;b.onclick=()=>{if(addProductToDocument(x,{fromSearch:true})){b.disabled=true;b.textContent='已加入';renderStockSearch()}};actions.appendChild(b)}if(x.status==='SOLD_ON_HAND'){const d=document.createElement('button');d.type='button';d.className='ghost';d.textContent='標記已交貨';d.onclick=()=>{if(confirm(`${x.artNo} / LOTNO ${x.lotNo}\n標記為 Sold - Delivered？`))markInventoryDelivered(x.lotNo)};actions.appendChild(d)}resultsEl.appendChild(card)}
+  resultsEl.innerHTML='';for(const x of shown){const card=document.createElement('div');card.className='stock-result';const imageList=state.imageFiles.get(x.artNo)||[],wantedVariant=chooseVariant(x),matchedImage=imageList.find(img=>img.variant===wantedVariant)||imageList.find(img=>img.variant.toUpperCase()===String(wantedVariant).toUpperCase())||imageList.find(img=>img.variant==='Default')||imageList[0],img=matchedImage?.url||placeholder(x.artNo),inDoc=state.items.some(i=>String(i.lotNo)===String(x.lotNo)),canAdd=x.status==='AVAILABLE'||(x.status==='SOLD_ON_HAND'&&state.documentType!=='consignment');card.innerHTML=`<img src="${esc(img)}" alt="${esc(x.artNo)}"><div><h4>${esc(x.artNo)}</h4><div class="lot">LOTNO ${esc(x.lotNo)}</div><div class="desc">${esc((x.descriptions||[]).join('\n'))}</div></div><div class="stock-result-actions"><span class="stock-status ${historyStatusClass(x.status)}">${esc(historyStatusLabel(x.status))}</span>${inDoc?'<span class="stock-current-doc">已在目前文件</span>':''}</div>`;const actions=$('.stock-result-actions',card);if(canAdd&&!inDoc){const b=document.createElement('button');b.type='button';b.textContent=`加入目前 ${documentLabels().short}`;b.onclick=()=>{if(addProductToDocument(x,{fromSearch:true})){b.disabled=true;b.textContent='已加入';renderStockSearch()}};actions.appendChild(b)}if(x.status==='SOLD_ON_HAND'){const d=document.createElement('button');d.type='button';d.className='ghost';d.textContent='標記已交貨';d.onclick=()=>{if(confirm(`${x.artNo} / LOTNO ${x.lotNo}\n標記為 Sold - Delivered？`))markInventoryDelivered(x.lotNo)};actions.appendChild(d)}resultsEl.appendChild(card)}
 }
 $('#stockSearchBtn').onclick=runStockSearch;$('#stockSearchInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runStockSearch()}};$('#stockSearchInput').oninput=e=>{e.target.value=e.target.value.toUpperCase()};
 $$('input[name="quoteKarat"]').forEach(r=>r.onchange=e=>setQuoteKarat(e.target.value));$('#refreshGoldBtn').onclick=()=>fetchKitcoAsk();let goldInputTimer=null;$('#kitcoAskInput').oninput=e=>{clearTimeout(goldInputTimer);goldInputTimer=setTimeout(()=>{const n=Number(e.target.value);if(n>0)setKitcoAsk(n,{source:'manual',message:`手動 Kitco Ask：USD ${n.toFixed(2)} / oz`});else{state.quote.kitcoAsk=0;syncEffectivePrices({clearCurrentOverride:true});renderItems();updateGoldQuoteUI('請輸入大於 0 的 Kitco Ask。','error')}},180)};

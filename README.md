@@ -1,4 +1,10 @@
-# Universe Invoice PWA v0.11.20
+# Universe Invoice PWA v0.11.21
+
+## v0.11.21 quotation / companion search / drag refinement
+
+- **14K Quotation / USD**：自動計算的 14K USD Unit Price 改為向上進位至整數美元，不保留尾數；例如 `$593.39 → $594.00`、`$1,191.82 → $1,192.00`。14K 模式下手動修改 USD Unit Price 亦會向上進位。
+- **配套搜尋圖片**：每個 LOTNO 會沿用建立文件時的石種／圖片變體配對邏輯，依 DESC2 與 Stone List alias 選擇相應圖片；不再固定顯示該 ARTNO 的第一張圖片。
+- **iPhone 拖曳排序**：加入 300ms 長按、10px 移動門檻，降低換位敏感度，並把自動捲動觸發範圍與速度降低。原有「編輯展開時全部 ≡ 灰掉停用」規則保留。
 
 ## v0.11.20 item list interaction revision
 
