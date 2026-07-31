@@ -226,3 +226,6 @@ button{width:auto}
 .invoice-item.sort-chosen{background:#f8fbff;border-radius:12px}
 .invoice-item.sort-ghost{opacity:.28}
 .invoice-item.sort-drag,.invoice-item.sort-fallback{background:#fff;border:1px solid #c7d7ec;border-radius:12px;box-shadow:0 12px 28px rgba(23,32,51,.18)}
+
+/* v0.11.23: monochrome fallback when no matching stone image exists */
+.grayscale-image{filter:grayscale(100%);-webkit-filter:grayscale(100%)}

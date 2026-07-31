@@ -248,12 +248,12 @@ function articleDescriptionFor(item){
 }
 
 function activeStoneAliases(){return state.stoneAliases.size?state.stoneAliases:FALLBACK_STONE_ALIASES}
-$('#stoneMappingInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importStoneFile(f);status('#stoneMappingStatus',`已匯入 ${f.name}：${count} 個石種代碼對照。`,'ok');setImportCollapsed('stone',true);for(const item of state.items)item.imageVariant=chooseVariant(item);renderItems()}catch(err){status('#stoneMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('stone',false)}};
+$('#stoneMappingInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importStoneFile(f);status('#stoneMappingStatus',`已匯入 ${f.name}：${count} 個石種代碼對照。`,'ok');setImportCollapsed('stone',true);for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);renderItems()}catch(err){status('#stoneMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('stone',false)}};
 $('#articleMappingInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importArticleFile(f);status('#articleMappingStatus',`已匯入 ${f.name}：${count} 個 Article 對照。`,'ok');setImportCollapsed('article',true);schedulePreview()}catch(err){status('#articleMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('article',false)}};
 $('#invoiceTemplateInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{await importTemplateFile(f);status('#invoiceTemplateStatus',`已匯入 ${f.name}；匯出文件時會套用此範本。`,'ok');setImportCollapsed('template',true)}catch(err){state.invoiceTemplateBuffer=null;status('#invoiceTemplateStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('template',false)}};
 
 function parseImage(file){const stem=file.name.replace(/\.[^.]+$/,'').trim();const arts=[...new Set([...state.stockCatalog.values(),...state.products.values(),...state.inventoryHistory.values()].map(x=>x.artNo).filter(Boolean))].sort((a,b)=>b.length-a.length);const art=arts.find(a=>stem.toUpperCase()===a||stem.toUpperCase().startsWith(a+' '));if(!art)return null;let variant=stem.slice(art.length).trim().replace(/\s*\(\d+\)$/,'').trim()||'Default';const dup=(stem.match(/\((\d+)\)$/)||[])[1];return{art,variant,dup:dup?Number(dup):0,file}}
-$('#imageFolderInput').onchange=e=>{const result=importImageFiles(e.target.files);status('#imageStatus',`已選擇圖片 Folder：${result.images} 張圖片，配對 ${result.matched} 個款號。`,'ok');setImportCollapsed('images',true);renderItems()};
+$('#imageFolderInput').onchange=e=>{const result=importImageFiles(e.target.files);for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);status('#imageStatus',`已選擇圖片 Folder：${result.images} 張圖片，配對 ${result.matched} 個款號。`,'ok');setImportCollapsed('images',true);renderItems()};
 $('#exhibitionPackageInput').onchange=async e=>{
   const files=[...e.target.files];if(!files.length)return;
   const root=(files[0].webkitRelativePath||'').split('/')[0]||'Exhibition Package';state.packageName=root;
@@ -273,7 +273,7 @@ $('#exhibitionPackageInput').onchange=async e=>{
     if(!stone)errors.push('找不到 Stone List & Shape & Cutting.xlsx');else{const n=await importStoneFile(stone);lines.push(`✓ ${stone.name} · ${n} 個石種代碼`)}
     if(!template)errors.push('找不到 Invoice Template.xlsx');else{await importTemplateFile(template);lines.push(`✓ ${template.name} · Template 已載入`)}
     if(article){const n=await importArticleFile(article);lines.push(`✓ ${article.name} · ${n} 個 Article 對照`)}else lines.push('○ Article Mapping 未提供（不顯示 Article）');
-    if(!imageFiles.length)errors.push('找不到 Pictures 內的圖片');else{const r=importImageFiles(imageFiles);lines.push(`✓ Pictures · ${r.images} 張圖片 · 配對 ${r.matched} 個款號`)}
+    if(!imageFiles.length)errors.push('找不到 Pictures 內的圖片');else{const r=importImageFiles(imageFiles);for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);lines.push(`✓ Pictures · ${r.images} 張圖片 · 配對 ${r.matched} 個款號`)}
     $('#packageSummary').innerHTML=lines.map(x=>`<div>${esc(x)}</div>`).join('')+(errors.length?`<div class="package-errors">${errors.map(x=>'✕ '+esc(x)).join('<br>')}</div>`:'');
     if(errors.length)status('#packageStatus',`${root} 未完整載入，請補回缺少的資料。`,'error');else{status('#packageStatus',`${root} 已完成匯入，可以開始建立文件。`,'ok');document.querySelector('.advanced-imports').open=false}
     status('#stockStatus',stock?`已由資料包匯入 ${stock.name}：${state.products.size} 件貨品。`:'尚未匯入倉存。',stock?'ok':'error');
@@ -306,28 +306,62 @@ function variantContainsStone(variant,wanted){
     const phrase=normalizeStonePhrase(part);return phrase===target||(` ${phrase} `).includes(` ${target} `);
   });
 }
-function chooseVariant(p){
-  const imgs=state.imageFiles.get(p.artNo)||[];if(!imgs.length)return'Default';
-  const d=(p.desc2||'').toUpperCase();
-  const hits=[];
+function desiredStoneVariants(p){
+  const d=(p?.desc2||'').toUpperCase(),hits=[];
   for(const [code,variant] of [...activeStoneAliases().entries()].sort((a,b)=>b[0].length-a[0].length)){
-    const pos=d.indexOf(code.toUpperCase());if(pos>=0)hits.push({pos,variant:String(variant).toUpperCase()});
+    const c=String(code||'').toUpperCase();
+    if(!c||c==='CDM')continue; // CDM is a side-diamond code; do not let it drive the main reference image.
+    const pos=d.indexOf(c);if(pos>=0)hits.push({pos,variant:String(variant||'').toUpperCase()});
   }
   hits.sort((a,b)=>a.pos-b.pos);
-  const ordered=[...new Set(hits.map(x=>x.variant))];
-  const candidates=[];
-  if(ordered.length>1){candidates.push(ordered.join('+'));candidates.push([...ordered].reverse().join('+'))}
-  candidates.push(...ordered);
-  // 1) Prefer an exact image variant match.
-  for(const wanted of candidates){const hit=imgs.find(x=>x.variant.toUpperCase()===wanted);if(hit)return hit.variant}
-  // 2) If the main stone only exists inside a combination filename (e.g. MCT+CT+LQZ),
-  //    accept that combination. Prefer the variant with the fewest '+' components.
-  for(const wanted of ordered){
-    const combo=imgs.filter(x=>x.variant!=='Default'&&variantContainsStone(x.variant,wanted))
-      .sort((a,b)=>a.variant.split('+').length-b.variant.split('+').length||a.variant.length-b.variant.length)[0];
-    if(combo)return combo.variant;
+  return [...new Set(hits.map(x=>x.variant).filter(Boolean))];
+}
+function originalMetalToken(p){
+  const desc1=String((p?.descriptions||[])[0]||'').toUpperCase().replace(/\s+/g,'');
+  const m=desc1.match(/([YWR])(750|585)\b/);
+  if(!m)return'';
+  return `${m[2]==='750'?'18K':'14K'}${m[1]}`;
+}
+function imageMetalToken(variant){
+  const u=String(variant||'').toUpperCase().replace(/\s+/g,'');
+  const m=u.match(/(?:^|[^A-Z0-9])((?:18|14)K[YWR])(?:$|[^A-Z0-9])/);
+  return m?m[1]:'';
+}
+function chooseImageMatch(p){
+  const imgs=state.imageFiles.get(p?.artNo)||[];
+  if(!imgs.length)return{variant:'Default',grayscale:false,stoneMatched:false,colorMatched:false};
+  const stones=desiredStoneVariants(p),metal=originalMetalToken(p);
+  const metalScore=img=>{const t=imageMetalToken(img.variant);return metal&&t===metal?2:!t?1:0};
+  if(stones.length){
+    const exactCombo=stones.join('+'),reverseCombo=[...stones].reverse().join('+');
+    const scored=imgs.filter(x=>x.variant!=='Default').map((img,index)=>{
+      const matchedIndexes=stones.map((s,i)=>variantContainsStone(img.variant,s)?i:-1).filter(i=>i>=0);
+      if(!matchedIndexes.length)return null;
+      const upper=String(img.variant||'').toUpperCase();
+      let stoneScore=matchedIndexes.length*100;
+      if(matchedIndexes.length===stones.length)stoneScore+=500;
+      if(upper===exactCombo||upper===reverseCombo)stoneScore+=400;
+      stoneScore+=Math.max(0,30-matchedIndexes[0]*5); // Earlier DESC stone remains the preferred main-stone signal.
+      return{img,index,stoneScore,metalScore:metalScore(img)};
+    }).filter(Boolean);
+    if(scored.length){
+      scored.sort((a,b)=>b.stoneScore-a.stoneScore||b.metalScore-a.metalScore||a.img.variant.split('+').length-b.img.variant.split('+').length||a.img.variant.length-b.img.variant.length||a.index-b.index);
+      const best=scored[0];
+      return{variant:best.img.variant,grayscale:false,stoneMatched:true,colorMatched:best.metalScore===2};
+    }
+    // No picture corresponds to the requested stone. Use the best same-ARTNO reference,
+    // but flag it for monochrome display/output so the colour cannot be mistaken for the actual stone.
+    const fallback=[...imgs].sort((a,b)=>metalScore(b)-metalScore(a)||(a.variant==='Default'?-1:b.variant==='Default'?1:0)||a.variant.length-b.variant.length)[0];
+    return{variant:fallback.variant,grayscale:true,stoneMatched:false,colorMatched:metalScore(fallback)===2};
   }
-  return imgs.find(x=>x.variant==='Default')?.variant||imgs[0].variant
+  // If no stone code can be identified, keep the legacy default behaviour and do not force monochrome.
+  const fallback=imgs.find(x=>x.variant==='Default')||imgs[0];
+  return{variant:fallback.variant,grayscale:false,stoneMatched:false,colorMatched:metalScore(fallback)===2};
+}
+function chooseVariant(p){return chooseImageMatch(p).variant}
+function applyAutoImageMatch(item){
+  if(!item)return;
+  const match=chooseImageMatch(item);item.imageVariant=match.variant;item.imageGrayscale=!!match.grayscale;item.imageAutoMatched=true;
 }
 function normalizeLotInput(raw){
   const map={'零':'0','〇':'0','一':'1','二':'2','兩':'2','两':'2','三':'3','四':'4','五':'5','六':'6','七':'7','八':'8','九':'9'};
@@ -347,7 +381,7 @@ function refocusLotInput(selectAll=false){
 function addProductToDocument(p,{fromSearch=false}={}){
   if(!p)return false;const lot=String(p.lotNo);
   if(state.items.some(x=>x.lotNo===lot)){status('#addMessage',`LOTNO ${lot} 已在 ${documentLabels().short}。`,'error');return false}
-  const rate=Number($('#salesRate').value)||0,usdUnitPrice=Math.ceil((Number(p.price)||0)*rate);const item={...productSnapshot(p),id:Date.now()+Math.random(),seq:state.items.length+1,qty:1,usdUnitPrice,currencyPrices:{},quote14kCurrencyPrices:{},unitPrice:0,imageVariant:chooseVariant(p)};state.items.push(item);item.unitPrice=convertedFromUsd(effectiveUsdPrice(item));
+  const rate=Number($('#salesRate').value)||0,usdUnitPrice=Math.ceil((Number(p.price)||0)*rate),match=chooseImageMatch(p);const item={...productSnapshot(p),id:Date.now()+Math.random(),seq:state.items.length+1,qty:1,usdUnitPrice,currencyPrices:{},quote14kCurrencyPrices:{},unitPrice:0,imageVariant:match.variant,imageGrayscale:!!match.grayscale,imageAutoMatched:true};state.items.push(item);item.unitPrice=convertedFromUsd(effectiveUsdPrice(item));
   status('#addMessage',`已加入 ${p.artNo} / LOTNO ${lot}`,'ok');renderItems();if(fromSearch)renderStockSearch();return true;
 }
 function addLot(raw){
@@ -362,9 +396,10 @@ $('#lotInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();addLot(e.tar
 $('#lotInput').oninput=e=>{e.target.value=e.target.value.replace(/[，,。\.\-–—_]/g,' ')};
 $('#lotInput').onfocus=e=>setTimeout(()=>e.target.select(),50);
 function getImg(item){
-  if(item?.customImage?.file&&item.customImage.url)return item.customImage;
+  if(item?.customImage?.file&&item.customImage.url)return {...item.customImage,grayscale:false};
   const arr=state.imageFiles.get(item.artNo)||[];
-  return arr.find(x=>x.variant===item.imageVariant)||arr[0];
+  const selected=arr.find(x=>x.variant===item.imageVariant)||arr[0];
+  return selected?{...selected,grayscale:!!item?.imageGrayscale}:selected;
 }
 function placeholder(t){return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="#f1f5f9"/><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="18" fill="#64748b">${t}</text></svg>`)}`}
 function revokeCustomImage(item){
@@ -414,7 +449,7 @@ function renderItems(){
     const usd=baseUsdPrice(item),code=currencyCode(),note=$('.item-price-note',node);
     if(quote14KMode()){const p18=parse18KDesc1((item.descriptions||[])[0]),m=goldMetrics();if(p18&&m){const w14=roundUpWeight05(p18.weight*K14_WEIGHT_FACTOR),diff=goldDifferenceUsd(item),u14=effectiveUsdPrice(item);note.textContent=code==='USD'?`14K：${p18.weight.toFixed(2)}g → ${w14.toFixed(2)}g · ${fmt(usd,'USD')} − ${fmt(diff,'USD')} → ${fmt(u14,'USD')}`:(fxPricingReady()?`14K：${p18.weight.toFixed(2)}g → ${w14.toFixed(2)}g · ${fmt(u14,'USD')} × ${currentFxRate()} → ${fmt(item.unitPrice,code)}`:`14K：${w14.toFixed(2)}g · 等待 FX Rate`);note.classList.add('quote14-price-note');const badge=document.createElement('span');badge.className='quote14-badge';badge.textContent='14K';$('.item-artno',node).after(badge)}else note.textContent='14K 參考報價：等待 Kitco Ask／DESC1 無法辨識 18K 金重';}
     else note.textContent=code==='USD'?`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')}`:(fxPricingReady()?`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')} × ${currentFxRate()} → ${fmt(item.unitPrice,code)}`:`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')} · 等待 FX Rate`);
-    $('.item-thumb',node).src=getImg(item)?.url||placeholder(item.artNo);
+    const thumbImg=getImg(item),thumb=$('.item-thumb',node);thumb.src=thumbImg?.url||placeholder(item.artNo);thumb.classList.toggle('grayscale-image',!!thumbImg?.grayscale);
     const controls=$('.item-controls',node),toggle=$('.item-edit-toggle',node);toggle.onclick=()=>{const open=controls.classList.toggle('open');node.classList.toggle('editing',open);toggle.textContent=open?'完成':'編輯';syncSortAvailability(box)};
     const sel=$('.variant-select',node),arr=state.imageFiles.get(item.artNo)||[],custom=item.customImage;
     if(custom){
@@ -427,7 +462,7 @@ function renderItems(){
     sel.onchange=e=>{
       if(e.target.value==='__custom__')return;
       if(custom)revokeCustomImage(item);
-      item.imageVariant=e.target.value;renderItems();schedulePreview();
+      item.imageVariant=e.target.value;item.imageGrayscale=false;item.imageAutoMatched=false;renderItems();schedulePreview();
     };
     const uploadBtn=$('.upload-image-btn',node),cameraBtn=$('.camera-image-btn',node),uploadInput=$('.upload-image-input',node),cameraInput=$('.camera-image-input',node),restoreBtn=$('.restore-db-image',node),customNote=$('.custom-image-note',node);
     uploadBtn.onclick=()=>uploadInput.click();
@@ -544,7 +579,7 @@ function currencyWords(code){
 }
 function renderPreview(){
   const t=totals();
-  const rows=formalItems().map((x,i)=>{const img=getImg(x)?.url||placeholder('No Image');return `<tr><td>${i+1}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${effectiveDescriptions(x).filter(Boolean).map(esc).join('<br>')}</td><td class="preview-picture"><img src="${esc(img)}" alt="${esc(x.artNo)}"></td><td class="qty-cell">${x.qty}</td><td class="unit-cell">${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`}).join('');
+  const rows=formalItems().map((x,i)=>{const selected=getImg(x),img=selected?.url||placeholder('No Image'),gray=selected?.grayscale?' grayscale-image':'';return `<tr><td>${i+1}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${effectiveDescriptions(x).filter(Boolean).map(esc).join('<br>')}</td><td class="preview-picture"><img class="${gray.trim()}" src="${esc(img)}" alt="${esc(x.artNo)}"></td><td class="qty-cell">${x.qty}</td><td class="unit-cell">${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`}).join('');
   $('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid screen-preview"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta print-only print-banker"><strong>Vendor's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Picture</th><th class="qty-head">Quantity</th><th class="unit-head">Unit</th><th class="num">Unit Price</th><th class="num amount-head"><span>Amount</span><small>F.O.B. Value</small></th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc(currencyCode())})</span><strong>${fmt(t.total)}</strong></div></div><p class="remark-preview"><strong>Remark :</strong><br>${esc($('#remark').value).replace(/\n/g,'<br>')}</p></div>`;
 }
 
@@ -561,7 +596,12 @@ function downloadBlob(blob,fileName){
   a.href=url;a.download=fileName;document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),3000);
 }
-async function imageFileToJpegDataUrl(file,maxSide=620,quality=.82){
+function grayscaleCanvas(ctx,width,height){
+  const imageData=ctx.getImageData(0,0,width,height),d=imageData.data;
+  for(let i=0;i<d.length;i+=4){const y=Math.round(.299*d[i]+.587*d[i+1]+.114*d[i+2]);d[i]=d[i+1]=d[i+2]=y}
+  ctx.putImageData(imageData,0,0);
+}
+async function imageFileToJpegDataUrl(file,maxSide=620,quality=.82,grayscale=false){
   if(!file)return null;
   const source=URL.createObjectURL(file);
   try{
@@ -570,11 +610,11 @@ async function imageFileToJpegDataUrl(file,maxSide=620,quality=.82){
     const w=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
     const h=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
     const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
-    const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);if(grayscale)grayscaleCanvas(ctx,w,h);
     return canvas.toDataURL('image/jpeg',quality);
   }finally{URL.revokeObjectURL(source)}
 }
-async function imageFileToJpegAsset(file,maxSide=700,quality=.84){
+async function imageFileToJpegAsset(file,maxSide=700,quality=.84,grayscale=false){
   if(!file)return null;
   const source=URL.createObjectURL(file);
   try{
@@ -583,7 +623,7 @@ async function imageFileToJpegAsset(file,maxSide=700,quality=.84){
     const width=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
     const height=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
     const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
-    const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,width,height);ctx.drawImage(img,0,0,width,height);
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,width,height);ctx.drawImage(img,0,0,width,height);if(grayscale)grayscaleCanvas(ctx,width,height);
     return {base64:canvas.toDataURL('image/jpeg',quality),width,height};
   }finally{URL.revokeObjectURL(source)}
 }
@@ -832,7 +872,7 @@ async function exportInvoiceFromTemplate(){
     const selected=getImg(item);
     if(selected?.file){
       try{
-        const asset=await imageFileToJpegAsset(selected.file,620,.84);
+        const asset=await imageFileToJpegAsset(selected.file,620,.84,!!selected.grayscale);
         const imageId=wb.addImage({base64:asset.base64,extension:'jpeg'});
         const imageStartColNo=excelColNumber(imageStartCol),imageEndColNo=excelColNumber(imageEndCol);
         const imageEndRow=start+3;
@@ -996,7 +1036,7 @@ async function exportInvoiceExcel(){
       const selected=getImg(item);
       if(selected?.file){
         try{
-          const dataUrl=await imageFileToJpegDataUrl(selected.file);
+          const dataUrl=await imageFileToJpegDataUrl(selected.file,620,.82,!!selected.grayscale);
           const imageId=wb.addImage({base64:dataUrl,extension:'jpeg'});
           ws.addImage(imageId,{tl:{col:3.01,row:start-1+.01},br:{col:3.99,row:start+3.99},editAs:'oneCell'});
         }catch{missingImages++}
@@ -1165,7 +1205,7 @@ function renderStockSearch(){
   const shown=all.filter(x=>(selectedTypes.length===0||selectedTypes.includes(articleType(x.artNo)))&&(selectedStones.length===0||stoneCodesForProduct(x).some(code=>selectedStones.includes(code)))).sort((a,b)=>articleType(a.artNo).localeCompare(articleType(b.artNo))||a.artNo.localeCompare(b.artNo)||String(a.lotNo).localeCompare(String(b.lotNo)));
   const counts={AVAILABLE:0,CONSIGNED:0,SOLD_ON_HAND:0,SOLD_DELIVERED:0};for(const x of all)counts[x.status]=(counts[x.status]||0)+1;$('#stockSearchMessage').textContent=`搜尋 ${core}：找到 ${all.length} 件，目前顯示 ${shown.length} 件。`;$('#stockSearchSummary').innerHTML=`<span class="stock-summary-chip">Avail ${counts.AVAILABLE||0}</span><span class="stock-summary-chip">Consign ${counts.CONSIGNED||0}</span><span class="stock-summary-chip">Sold-OH ${counts.SOLD_ON_HAND||0}</span><span class="stock-summary-chip">Deliv ${counts.SOLD_DELIVERED||0}</span>`;$('#stockSearchSummary').classList.remove('hidden');
   if(!shown.length){resultsEl.innerHTML='<div class="notice">沒有符合目前款式／石頭篩選的貨品。</div>';return}
-  resultsEl.innerHTML='';for(const x of shown){const card=document.createElement('div');card.className='stock-result';const imageList=state.imageFiles.get(x.artNo)||[],wantedVariant=chooseVariant(x),matchedImage=imageList.find(img=>img.variant===wantedVariant)||imageList.find(img=>img.variant.toUpperCase()===String(wantedVariant).toUpperCase())||imageList.find(img=>img.variant==='Default')||imageList[0],img=matchedImage?.url||placeholder(x.artNo),inDoc=state.items.some(i=>String(i.lotNo)===String(x.lotNo)),canAdd=x.status==='AVAILABLE'||(x.status==='SOLD_ON_HAND'&&state.documentType!=='consignment');card.innerHTML=`<img src="${esc(img)}" alt="${esc(x.artNo)}"><div><h4>${esc(x.artNo)}</h4><div class="lot">LOTNO ${esc(x.lotNo)}</div><div class="desc">${esc((x.descriptions||[]).join('\n'))}</div></div><div class="stock-result-actions"><span class="stock-status ${historyStatusClass(x.status)}">${esc(historyStatusLabel(x.status))}</span>${inDoc?'<span class="stock-current-doc">已在目前文件</span>':''}</div>`;const actions=$('.stock-result-actions',card);if(canAdd&&!inDoc){const b=document.createElement('button');b.type='button';b.textContent=`加入目前 ${documentLabels().short}`;b.onclick=()=>{if(addProductToDocument(x,{fromSearch:true})){b.disabled=true;b.textContent='已加入';renderStockSearch()}};actions.appendChild(b)}if(x.status==='SOLD_ON_HAND'){const d=document.createElement('button');d.type='button';d.className='ghost';d.textContent='標記已交貨';d.onclick=()=>{if(confirm(`${x.artNo} / LOTNO ${x.lotNo}\n標記為 Sold - Delivered？`))markInventoryDelivered(x.lotNo)};actions.appendChild(d)}resultsEl.appendChild(card)}
+  resultsEl.innerHTML='';for(const x of shown){const card=document.createElement('div');card.className='stock-result';const imageList=state.imageFiles.get(x.artNo)||[],imageMatch=chooseImageMatch(x),matchedImage=imageList.find(img=>img.variant===imageMatch.variant)||imageList.find(img=>img.variant.toUpperCase()===String(imageMatch.variant).toUpperCase())||imageList.find(img=>img.variant==='Default')||imageList[0],img=matchedImage?.url||placeholder(x.artNo),grayClass=imageMatch.grayscale?'grayscale-image':'',inDoc=state.items.some(i=>String(i.lotNo)===String(x.lotNo)),canAdd=x.status==='AVAILABLE'||(x.status==='SOLD_ON_HAND'&&state.documentType!=='consignment');card.innerHTML=`<img class="${grayClass}" src="${esc(img)}" alt="${esc(x.artNo)}"><div><h4>${esc(x.artNo)}</h4><div class="lot">LOTNO ${esc(x.lotNo)}</div><div class="desc">${esc((x.descriptions||[]).join('\n'))}</div></div><div class="stock-result-actions"><span class="stock-status ${historyStatusClass(x.status)}">${esc(historyStatusLabel(x.status))}</span>${inDoc?'<span class="stock-current-doc">已在目前文件</span>':''}</div>`;const actions=$('.stock-result-actions',card);if(canAdd&&!inDoc){const b=document.createElement('button');b.type='button';b.textContent=`加入目前 ${documentLabels().short}`;b.onclick=()=>{if(addProductToDocument(x,{fromSearch:true})){b.disabled=true;b.textContent='已加入';renderStockSearch()}};actions.appendChild(b)}if(x.status==='SOLD_ON_HAND'){const d=document.createElement('button');d.type='button';d.className='ghost';d.textContent='標記已交貨';d.onclick=()=>{if(confirm(`${x.artNo} / LOTNO ${x.lotNo}\n標記為 Sold - Delivered？`))markInventoryDelivered(x.lotNo)};actions.appendChild(d)}resultsEl.appendChild(card)}
 }
 $('#stockSearchBtn').onclick=runStockSearch;$('#stockSearchInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runStockSearch()}};$('#stockSearchInput').oninput=e=>{e.target.value=e.target.value.toUpperCase()};
 $$('input[name="quoteKarat"]').forEach(r=>r.onchange=e=>setQuoteKarat(e.target.value));$('#refreshGoldBtn').onclick=()=>fetchKitcoAsk();let goldInputTimer=null;$('#kitcoAskInput').oninput=e=>{clearTimeout(goldInputTimer);goldInputTimer=setTimeout(()=>{const n=Number(e.target.value);if(n>0)setKitcoAsk(n,{source:'manual',message:`手動 Kitco Ask：USD ${n.toFixed(2)} / oz`});else{state.quote.kitcoAsk=0;syncEffectivePrices({clearCurrentOverride:true});renderItems();updateGoldQuoteUI('請輸入大於 0 的 Kitco Ask。','error')}},180)};

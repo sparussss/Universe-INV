@@ -1,4 +1,12 @@
-# Universe Invoice PWA v0.11.22
+# Universe Invoice PWA v0.11.23
+
+
+## v0.11.23 stone-first image fallback
+
+- 圖片自動配對以**石頭為第一優先**。完全／組合石種匹配成功時維持彩色圖片；同石種有多張候選時，再盡量按原始 18K DESC1 的 Y / W / R 成色對應 `18KY / 18KW / 18KR`。
+- 若同 ARTNO **完全找不到對應石種圖片**，PWA 會選同款最合適的參考圖並自動以**黑白**顯示，避免以錯誤石色誤導客人。
+- 黑白 fallback 同步套用到建立文件縮圖、文件預覽、配套搜尋，以及 Excel / PDF 輸出；Pictures 原始圖片檔不會被修改。
+- `CDM` 不參與主圖片石種選擇。14K Quotation 的圖片成色仍依原始庫存 DESC1 判斷，而不是 585 轉換後文字。
 
 ## v0.11.22 combined-stone image matching
 
