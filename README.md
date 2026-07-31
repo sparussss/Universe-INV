@@ -1,4 +1,10 @@
-# Universe Invoice PWA v0.11.21
+# Universe Invoice PWA v0.11.22
+
+## v0.11.22 combined-stone image matching
+
+- 圖片變體配對加入「包含石種」邏輯：若 DESC2 的主石沒有完全同名圖片，但存在組合圖片，例如 `MCT+CT+LQZ`，系統會把它視為可匹配 `MCT`、`CT`、`LQZ` 的圖片。
+- 配對優先順序維持：完全同名變體 → 包含主石的組合變體（優先較少組合項）→ Default／第一張圖片。
+- 下拉選單仍顯示實際檔名變體，不建立不存在的虛擬 `MCT.JPG`。
 
 ## v0.11.21 quotation / companion search / drag refinement
 

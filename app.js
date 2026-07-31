@@ -299,6 +299,13 @@ $('#customerSearch').oninput=e=>{
   customerSearchTimer=setTimeout(showMatches,120);
 };
 function renderCustomerSummary(){const code=$('#customerCode').value,name=$('#customerName').value,currency=currencyCode(),fx=currency==='USD'?'':(currentFxRate()>0?` · FX 1 USD = ${currentFxRate()} ${currency}`:' · FX 未設定');$('#selectedCustomerSummary').innerHTML=code||name?`<strong>${esc(code)} · ${esc(name)}</strong><span>Sales Rate ${esc($('#salesRate').value)} · ${esc(currency)}${esc(fx)}</span>`:'尚未選擇客戶。'}
+function variantContainsStone(variant,wanted){
+  const normalizeStonePhrase=v=>String(v||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+  const target=normalizeStonePhrase(wanted);if(!target)return false;
+  return String(variant||'').split('+').some(part=>{
+    const phrase=normalizeStonePhrase(part);return phrase===target||(` ${phrase} `).includes(` ${target} `);
+  });
+}
 function chooseVariant(p){
   const imgs=state.imageFiles.get(p.artNo)||[];if(!imgs.length)return'Default';
   const d=(p.desc2||'').toUpperCase();
@@ -311,7 +318,15 @@ function chooseVariant(p){
   const candidates=[];
   if(ordered.length>1){candidates.push(ordered.join('+'));candidates.push([...ordered].reverse().join('+'))}
   candidates.push(...ordered);
+  // 1) Prefer an exact image variant match.
   for(const wanted of candidates){const hit=imgs.find(x=>x.variant.toUpperCase()===wanted);if(hit)return hit.variant}
+  // 2) If the main stone only exists inside a combination filename (e.g. MCT+CT+LQZ),
+  //    accept that combination. Prefer the variant with the fewest '+' components.
+  for(const wanted of ordered){
+    const combo=imgs.filter(x=>x.variant!=='Default'&&variantContainsStone(x.variant,wanted))
+      .sort((a,b)=>a.variant.split('+').length-b.variant.split('+').length||a.variant.length-b.variant.length)[0];
+    if(combo)return combo.variant;
+  }
   return imgs.find(x=>x.variant==='Default')?.variant||imgs[0].variant
 }
 function normalizeLotInput(raw){
