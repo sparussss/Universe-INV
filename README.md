@@ -1,5 +1,15 @@
-# Universe Invoice PWA v0.11.17
+# Universe Invoice PWA v0.11.18
 
+
+
+## v0.11.18 exhibition workflow refinements
+
+- EUR reference FX source changed from Frankfurter to **Bank of China (Hong Kong) / BOCHK** T/T rates against USD. For EUR/USD, the PWA takes the midpoint of BOCHK Customer Sell and Customer Buy, then uses its reciprocal as the USD→EUR quotation rate. Manual FX override and cached fallback remain available.
+- EUR Unit Price is rounded to the nearest whole euro after all pricing/FX/14K calculations, while all EUR money displays and Excel formats keep two decimal places, e.g. `€637.00`.
+- Companion-search stone filters no longer show `CDM`; CDM remains visible in product descriptions. Stone filter chip labels are centred.
+- Companion-search status summary is kept on one compact line using `Avail`, `Consign`, `Sold-OH`, and `Deliv`.
+- Companion-search result actions stay in the right-side action column on iPhone instead of adding a bottom action row.
+- Build-document item `編輯` action is moved to the right-side action rail below the `≡` order button, reducing item-card height.
 
 ## v0.11.17 work-trial fixes
 

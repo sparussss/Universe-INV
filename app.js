@@ -118,24 +118,26 @@ async function fetchKitcoAsk({silent=false}={}){
 }
 function setQuoteKarat(value){state.quote.karat=value==='14K'?'14K':'18K';$$('input[name="quoteKarat"]').forEach(x=>x.checked=x.value===state.quote.karat);syncEffectivePrices();updateGoldQuoteUI();renderItems();schedulePreview();if(quote14KMode()){if(!state.quote.kitcoAsk)loadKitcoCache();updateGoldQuoteUI();fetchKitcoAsk({silent:!!state.quote.kitcoAsk})}}
 loadInventoryHistory();loadKitcoCache();
-const FX_API='https://api.frankfurter.dev/v2/rate';
-const FX_API_V1='https://api.frankfurter.dev/v1/latest';
+const BOCHK_FX_PAGE='https://www.bochk.com/whk/rates/exchangeRatesUSD/exchangeRatesUSD-input.action?lang=en';
 function currencyCode(){return norm($('#currency')?.value||'USD').toUpperCase()||'USD'}
-function currencyDigits(code=currencyCode()){return code==='EUR'||code==='JPY'?0:2}
-function roundCurrency(v,code=currencyCode()){const p=10**currencyDigits(code);return Math.round((Number(v)||0)*p+Number.EPSILON)/p}
-function fmt(v,code=currencyCode()){return new Intl.NumberFormat('en-US',{style:'currency',currency:code,minimumFractionDigits:currencyDigits(code),maximumFractionDigits:currencyDigits(code)}).format(Number(v)||0)}
+// USD and EUR are displayed with 2 decimals. EUR Unit Price itself is rounded
+// to a whole euro before Amount/Sub Total/Total are calculated.
+function currencyDigits(){return 2}
+function roundCurrency(v,code=currencyCode()){const p=100;return Math.round((Number(v)||0)*p+Number.EPSILON)/p}
+function roundUnitPrice(v,code=currencyCode()){const n=Math.max(0,Number(v)||0);return code==='EUR'?Math.round(n):roundCurrency(n,code)}
+function fmt(v,code=currencyCode()){return new Intl.NumberFormat('en-US',{style:'currency',currency:code,minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v)||0)}
 function currencyExcelFormat(code=currencyCode(),negative=false){
-  const formats={USD:'$#,##0.00',EUR:'€#,##0',GBP:'£#,##0.00',CNY:'"CNY" #,##0.00',JPY:'¥#,##0',HKD:'"HK$" #,##0.00'};
+  const formats={USD:'$#,##0.00',EUR:'€#,##0.00'};
   const positive=formats[code]||`"${code}" #,##0.00`;
   if(!negative)return positive;
   const body=positive.replace(/^([^#0]*)(.*)$/,'$1$2');
   return `(${body});(${body});${positive}`;
 }
-function fxCacheKey(code){return `universeFx_USD_${code}`}
+function fxCacheKey(code){return `universeFx_BOCHK_USD_${code}`}
 function currentFxRate(){if(currencyCode()==='USD')return 1;const v=Number($('#fxRate')?.value);return Number.isFinite(v)&&v>0?v:0}
 function fxPricingReady(){return currencyCode()==='USD'||currentFxRate()>0}
 function baseUsdPrice(item){const stored=Number(item.usdUnitPrice);return Number.isFinite(stored)&&stored>=0?stored:Math.max(0,Number(item.unitPrice)||0)}
-function convertedFromUsd(usd){const code=currencyCode();if(code==='USD')return roundCurrency(usd,'USD');const rate=currentFxRate();return rate>0?roundCurrency(usd*rate,code):0}
+function convertedFromUsd(usd){const code=currencyCode();if(code==='USD')return roundUnitPrice(usd,'USD');const rate=currentFxRate();return rate>0?roundUnitPrice(usd*rate,code):0}
 function syncEffectivePrices({clearCurrentOverride=false}={}){
   const code=currencyCode();
   for(const item of state.items){
@@ -163,34 +165,45 @@ function applyFxRate(rate,date='',source='manual',message=''){
   renderItems();renderCustomerSummary();schedulePreview();
   if(message)setFxStatus(message,source==='online'?'ok':source==='cache'?'warn':'');
 }
+function parseBochkEurUsd(html){
+  const text=String(html||'').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
+  const row=text.match(/EUR\s*\/\s*USD\s+([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)/i);
+  if(!row)throw new Error('BOCHK 頁面找不到 EUR/USD Customer Sell / Buy');
+  const sell=Number(row[1]),buy=Number(row[2]);
+  if(!(sell>0&&buy>0))throw new Error('BOCHK EUR/USD 匯率無效');
+  const mid=(sell+buy)/2,rate=1/mid;
+  const dm=text.match(/Information last updated at HK Time:\s*([0-9]{4}\/[0-9]{2}\/[0-9]{2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})/i);
+  return{sell,buy,mid,rate,date:dm?dm[1]:''};
+}
+async function fetchBochkPage(signal){
+  let directErr='';
+  try{
+    const res=await fetch(BOCHK_FX_PAGE,{cache:'no-store',signal});
+    if(!res.ok)throw new Error(`BOCHK HTTP ${res.status}`);
+    return{html:await res.text(),viaRelay:false};
+  }catch(err){directErr=err?.message||String(err)}
+  const relay=`https://api.allorigins.win/raw?url=${encodeURIComponent(BOCHK_FX_PAGE)}`;
+  const res=await fetch(relay,{cache:'no-store',signal});
+  if(!res.ok)throw new Error(`BOCHK relay HTTP ${res.status}; ${directErr}`);
+  return{html:await res.text(),viaRelay:true};
+}
 async function fetchReferenceFxRate({silent=false}={}){
   const code=currencyCode();updateFxPanel();if(code==='USD')return;
+  if(code!=='EUR'){setFxStatus(`目前只支援 USD / EUR。`,'error');return}
   if(state.fx.fetching)return;
   state.fx.fetching=true;$('#refreshFxBtn').disabled=true;
-  if(!silent)setFxStatus(`正在取得 USD → ${code} 參考匯率…`);
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+  if(!silent)setFxStatus('正在取得 BOCHK EUR/USD 買入／賣出中間價…');
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),14000);
   try{
-    let rate=0,date='',sourceLabel='Frankfurter v2';
-    try{
-      const res=await fetch(`${FX_API}/USD/${encodeURIComponent(code)}`,{cache:'no-store',signal:controller.signal});
-      if(!res.ok)throw new Error(`v2 HTTP ${res.status}`);
-      const data=await res.json();
-      rate=Number(data.rate);date=norm(data.date);
-      if(!(Number.isFinite(rate)&&rate>0))throw new Error('v2 回傳匯率無效');
-    }catch(v2err){
-      const res=await fetch(`${FX_API_V1}?base=USD&symbols=${encodeURIComponent(code)}`,{cache:'no-store',signal:controller.signal});
-      if(!res.ok)throw new Error(`v1 HTTP ${res.status}; ${v2err?.message||v2err}`);
-      const data=await res.json();
-      rate=Number(data?.rates?.[code]);date=norm(data.date);sourceLabel='Frankfurter v1 fallback';
-      if(!(Number.isFinite(rate)&&rate>0))throw new Error(`v1 回傳匯率無效; ${v2err?.message||v2err}`);
-    }
-    saveFxCache(code,rate,date);
-    applyFxRate(rate,date,'online',`線上參考匯率 · ${date||'最新工作日'} · ${sourceLabel}`);
+    const page=await fetchBochkPage(controller.signal),q=parseBochkEurUsd(page.html),rate=q.rate;
+    saveFxCache(code,rate,q.date);
+    const route=page.viaRelay?' · 網頁備援':'',message=`BOCHK · Sell ${q.sell.toFixed(6)} · Buy ${q.buy.toFixed(6)} · Mid ${q.mid.toFixed(6)} · ${q.date||'最新'}${route}`;
+    applyFxRate(rate,q.date,'online',message);
   }catch(err){
     const cached=loadFxCache(code);
-    console.warn('FX fetch failed',code,err);
-    if(cached){applyFxRate(cached.rate,cached.date,'cache',`未能更新；沿用上次參考匯率 · ${cached.date||new Date(cached.fetchedAt).toLocaleDateString('zh-HK')}`)}
-    else{state.fx={rate:0,date:'',source:'error',fetching:false};$('#fxRate').value='';syncEffectivePrices({clearCurrentOverride:true});renderItems();updateTotals();setFxStatus(`無法取得 ${code} 最新匯率，請手動輸入 FX Rate。`,'error')}
+    console.warn('BOCHK FX fetch failed',code,err);
+    if(cached){applyFxRate(cached.rate,cached.date,'cache',`BOCHK 未能更新；沿用上次匯率 · ${cached.date||new Date(cached.fetchedAt).toLocaleDateString('zh-HK')}`)}
+    else{state.fx={rate:0,date:'',source:'error',fetching:false};$('#fxRate').value='';syncEffectivePrices({clearCurrentOverride:true});renderItems();updateTotals();setFxStatus('無法取得 BOCHK EUR 最新匯率，請手動輸入 FX Rate。','error')}
   }finally{clearTimeout(timer);state.fx.fetching=false;$('#refreshFxBtn').disabled=false}
 }
 async function handleCurrencyChange(){
@@ -394,7 +407,7 @@ function renderItems(){
     if(quote14KMode()){const p18=parse18KDesc1((item.descriptions||[])[0]),m=goldMetrics();if(p18&&m){const w14=roundUpWeight05(p18.weight*K14_WEIGHT_FACTOR),diff=goldDifferenceUsd(item),u14=effectiveUsdPrice(item);note.textContent=code==='USD'?`14K：${p18.weight.toFixed(2)}g → ${w14.toFixed(2)}g · ${fmt(usd,'USD')} − ${fmt(diff,'USD')} → ${fmt(u14,'USD')}`:(fxPricingReady()?`14K：${p18.weight.toFixed(2)}g → ${w14.toFixed(2)}g · ${fmt(u14,'USD')} × ${currentFxRate()} → ${fmt(item.unitPrice,code)}`:`14K：${w14.toFixed(2)}g · 等待 FX Rate`);note.classList.add('quote14-price-note');const badge=document.createElement('span');badge.className='quote14-badge';badge.textContent='14K';$('.item-artno',node).after(badge)}else note.textContent='14K 參考報價：等待 Kitco Ask／DESC1 無法辨識 18K 金重';}
     else note.textContent=code==='USD'?`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')}`:(fxPricingReady()?`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')} × ${currentFxRate()} → ${fmt(item.unitPrice,code)}`:`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')} · 等待 FX Rate`);
     $('.item-thumb',node).src=getImg(item)?.url||placeholder(item.artNo);
-    const controls=$('.item-controls',node),toggle=$('.item-edit-toggle',node);toggle.onclick=()=>{const open=controls.classList.toggle('open');node.classList.toggle('editing',open);toggle.textContent=open?'完成 ▴':'編輯 ▾'};
+    const controls=$('.item-controls',node),toggle=$('.item-edit-toggle',node);toggle.onclick=()=>{const open=controls.classList.toggle('open');node.classList.toggle('editing',open);toggle.textContent=open?'完成':'編輯'};
     const sel=$('.variant-select',node),arr=state.imageFiles.get(item.artNo)||[],custom=item.customImage;
     if(custom){
       const o=document.createElement('option');o.value='__custom__';o.textContent=custom.source==='camera'?'圖片：即時拍照':'圖片：上傳';o.selected=true;sel.appendChild(o);
@@ -420,7 +433,7 @@ function renderItems(){
     }
     $('.qty-input',node).value=item.qty;$('.price-input',node).value=item.unitPrice;
     $('.qty-input',node).onchange=e=>{item.qty=Math.max(1,Number(e.target.value)||1);updateTotals()};
-    $('.price-input',node).onchange=e=>{const code=currencyCode(),raw=Math.max(0,Number(e.target.value)||0),value=roundCurrency(raw,code),overrides=activePriceOverrides(item);overrides[code]=value;item.unitPrice=value;if(code==='USD'&&!quote14KMode())item.usdUnitPrice=value;updateTotals()};
+    $('.price-input',node).onchange=e=>{const code=currencyCode(),raw=Math.max(0,Number(e.target.value)||0),value=roundUnitPrice(raw,code),overrides=activePriceOverrides(item);overrides[code]=value;item.unitPrice=value;if(code==='USD'&&!quote14KMode())item.usdUnitPrice=value;updateTotals()};
     $('.delete-item',node).onclick=()=>{if(confirm(`刪除 ${item.artNo}？`)){revokeCustomImage(item);state.items=state.items.filter(x=>x.id!==item.id);normalizeItemSequence();renderItems()}};
     box.appendChild(node)
   });
@@ -1085,7 +1098,7 @@ $('#confirmInvoiceBtn').onclick=()=>{const l=documentLabels();if(confirm(`${l.co
 
 function articleCore(value){const s=normArt(value),m=s.match(/(\d{3,})/);return m?m[1]:s.replace(/^[A-Z]+[-\s]*/,'').replace(/\.[A-Z0-9]+$/,'')}
 function articleType(value){const m=normArt(value).match(/^([A-Z]+)/);return m?m[1]:'OTHER'}
-function stoneCodesForProduct(p){const text=(p.descriptions||[]).join(' ').toUpperCase(),known=new Set([...activeStoneAliases().keys(),'CDM','PSA','MCT','RGT','GGTR','GGT','SAR','BSA']);const out=[];for(const c of [...known].map(x=>norm(x).toUpperCase()).filter(Boolean).sort((a,b)=>b.length-a.length)){if(text.includes(c)&&!out.includes(c))out.push(c)}return out}
+function stoneCodesForProduct(p){const text=(p.descriptions||[]).join(' ').toUpperCase(),known=new Set([...activeStoneAliases().keys(),'PSA','MCT','RGT','GGTR','GGT','SAR','BSA']);const out=[];for(const c of [...known].map(x=>norm(x).toUpperCase()).filter(Boolean).sort((a,b)=>b.length-a.length)){if(c==='CDM')continue;if(text.includes(c)&&!out.includes(c))out.push(c)}return out}
 function inventorySearchRecords(){const map=new Map();for(const p of state.stockCatalog.values())map.set(String(p.lotNo),{...productSnapshot(p),status:'AVAILABLE'});for(const p of state.products.values())map.set(String(p.lotNo),{...productSnapshot(p),status:'AVAILABLE'});for(const h of state.inventoryHistory.values())map.set(String(h.lotNo),{...h,status:h.status||'AVAILABLE'});return [...map.values()]}
 function filterButtonHTML(value,label,active){return `<button type="button" class="filter-chip${active?' active':''}" data-value="${esc(value)}">${esc(label)}</button>`}
 function selectedStockFilters(kind){const key=kind==='type'?'types':'stones',v=state.stockSearch[key];return Array.isArray(v)?v:[]}
@@ -1103,7 +1116,7 @@ function renderStockSearch(){
   const selectedTypes=selectedStockFilters('type'),selectedStones=selectedStockFilters('stone');
   const typeBox=$('#stockTypeFilters'),stoneBox=$('#stockStoneFilters');typeBox.dataset.kind='type';stoneBox.dataset.kind='stone';typeBox.innerHTML=`<div class="filter-chips">${filterButtonHTML('ALL','全部',selectedTypes.length===0)}${types.map(x=>filterButtonHTML(x,x,selectedTypes.includes(x))).join('')}</div>`;stoneBox.innerHTML=`<div class="filter-chips">${filterButtonHTML('ALL','全部',selectedStones.length===0)}${stones.map(x=>filterButtonHTML(x,x,selectedStones.includes(x))).join('')}</div>`;typeBox.classList.toggle('hidden',!types.length);stoneBox.classList.toggle('hidden',!stones.length);typeBox.querySelectorAll('.filter-chip').forEach(b=>b.onclick=()=>toggleStockFilter('type',b.dataset.value));stoneBox.querySelectorAll('.filter-chip').forEach(b=>b.onclick=()=>toggleStockFilter('stone',b.dataset.value));
   const shown=all.filter(x=>(selectedTypes.length===0||selectedTypes.includes(articleType(x.artNo)))&&(selectedStones.length===0||stoneCodesForProduct(x).some(code=>selectedStones.includes(code)))).sort((a,b)=>articleType(a.artNo).localeCompare(articleType(b.artNo))||a.artNo.localeCompare(b.artNo)||String(a.lotNo).localeCompare(String(b.lotNo)));
-  const counts={AVAILABLE:0,CONSIGNED:0,SOLD_ON_HAND:0,SOLD_DELIVERED:0};for(const x of all)counts[x.status]=(counts[x.status]||0)+1;$('#stockSearchMessage').textContent=`搜尋 ${core}：找到 ${all.length} 件，目前顯示 ${shown.length} 件。`;$('#stockSearchSummary').innerHTML=`<span class="stock-summary-chip">Available ${counts.AVAILABLE||0}</span><span class="stock-summary-chip">Consigned ${counts.CONSIGNED||0}</span><span class="stock-summary-chip">Sold - On Hand ${counts.SOLD_ON_HAND||0}</span><span class="stock-summary-chip">Sold - Delivered ${counts.SOLD_DELIVERED||0}</span>`;$('#stockSearchSummary').classList.remove('hidden');
+  const counts={AVAILABLE:0,CONSIGNED:0,SOLD_ON_HAND:0,SOLD_DELIVERED:0};for(const x of all)counts[x.status]=(counts[x.status]||0)+1;$('#stockSearchMessage').textContent=`搜尋 ${core}：找到 ${all.length} 件，目前顯示 ${shown.length} 件。`;$('#stockSearchSummary').innerHTML=`<span class="stock-summary-chip">Avail ${counts.AVAILABLE||0}</span><span class="stock-summary-chip">Consign ${counts.CONSIGNED||0}</span><span class="stock-summary-chip">Sold-OH ${counts.SOLD_ON_HAND||0}</span><span class="stock-summary-chip">Deliv ${counts.SOLD_DELIVERED||0}</span>`;$('#stockSearchSummary').classList.remove('hidden');
   if(!shown.length){resultsEl.innerHTML='<div class="notice">沒有符合目前款式／石頭篩選的貨品。</div>';return}
   resultsEl.innerHTML='';for(const x of shown){const card=document.createElement('div');card.className='stock-result';const img=(state.imageFiles.get(x.artNo)||[])[0]?.url||placeholder(x.artNo),inDoc=state.items.some(i=>String(i.lotNo)===String(x.lotNo)),canAdd=x.status==='AVAILABLE'||(x.status==='SOLD_ON_HAND'&&state.documentType!=='consignment');card.innerHTML=`<img src="${esc(img)}" alt="${esc(x.artNo)}"><div><h4>${esc(x.artNo)}</h4><div class="lot">LOTNO ${esc(x.lotNo)}</div><div class="desc">${esc((x.descriptions||[]).join('\n'))}</div></div><div class="stock-result-actions"><span class="stock-status ${historyStatusClass(x.status)}">${esc(historyStatusLabel(x.status))}</span>${inDoc?'<span class="stock-current-doc">已在目前文件</span>':''}</div>`;const actions=$('.stock-result-actions',card);if(canAdd&&!inDoc){const b=document.createElement('button');b.type='button';b.textContent=`加入目前 ${documentLabels().short}`;b.onclick=()=>{if(addProductToDocument(x,{fromSearch:true})){b.disabled=true;b.textContent='已加入';renderStockSearch()}};actions.appendChild(b)}if(x.status==='SOLD_ON_HAND'){const d=document.createElement('button');d.type='button';d.className='ghost';d.textContent='標記已交貨';d.onclick=()=>{if(confirm(`${x.artNo} / LOTNO ${x.lotNo}\n標記為 Sold - Delivered？`))markInventoryDelivered(x.lotNo)};actions.appendChild(d)}resultsEl.appendChild(card)}
 }

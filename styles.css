@@ -188,3 +188,30 @@ button{width:auto}
 .stock-search-summary{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}.stock-summary-chip{padding:6px 9px;border-radius:999px;background:#f4f7fb;font-size:12px;color:#344054}.stock-search-results{display:grid;gap:10px;margin-top:12px}.stock-result{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px;border:1px solid #d7dde7;border-radius:13px}.stock-result img{width:76px;height:76px;object-fit:contain;background:#f8fafc;border-radius:10px}.stock-result h4{margin:0 0 2px;font-size:17px}.stock-result .lot{font-size:12px;color:#667085}.stock-result .desc{margin-top:6px;font-size:12px;line-height:1.35;white-space:pre-line}.stock-result-actions{display:flex;flex-direction:column;align-items:flex-end;gap:7px}.stock-status{display:inline-flex;padding:5px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}.stock-status.available{background:#ecfdf3;color:#067647}.stock-status.consigned{background:#fff7e6;color:#b54708}.stock-status.sold-on-hand{background:#eef4ff;color:#175cd3}.stock-status.sold-delivered{background:#f2f4f7;color:#667085}.stock-current-doc{font-size:11px;color:#7a5af8}.stock-result button{padding:7px 9px;font-size:12px}
 .quote14-badge{display:inline-block;margin-left:6px;padding:2px 6px;border-radius:999px;background:#fff4e5;color:#b54708;font-size:11px;font-weight:700}.quote14-price-note{color:#b54708!important}
 @media(max-width:600px){.gold-metrics{grid-template-columns:1fr}.stock-search-row{display:grid;grid-template-columns:1fr auto}.stock-result{grid-template-columns:64px minmax(0,1fr)}.stock-result img{width:64px;height:64px}.stock-result-actions{grid-column:1/-1;flex-direction:row;align-items:center;justify-content:flex-end;flex-wrap:wrap}.quote-karat-switch{grid-template-columns:1fr 1fr}.stock-search-title{align-items:flex-start}}
+
+/* v0.11.18 BOCHK FX + compact exhibition workflow refinements */
+.filter-chip{display:inline-flex;align-items:center;justify-content:center;text-align:center}
+.stock-search-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin:12px 0 4px;overflow:visible}
+.stock-summary-chip{display:block;min-width:0;padding:6px 4px;text-align:center;font-size:11px;line-height:1.1;white-space:nowrap}
+.item-side-actions{display:flex;flex-direction:column;align-items:stretch;gap:7px;min-width:0}
+.item-side-actions .drag-handle,.item-side-actions .item-edit-toggle{width:100%;margin:0}
+.item-side-actions .item-edit-toggle{min-height:36px;padding:6px 4px;font-size:11px}
+.stock-result-actions{min-width:96px}
+.stock-result-actions button{max-width:104px;white-space:normal;text-align:center;line-height:1.2}
+@media(max-width:800px){
+  .compact-item{grid-template-columns:28px 68px minmax(0,1fr) 56px}
+  .stock-result{grid-template-columns:64px minmax(0,1fr) 96px;gap:9px}
+  .stock-result-actions{grid-column:auto;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:6px;min-width:0}
+  .stock-result-actions .stock-status,.stock-result-actions .stock-current-doc{text-align:center;justify-content:center}
+  .stock-result-actions button{width:100%;max-width:none;padding:7px 5px;font-size:11px}
+}
+@media(max-width:520px){
+  .compact-item{grid-template-columns:24px 60px minmax(0,1fr) 54px;gap:7px}
+  .stock-search-summary{gap:4px}
+  .stock-summary-chip{padding:6px 2px;font-size:10px}
+  .stock-result{grid-template-columns:58px minmax(0,1fr) 88px;gap:8px;padding:10px}
+  .stock-result img{width:58px;height:58px}
+  .stock-result h4{font-size:15px}
+  .stock-result .desc{font-size:11px}
+  .stock-result-actions button{font-size:10.5px}
+}
