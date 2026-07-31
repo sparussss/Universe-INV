@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.11.24</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.11.25</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -241,15 +241,21 @@
   <section id="stockSearch" class="tab-panel">
     <article class="card">
       <div class="section-title-row stock-search-title">
-        <div><h3>配套／庫存搜尋</h3><p class="muted">輸入核心款號，例如 34686，可同時查看 RG / PT / ER / BL / NL 等配套及銷售狀態。</p></div>
+        <div><h3>配套／庫存搜尋</h3><p class="muted">輸入核心款號，例如 34686；輸入 * 可顯示全部貨品，並按核心款號、石頭及款式排序。</p></div>
       </div>
       <div class="stock-search-row">
-        <input id="stockSearchInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="輸入 34686 或 RG-34686">
+        <input id="stockSearchInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="輸入 34686、RG-34686 或 *">
         <button id="stockSearchBtn" class="primary">搜尋</button>
       </div>
       <div id="stockSearchMessage" class="notice">請輸入款號搜尋。</div>
-      <div id="stockTypeFilters" class="filter-group hidden"></div>
-      <div id="stockStoneFilters" class="filter-group hidden"></div>
+      <div id="stockFilterControls" class="stock-filter-controls hidden">
+        <div id="stockFilterSelectionSummary" class="stock-filter-selection-summary">款式：全部 · 石頭：全部</div>
+        <button id="stockFilterToggle" type="button" class="ghost">展開篩選</button>
+      </div>
+      <div id="stockFilterPanel" class="stock-filter-panel hidden">
+        <div id="stockTypeFilters" class="filter-group hidden"></div>
+        <div id="stockStoneFilters" class="filter-group hidden"></div>
+      </div>
       <div id="stockSearchSummary" class="stock-search-summary hidden"></div>
       <div id="stockSearchResults" class="stock-search-results"></div>
     </article>

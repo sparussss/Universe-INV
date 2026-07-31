@@ -229,3 +229,11 @@ button{width:auto}
 
 /* v0.11.23: monochrome fallback when no matching stone image exists */
 .grayscale-image{filter:grayscale(100%);-webkit-filter:grayscale(100%)}
+
+/* v0.11.25 wildcard inventory search + collapsible filters */
+.stock-filter-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:11px;background:#f8fafc}
+.stock-filter-selection-summary{min-width:0;font-size:12px;color:#475467;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stock-filter-controls button{flex:0 0 auto;padding:7px 10px;font-size:12px}
+.stock-filter-panel{margin-top:8px;padding:2px 10px 10px;border:1px solid #e5e9f0;border-radius:11px;background:#fff}
+.stock-filter-panel .filter-group{margin-top:10px}
+@media(max-width:520px){.stock-filter-controls{gap:7px;padding:7px 8px}.stock-filter-selection-summary{font-size:11px}.stock-filter-controls button{padding:7px 8px;font-size:11px}}

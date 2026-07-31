@@ -1,4 +1,12 @@
-# Universe Invoice PWA v0.11.24
+# Universe Invoice PWA v0.11.25
+
+
+## v0.11.25 wildcard all-stock search + compact filters
+
+- 配套搜尋輸入 `*` 可顯示全部庫存／歷史貨品。
+- `*` 結果排序：核心款號數字由大至小 → 石頭依 Stone List 順序 → 同石頭內依 `RG → ER → PT → BR → NL → BL → BG → 其他`。
+- 款式／石頭多選篩選改成可收合區；搜尋後預設收起，只顯示一行目前篩選摘要，按「展開篩選」才顯示 chips。
+- 輸入 `*` 時同樣可使用既有款式多選、石頭多選、庫存狀態與加入目前文件功能。
 
 
 ## v0.11.24 unified image selection + single edit + tab order
