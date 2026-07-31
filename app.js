@@ -118,13 +118,16 @@ async function fetchKitcoAsk({silent=false}={}){
 }
 function setQuoteKarat(value){state.quote.karat=value==='14K'?'14K':'18K';$$('input[name="quoteKarat"]').forEach(x=>x.checked=x.value===state.quote.karat);syncEffectivePrices();updateGoldQuoteUI();renderItems();schedulePreview();if(quote14KMode()){if(!state.quote.kitcoAsk)loadKitcoCache();updateGoldQuoteUI();fetchKitcoAsk({silent:!!state.quote.kitcoAsk})}}
 loadInventoryHistory();loadKitcoCache();
-const BOCHK_FX_PAGE='https://www.bochk.com/whk/rates/exchangeRatesUSD/exchangeRatesUSD-input.action?lang=en';
+const FX_API='https://api.frankfurter.dev/v2/rate';
+const FX_API_V1='https://api.frankfurter.dev/v1/latest';
 function currencyCode(){return norm($('#currency')?.value||'USD').toUpperCase()||'USD'}
-// USD and EUR are displayed with 2 decimals. EUR Unit Price itself is rounded
-// to a whole euro before Amount/Sub Total/Total are calculated.
+// Money is displayed with 2 decimals. For EUR converted with an automatic
+// Frankfurter rate, cents are dropped (truncated) from Unit Price. If the FX
+// rate is entered manually, EUR Unit Price is rounded to the nearest euro.
 function currencyDigits(){return 2}
 function roundCurrency(v,code=currencyCode()){const p=100;return Math.round((Number(v)||0)*p+Number.EPSILON)/p}
-function roundUnitPrice(v,code=currencyCode()){const n=Math.max(0,Number(v)||0);return code==='EUR'?Math.round(n):roundCurrency(n,code)}
+function eurUnitPrice(v,source=state.fx?.source){const n=Math.max(0,Number(v)||0);return source==='manual'?Math.round(n):Math.floor(n+1e-9)}
+function roundUnitPrice(v,code=currencyCode()){const n=Math.max(0,Number(v)||0);return code==='EUR'?eurUnitPrice(n):roundCurrency(n,code)}
 function fmt(v,code=currencyCode()){return new Intl.NumberFormat('en-US',{style:'currency',currency:code,minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v)||0)}
 function currencyExcelFormat(code=currencyCode(),negative=false){
   const formats={USD:'$#,##0.00',EUR:'€#,##0.00'};
@@ -133,7 +136,7 @@ function currencyExcelFormat(code=currencyCode(),negative=false){
   const body=positive.replace(/^([^#0]*)(.*)$/,'$1$2');
   return `(${body});(${body});${positive}`;
 }
-function fxCacheKey(code){return `universeFx_BOCHK_USD_${code}`}
+function fxCacheKey(code){return `universeFx_USD_${code}`}
 function currentFxRate(){if(currencyCode()==='USD')return 1;const v=Number($('#fxRate')?.value);return Number.isFinite(v)&&v>0?v:0}
 function fxPricingReady(){return currencyCode()==='USD'||currentFxRate()>0}
 function baseUsdPrice(item){const stored=Number(item.usdUnitPrice);return Number.isFinite(stored)&&stored>=0?stored:Math.max(0,Number(item.unitPrice)||0)}
@@ -165,52 +168,42 @@ function applyFxRate(rate,date='',source='manual',message=''){
   renderItems();renderCustomerSummary();schedulePreview();
   if(message)setFxStatus(message,source==='online'?'ok':source==='cache'?'warn':'');
 }
-function parseBochkEurUsd(html){
-  const text=String(html||'').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
-  const row=text.match(/EUR\s*\/\s*USD\s+([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)/i);
-  if(!row)throw new Error('BOCHK 頁面找不到 EUR/USD Customer Sell / Buy');
-  const sell=Number(row[1]),buy=Number(row[2]);
-  if(!(sell>0&&buy>0))throw new Error('BOCHK EUR/USD 匯率無效');
-  const mid=(sell+buy)/2,rate=1/mid;
-  const dm=text.match(/Information last updated at HK Time:\s*([0-9]{4}\/[0-9]{2}\/[0-9]{2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})/i);
-  return{sell,buy,mid,rate,date:dm?dm[1]:''};
-}
-async function fetchBochkPage(signal){
-  let directErr='';
-  try{
-    const res=await fetch(BOCHK_FX_PAGE,{cache:'no-store',signal});
-    if(!res.ok)throw new Error(`BOCHK HTTP ${res.status}`);
-    return{html:await res.text(),viaRelay:false};
-  }catch(err){directErr=err?.message||String(err)}
-  const relay=`https://api.allorigins.win/raw?url=${encodeURIComponent(BOCHK_FX_PAGE)}`;
-  const res=await fetch(relay,{cache:'no-store',signal});
-  if(!res.ok)throw new Error(`BOCHK relay HTTP ${res.status}; ${directErr}`);
-  return{html:await res.text(),viaRelay:true};
-}
 async function fetchReferenceFxRate({silent=false}={}){
   const code=currencyCode();updateFxPanel();if(code==='USD')return;
   if(code!=='EUR'){setFxStatus(`目前只支援 USD / EUR。`,'error');return}
   if(state.fx.fetching)return;
   state.fx.fetching=true;$('#refreshFxBtn').disabled=true;
-  if(!silent)setFxStatus('正在取得 BOCHK EUR/USD 買入／賣出中間價…');
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),14000);
+  if(!silent)setFxStatus(`正在取得 Frankfurter v2 USD → ${code} 參考匯率…`);
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
   try{
-    const page=await fetchBochkPage(controller.signal),q=parseBochkEurUsd(page.html),rate=q.rate;
-    saveFxCache(code,rate,q.date);
-    const route=page.viaRelay?' · 網頁備援':'',message=`BOCHK · Sell ${q.sell.toFixed(6)} · Buy ${q.buy.toFixed(6)} · Mid ${q.mid.toFixed(6)} · ${q.date||'最新'}${route}`;
-    applyFxRate(rate,q.date,'online',message);
+    let rate=0,date='',sourceLabel='Frankfurter v2';
+    try{
+      const res=await fetch(`${FX_API}/USD/${encodeURIComponent(code)}`,{cache:'no-store',signal:controller.signal});
+      if(!res.ok)throw new Error(`v2 HTTP ${res.status}`);
+      const data=await res.json();
+      rate=Number(data.rate);date=norm(data.date);
+      if(!(Number.isFinite(rate)&&rate>0))throw new Error('v2 回傳匯率無效');
+    }catch(v2err){
+      const res=await fetch(`${FX_API_V1}?base=USD&symbols=${encodeURIComponent(code)}`,{cache:'no-store',signal:controller.signal});
+      if(!res.ok)throw new Error(`v1 HTTP ${res.status}; ${v2err?.message||v2err}`);
+      const data=await res.json();
+      rate=Number(data?.rates?.[code]);date=norm(data.date);sourceLabel='Frankfurter v1 fallback';
+      if(!(Number.isFinite(rate)&&rate>0))throw new Error(`v1 回傳匯率無效; ${v2err?.message||v2err}`);
+    }
+    saveFxCache(code,rate,date);
+    applyFxRate(rate,date,'online',`線上參考匯率 · ${date||'最新工作日'} · ${sourceLabel} · EUR Unit Price 刪除 cents`);
   }catch(err){
     const cached=loadFxCache(code);
-    console.warn('BOCHK FX fetch failed',code,err);
-    if(cached){applyFxRate(cached.rate,cached.date,'cache',`BOCHK 未能更新；沿用上次匯率 · ${cached.date||new Date(cached.fetchedAt).toLocaleDateString('zh-HK')}`)}
-    else{state.fx={rate:0,date:'',source:'error',fetching:false};$('#fxRate').value='';syncEffectivePrices({clearCurrentOverride:true});renderItems();updateTotals();setFxStatus('無法取得 BOCHK EUR 最新匯率，請手動輸入 FX Rate。','error')}
+    console.warn('Frankfurter FX fetch failed',code,err);
+    if(cached){applyFxRate(cached.rate,cached.date,'cache',`未能更新；沿用上次 Frankfurter 匯率 · ${cached.date||new Date(cached.fetchedAt).toLocaleDateString('zh-HK')} · EUR Unit Price 刪除 cents`)}
+    else{state.fx={rate:0,date:'',source:'error',fetching:false};$('#fxRate').value='';syncEffectivePrices({clearCurrentOverride:true});renderItems();updateTotals();setFxStatus(`無法取得 Frankfurter ${code} 最新匯率，請手動輸入 FX Rate。`,'error')}
   }finally{clearTimeout(timer);state.fx.fetching=false;$('#refreshFxBtn').disabled=false}
 }
 async function handleCurrencyChange(){
   const code=currencyCode();updateFxPanel();
   if(code==='USD'){syncEffectivePrices();renderItems();renderCustomerSummary();schedulePreview();return}
   const cached=loadFxCache(code);
-  if(cached){applyFxRate(cached.rate,cached.date,'cache',`使用上次參考匯率 · ${cached.date||''}`)}else{$('#fxRate').value='';state.fx={rate:0,date:'',source:'pending',fetching:false};syncEffectivePrices({clearCurrentOverride:true});renderItems();updateTotals();setFxStatus(`正在取得 USD → ${code} 參考匯率…`)}
+  if(cached){applyFxRate(cached.rate,cached.date,'cache',`使用上次 Frankfurter 參考匯率 · ${cached.date||''} · EUR Unit Price 刪除 cents`)}else{$('#fxRate').value='';state.fx={rate:0,date:'',source:'pending',fetching:false};syncEffectivePrices({clearCurrentOverride:true});renderItems();updateTotals();setFxStatus(`正在取得 Frankfurter v2 USD → ${code} 參考匯率…`)}
   await fetchReferenceFxRate({silent:!!cached});
 }
 function totals(){const code=currencyCode(),qty=state.items.reduce((a,x)=>a+x.qty,0),sub=roundCurrency(state.items.reduce((a,x)=>a+x.qty*(Number(x.unitPrice)||0),0),code),discount=roundCurrency(Math.max(0,Number($('#discountAmount').value)||0),code),total=roundCurrency(Math.max(0,sub-discount),code);return{qty,sub,discount,total}}
@@ -407,7 +400,7 @@ function renderItems(){
     if(quote14KMode()){const p18=parse18KDesc1((item.descriptions||[])[0]),m=goldMetrics();if(p18&&m){const w14=roundUpWeight05(p18.weight*K14_WEIGHT_FACTOR),diff=goldDifferenceUsd(item),u14=effectiveUsdPrice(item);note.textContent=code==='USD'?`14K：${p18.weight.toFixed(2)}g → ${w14.toFixed(2)}g · ${fmt(usd,'USD')} − ${fmt(diff,'USD')} → ${fmt(u14,'USD')}`:(fxPricingReady()?`14K：${p18.weight.toFixed(2)}g → ${w14.toFixed(2)}g · ${fmt(u14,'USD')} × ${currentFxRate()} → ${fmt(item.unitPrice,code)}`:`14K：${w14.toFixed(2)}g · 等待 FX Rate`);note.classList.add('quote14-price-note');const badge=document.createElement('span');badge.className='quote14-badge';badge.textContent='14K';$('.item-artno',node).after(badge)}else note.textContent='14K 參考報價：等待 Kitco Ask／DESC1 無法辨識 18K 金重';}
     else note.textContent=code==='USD'?`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')}`:(fxPricingReady()?`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')} × ${currentFxRate()} → ${fmt(item.unitPrice,code)}`:`${item.price}u × ${Number($('#salesRate').value)||0} → ${fmt(usd,'USD')} · 等待 FX Rate`);
     $('.item-thumb',node).src=getImg(item)?.url||placeholder(item.artNo);
-    const controls=$('.item-controls',node),toggle=$('.item-edit-toggle',node);toggle.onclick=()=>{const open=controls.classList.toggle('open');node.classList.toggle('editing',open);toggle.textContent=open?'完成':'編輯'};
+    const controls=$('.item-controls',node),toggle=$('.item-edit-toggle',node);toggle.onclick=()=>{const open=controls.classList.toggle('open');node.classList.toggle('editing',open);toggle.textContent=open?'完成':'編輯';syncSortAvailability(box)};
     const sel=$('.variant-select',node),arr=state.imageFiles.get(item.artNo)||[],custom=item.customImage;
     if(custom){
       const o=document.createElement('option');o.value='__custom__';o.textContent=custom.source==='camera'?'圖片：即時拍照':'圖片：上傳';o.selected=true;sel.appendChild(o);
@@ -433,34 +426,68 @@ function renderItems(){
     }
     $('.qty-input',node).value=item.qty;$('.price-input',node).value=item.unitPrice;
     $('.qty-input',node).onchange=e=>{item.qty=Math.max(1,Number(e.target.value)||1);updateTotals()};
-    $('.price-input',node).onchange=e=>{const code=currencyCode(),raw=Math.max(0,Number(e.target.value)||0),value=roundUnitPrice(raw,code),overrides=activePriceOverrides(item);overrides[code]=value;item.unitPrice=value;if(code==='USD'&&!quote14KMode())item.usdUnitPrice=value;updateTotals()};
+    $('.price-input',node).onchange=e=>{const code=currencyCode(),raw=Math.max(0,Number(e.target.value)||0),value=code==='EUR'?Math.round(raw):roundUnitPrice(raw,code),overrides=activePriceOverrides(item);overrides[code]=value;item.unitPrice=value;if(code==='USD'&&!quote14KMode())item.usdUnitPrice=value;updateTotals()};
     $('.delete-item',node).onclick=()=>{if(confirm(`刪除 ${item.artNo}？`)){revokeCustomImage(item);state.items=state.items.filter(x=>x.id!==item.id);normalizeItemSequence();renderItems()}};
     box.appendChild(node)
   });
-  // iPhone-friendly ordering: tap ≡ and choose the target position instead of free dragging.
-  box.querySelectorAll('.drag-handle').forEach(handle=>{
-    handle.onclick=()=>{
-      const node=handle.closest('.invoice-item');
-      const item=state.items.find(x=>String(x.id)===node?.dataset.itemId);
-      if(!item)return;
-      const current=Number(item.seq)||1,total=state.items.length;
-      const raw=prompt(`移動 ${item.artNo}\n目前正式次序：${current} / ${total}\n請輸入新位置 1-${total}`,String(current));
-      if(raw===null)return;
-      const target=Math.max(1,Math.min(total,Math.floor(Number(raw)||0)));
-      if(!target){alert('請輸入有效位置。');return}
-      const ordered=formalItems().filter(x=>x.id!==item.id);
-      ordered.splice(target-1,0,item);
-      // Preserve the newly requested formal order. Calling normalizeItemSequence()
-      // here would sort again by the old seq values and silently undo the move.
-      state.items=ordered;
-      state.items.forEach((x,i)=>x.seq=i+1);
-      renderItems();schedulePreview();
-    };
-  });
+  installItemSorting(box);
   updateTotals()
 }
+function syncSortAvailability(box=$('#invoiceItems')){
+  if(!box)return;
+  const editing=!!box.querySelector('.invoice-item.editing');
+  box.classList.toggle('sorting-locked',editing);
+  box.querySelectorAll('.drag-handle').forEach(handle=>{
+    handle.disabled=editing;
+    handle.setAttribute('aria-disabled',String(editing));
+    handle.title=editing?'請先按「完成」收起編輯，再拖曳排序':'按住並上下拖曳排序';
+  });
+  if(state.sortable&&typeof state.sortable.option==='function')state.sortable.option('disabled',editing);
+}
+function installItemSorting(box){
+  if(state.sortable){try{state.sortable.destroy()}catch{}state.sortable=null}
+  if(!box||!window.Sortable){
+    if(box)box.querySelectorAll('.drag-handle').forEach(handle=>{handle.disabled=true;handle.setAttribute('aria-disabled','true');handle.title='拖曳排序元件未能載入'});
+    return;
+  }
+  state.sortable=Sortable.create(box,{
+    animation:160,
+    handle:'.drag-handle',
+    draggable:'.invoice-item',
+    forceFallback:true,
+    fallbackOnBody:true,
+    fallbackTolerance:3,
+    touchStartThreshold:3,
+    swapThreshold:0.55,
+    scroll:true,
+    scrollSensitivity:70,
+    scrollSpeed:12,
+    chosenClass:'sort-chosen',
+    ghostClass:'sort-ghost',
+    dragClass:'sort-drag',
+    fallbackClass:'sort-fallback',
+    onStart:()=>box.classList.add('sorting-active'),
+    onEnd:()=>{
+      box.classList.remove('sorting-active');
+      const byId=new Map(state.items.map(item=>[String(item.id),item]));
+      const visible=[...box.querySelectorAll('.invoice-item')].map(node=>byId.get(node.dataset.itemId)).filter(Boolean);
+      if(visible.length!==state.items.length){renderItems();return}
+      // The working list is newest/highest Item No. at the top, while formal output is 1 → N.
+      // Reverse the visible order back into formal order, then rebuild sequence numbers.
+      state.items=[...visible].reverse();
+      state.items.forEach((item,i)=>item.seq=i+1);
+      box.querySelectorAll('.invoice-item').forEach(node=>{
+        const item=byId.get(node.dataset.itemId),seq=$('.item-seq',node);
+        if(item&&seq)seq.textContent=item.seq;
+      });
+      schedulePreview();
+      syncSortAvailability(box);
+    }
+  });
+  syncSortAvailability(box);
+}
 $('#scrollLatestBtn').onclick=()=>$('#invoiceItems').scrollTo({top:0,behavior:'smooth'});$('#clearInvoiceBtn').onclick=()=>{if(confirm('清空目前 Invoice？')){releaseCustomImages();state.items=[];renderItems()}};
-function reprice(){const r=Number($('#salesRate').value)||0;state.items.forEach(x=>{x.usdUnitPrice=Math.ceil(x.price*r);x.currencyPrices={};x.quote14kCurrencyPrices={}});syncEffectivePrices();renderItems()}$('#salesRate').onchange=reprice;$('#currency').onchange=handleCurrencyChange;$('#refreshFxBtn').onclick=()=>fetchReferenceFxRate();let fxInputTimer=null;$('#fxRate').oninput=e=>{clearTimeout(fxInputTimer);fxInputTimer=setTimeout(()=>{const n=Number(e.target.value);if(Number.isFinite(n)&&n>0){state.fx={rate:n,date:'',source:'manual',fetching:false};syncEffectivePrices({clearCurrentOverride:true});renderItems();renderCustomerSummary();setFxStatus('使用手動 FX Rate。','warn')}else{syncEffectivePrices({clearCurrentOverride:true});renderItems();setFxStatus('請輸入大於 0 的 FX Rate。','error')}},160)};$('#discountAmount').oninput=updateTotals;['invoiceNo','invoiceDate','shipmentMethod','customerCode','customerName','customerAddress','customerTerms','remark'].forEach(id=>$('#'+id)?.addEventListener('input',schedulePreview));
+function reprice(){const r=Number($('#salesRate').value)||0;state.items.forEach(x=>{x.usdUnitPrice=Math.ceil(x.price*r);x.currencyPrices={};x.quote14kCurrencyPrices={}});syncEffectivePrices();renderItems()}$('#salesRate').onchange=reprice;$('#currency').onchange=handleCurrencyChange;$('#refreshFxBtn').onclick=()=>fetchReferenceFxRate();let fxInputTimer=null;$('#fxRate').oninput=e=>{clearTimeout(fxInputTimer);fxInputTimer=setTimeout(()=>{const n=Number(e.target.value);if(Number.isFinite(n)&&n>0){state.fx={rate:n,date:'',source:'manual',fetching:false};syncEffectivePrices({clearCurrentOverride:true});renderItems();renderCustomerSummary();setFxStatus('使用手動 FX Rate · EUR Unit Price 四捨五入至整數。','warn')}else{syncEffectivePrices({clearCurrentOverride:true});renderItems();setFxStatus('請輸入大於 0 的 FX Rate。','error')}},160)};$('#discountAmount').oninput=updateTotals;['invoiceNo','invoiceDate','shipmentMethod','customerCode','customerName','customerAddress','customerTerms','remark'].forEach(id=>$('#'+id)?.addEventListener('input',schedulePreview));
 function words(n){return String(Math.floor(n))}
 function numberToWords(value){
   let n=Math.floor(Number(value)||0);

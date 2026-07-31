@@ -1,6 +1,22 @@
-# Universe Invoice PWA v0.11.18
+# Universe Invoice PWA v0.11.20
+
+## v0.11.20 item list interaction revision
+
+- 「刪除」固定顯示在每件貨品圖片下方，不再需要先按「編輯」。
+- 右側 ≡ 改為 iPhone 觸控拖曳排序；拖曳後會重建正式 Item 1 → N 次序，Preview / Excel / PDF 跟隨新順序。
+- 「編輯」與排序互斥：只要任何貨品的編輯區展開，全部 ≡ 會變灰並暫停拖曳；全部收起後才恢復排序。
+- 拖曳只由 ≡ 觸控區啟動，避免一般上下捲動貨品清單時誤排序。
 
 
+
+
+
+## v0.11.19 FX pricing revision
+
+- EUR reference FX source is changed back to **Frankfurter v2**. Frankfurter v1 remains a fallback if v2 cannot be reached; cached last-known rates and manual FX input remain available.
+- With an **automatic Frankfurter** rate (online or cached), EUR Unit Price drops the cents instead of rounding: e.g. `€637.92 → €637.00`.
+- With a **manually entered FX Rate**, EUR Unit Price rounds to the nearest whole euro: e.g. `€637.50 → €638.00`.
+- Explicit manual EUR Unit Price edits are also rounded to the nearest whole euro. EUR display/Excel format remains fixed at two decimals. USD pricing is unchanged.
 
 ## v0.11.18 exhibition workflow refinements
 

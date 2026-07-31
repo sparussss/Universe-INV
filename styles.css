@@ -215,3 +215,14 @@ button{width:auto}
   .stock-result .desc{font-size:11px}
   .stock-result-actions button{font-size:10.5px}
 }
+
+
+/* v0.11.20 always-visible delete + iPhone touch drag sorting */
+.item-thumb-stack .delete-item{display:block!important;padding:3px 7px;font-size:11px;line-height:1.2;border:0}
+.drag-handle{touch-action:none!important;-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;cursor:grab!important}
+.drag-handle:active{cursor:grabbing!important}
+.drag-handle:disabled,.sorting-locked .drag-handle{opacity:.32;background:#f2f4f7!important;color:#98a2b3!important;border-color:#d0d5dd!important;cursor:not-allowed!important;touch-action:auto!important}
+.invoice-items.sorting-active{user-select:none;-webkit-user-select:none}
+.invoice-item.sort-chosen{background:#f8fbff;border-radius:12px}
+.invoice-item.sort-ghost{opacity:.28}
+.invoice-item.sort-drag,.invoice-item.sort-fallback{background:#fff;border:1px solid #c7d7ec;border-radius:12px;box-shadow:0 12px 28px rgba(23,32,51,.18)}
