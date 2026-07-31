@@ -1,4 +1,13 @@
-# Universe Invoice PWA v0.11.23
+# Universe Invoice PWA v0.11.24
+
+
+## v0.11.24 unified image selection + single edit + tab order
+
+- **石頭優先、成色次選**：圖片石種評分會先移除 `(18KY)` / `(18KR)` / `(18KW)` / `(reg)` / 編號等括號 metadata，再比較石種。因此 `BT`、`BT (18KR)`、`BT (18KY)` 會先視為同一個 BT 石種，然後以原始 DESC1 的成色選最合適版本；例如 `1.20Y750` 會優先 `BT (18KY)`。
+- **黑白手動選項**：每款編輯的圖片下拉選單新增 `圖片：黑白`。自動找不到對應石種時仍會自動使用同 ARTNO 參考圖黑白顯示；手動亦可強制把目前資料庫款式圖切成黑白。Preview / Excel / PDF 沿用相同黑白狀態。
+- **同一時間只展開一款編輯**：打開另一款「編輯」時，上一款會自動收起；修改仍即時保留。任何一款正在編輯時，全部 ☰ 維持灰色停用，全部收起後才恢復拖曳排序。
+- **四個功能共用同一自動選圖核心**：Invoice、Consignment、Quotation、配套搜尋都使用 `chooseImageMatch()`；14K Quotation 仍以原始 18K DESC1 判斷成色。
+- **頁面順序**：資料匯入 → 建立文件 → 配套搜尋 → 文件預覽。
 
 
 ## v0.11.23 stone-first image fallback

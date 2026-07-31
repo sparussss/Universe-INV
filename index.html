@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.11.23</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.11.24</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -35,8 +35,8 @@
   <nav class="tabs">
     <button class="tab active" data-tab="setup">資料匯入</button>
     <button class="tab" data-tab="invoice">建立文件</button>
-    <button class="tab" data-tab="preview">文件預覽</button>
     <button class="tab" data-tab="stockSearch">配套搜尋</button>
+    <button class="tab" data-tab="preview">文件預覽</button>
   </nav>
 
   <section id="setup" class="tab-panel active">
@@ -238,15 +238,6 @@
     </article>
   </section>
 
-  <section id="preview" class="tab-panel">
-    <article class="card preview-actions no-print">
-      <div class="preview-status"><strong>預覽會自動更新</strong><span id="previewUpdatedAt">尚未更新</span></div>
-      <div class="preview-export-buttons"><button id="exportExcelBtn">匯出 Excel Invoice</button><button id="exportPdfBtn">輸出 PDF</button></div>
-      <div id="excelExportStatus" class="notice hidden"></div>
-    </article>
-    <article id="invoiceDocument" class="invoice-document"></article>
-  </section>
-
   <section id="stockSearch" class="tab-panel">
     <article class="card">
       <div class="section-title-row stock-search-title">
@@ -263,6 +254,16 @@
       <div id="stockSearchResults" class="stock-search-results"></div>
     </article>
   </section>
+
+  <section id="preview" class="tab-panel">
+    <article class="card preview-actions no-print">
+      <div class="preview-status"><strong>預覽會自動更新</strong><span id="previewUpdatedAt">尚未更新</span></div>
+      <div class="preview-export-buttons"><button id="exportExcelBtn">匯出 Excel Invoice</button><button id="exportPdfBtn">輸出 PDF</button></div>
+      <div id="excelExportStatus" class="notice hidden"></div>
+    </article>
+    <article id="invoiceDocument" class="invoice-document"></article>
+  </section>
+
 </main>
 
 <dialog id="scannerDialog">
