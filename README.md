@@ -1,4 +1,13 @@
-# Universe Invoice PWA v0.11.30
+# Universe Invoice PWA v0.11.31
+
+## v0.11.31 Unified colour/stone sorting for Companion Search
+
+- The same colour-group sorting is now applied to every Companion Search, not only `*`.
+- Applies to core article searches, full ARTNO searches, style filters, stone filters, and status filters.
+- Order: core number descending → Stone List `GROUP` order → Stone List stone order → `RG → ER → PT → BR → NL → BL → BG → other` → ARTNO / LOTNO.
+- When stone filters are selected, matching selected stones are used as the sorting key so the filtered results stay grouped by the chosen colours/stones.
+- Existing GROUP-driven image matching and all v0.11.30 behaviour are preserved.
+
 
 ## v0.11.30 Stone List GROUP-driven image matching
 
