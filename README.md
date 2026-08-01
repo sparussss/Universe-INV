@@ -1,4 +1,14 @@
-# Universe Invoice PWA v0.11.28
+# Universe Invoice PWA v0.11.29
+
+
+## v0.11.29 four-stone MULTI fallback refinement
+
+- **5 個或以上**不同的非鑽石石頭代號：直接優先選擇 `MULTI` 圖片；沒有 `MULTI` 才使用同款參考圖並轉黑白。
+- **剛好 4 個**不同的非鑽石石頭代號：先沿用正常石頭／組合圖片配對；找不到正常對應圖片才改選 `MULTI`；連 `MULTI` 也沒有才轉黑白。
+- **1–3 個**石頭代號：維持原本石頭優先、同石頭再盡量配對成色、找不到才黑白的規則。
+- 不使用 ct 重量判斷；`CDM`／`DIA` 不計入石頭數量，重複代號只計一次。
+- 共用選圖核心同步套用於 Invoice、Consignment、Quotation 及配套搜尋。
+
 
 ## v0.11.28 MULTI image matching for five-or-more stones
 

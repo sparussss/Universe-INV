@@ -309,16 +309,12 @@ function variantContainsStone(variant,wanted){
   });
 }
 const MULTI_STONE_THRESHOLD=5;
+const AMBIGUOUS_MULTI_STONE_COUNT=4;
 const IMAGE_STONE_EXCLUSIONS=new Set(['CDM','DIA']);
 function imageStoneCodesForProduct(p){
   return stoneCodesForProduct(p).filter(code=>!IMAGE_STONE_EXCLUSIONS.has(String(code||'').toUpperCase()));
 }
-function desiredStoneVariants(p){
-  // Four or more distinct non-diamond stone codes represent a multi-colour design.
-  // This uses every DESC line, not only DESC2, so combinations spread across DESC2–DESC6 are counted.
-  const productStoneCodes=imageStoneCodesForProduct(p);
-  if(productStoneCodes.length>=MULTI_STONE_THRESHOLD)return['MULTI'];
-
+function normalDesiredStoneVariants(p){
   const d=(p?.desc2||'').toUpperCase(),hits=[];
   for(const [code,variant] of [...activeStoneAliases().entries()].sort((a,b)=>b[0].length-a[0].length)){
     const c=String(code||'').toUpperCase();
@@ -327,6 +323,13 @@ function desiredStoneVariants(p){
   }
   hits.sort((a,b)=>a.pos-b.pos);
   return [...new Set(hits.map(x=>x.variant).filter(Boolean))];
+}
+function desiredStoneVariants(p){
+  // Five or more distinct non-diamond stone codes are definitely MULTI.
+  // Exactly four remains ambiguous and first follows the normal stone-image logic.
+  const productStoneCodes=imageStoneCodesForProduct(p);
+  if(productStoneCodes.length>=MULTI_STONE_THRESHOLD)return['MULTI'];
+  return normalDesiredStoneVariants(p);
 }
 function originalMetalToken(p){
   const desc1=String((p?.descriptions||[])[0]||'').toUpperCase().replace(/\s+/g,'');
@@ -348,26 +351,37 @@ function imageStoneSignature(variant){
 function chooseImageMatch(p){
   const imgs=state.imageFiles.get(p?.artNo)||[];
   if(!imgs.length)return{variant:'Default',grayscale:false,stoneMatched:false,colorMatched:false};
-  const stones=desiredStoneVariants(p),metal=originalMetalToken(p);
+  const productStoneCount=imageStoneCodesForProduct(p).length,stones=desiredStoneVariants(p),metal=originalMetalToken(p);
   const metalScore=img=>{const t=imageMetalToken(img.variant);return metal&&t===metal?2:!t?1:0};
-  if(stones.length){
-    const exactCombo=stones.join('+'),reverseCombo=[...stones].reverse().join('+');
+  const bestStoneMatch=wantedStones=>{
+    if(!wantedStones.length)return null;
+    const exactCombo=wantedStones.join('+'),reverseCombo=[...wantedStones].reverse().join('+');
     const scored=imgs.filter(x=>x.variant!=='Default').map((img,index)=>{
-      const matchedIndexes=stones.map((s,i)=>variantContainsStone(img.variant,s)?i:-1).filter(i=>i>=0);
+      const matchedIndexes=wantedStones.map((s,i)=>variantContainsStone(img.variant,s)?i:-1).filter(i=>i>=0);
       if(!matchedIndexes.length)return null;
       const stoneSignature=imageStoneSignature(img.variant);
       let stoneScore=matchedIndexes.length*100;
-      if(matchedIndexes.length===stones.length)stoneScore+=500;
+      if(matchedIndexes.length===wantedStones.length)stoneScore+=500;
       if(stoneSignature===exactCombo||stoneSignature===reverseCombo)stoneScore+=400;
       stoneScore+=Math.max(0,30-matchedIndexes[0]*5); // Earlier DESC stone remains the preferred main-stone signal.
       return{img,index,stoneScore,metalScore:metalScore(img)};
     }).filter(Boolean);
-    if(scored.length){
-      scored.sort((a,b)=>b.stoneScore-a.stoneScore||b.metalScore-a.metalScore||a.img.variant.split('+').length-b.img.variant.split('+').length||a.img.variant.length-b.img.variant.length||a.index-b.index);
-      const best=scored[0];
-      return{variant:best.img.variant,grayscale:false,stoneMatched:true,colorMatched:best.metalScore===2};
-    }
-    // No picture corresponds to the requested stone. Use the best same-ARTNO reference,
+    if(!scored.length)return null;
+    scored.sort((a,b)=>b.stoneScore-a.stoneScore||b.metalScore-a.metalScore||a.img.variant.split('+').length-b.img.variant.split('+').length||a.img.variant.length-b.img.variant.length||a.index-b.index);
+    return scored[0];
+  };
+
+  // 5+ stones: MULTI is mandatory. Exactly 4 stones: try the normal stone logic first,
+  // then MULTI only when no normal stone/combination image can be found.
+  let best=bestStoneMatch(stones);
+  if(best)return{variant:best.img.variant,grayscale:false,stoneMatched:true,colorMatched:best.metalScore===2};
+  if(productStoneCount===AMBIGUOUS_MULTI_STONE_COUNT){
+    best=bestStoneMatch(['MULTI']);
+    if(best)return{variant:best.img.variant,grayscale:false,stoneMatched:true,colorMatched:best.metalScore===2};
+  }
+
+  if(stones.length||productStoneCount===AMBIGUOUS_MULTI_STONE_COUNT){
+    // No normal or MULTI image corresponds to the requested design. Use the best same-ARTNO reference,
     // but flag it for monochrome display/output so the colour cannot be mistaken for the actual stone.
     const fallback=[...imgs].sort((a,b)=>metalScore(b)-metalScore(a)||(a.variant==='Default'?-1:b.variant==='Default'?1:0)||a.variant.length-b.variant.length)[0];
     return{variant:fallback.variant,grayscale:true,stoneMatched:false,colorMatched:metalScore(fallback)===2};
