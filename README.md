@@ -1,9 +1,9 @@
-# Universe Invoice PWA v0.11.27
+# Universe Invoice PWA v0.11.28
 
-## v0.11.27 MULTI image matching for four-or-more stones
+## v0.11.28 MULTI image matching for five-or-more stones
 
 - 使用更新版 `Stone List & Shape & Cutting.xlsx` 的 BREAKDOWN 代號辨識每件貨品的石種。
-- 同一貨品在 DESC2–DESC6 合共有 **4 個或以上不同的非鑽石石頭代號**時，自動把圖片目標判定為 `MULTI`。
+- 同一貨品在 DESC2–DESC6 合共有 **5 個或以上不同的非鑽石石頭代號**時，自動把圖片目標判定為 `MULTI`。
 - `CDM`／`DIA` 不計入 MULTI 門檻；重複石頭代號只計一次，Shape、Cutting、尺寸亦不計。
 - 有 `MULTI` 圖時會優先選取，並在同類候選中盡量配對原始 18K 成色；沒有 `MULTI` 圖時沿用同款參考圖並自動轉黑白。
 - 此共用選圖邏輯同步套用於 Invoice、Consignment、Quotation 及配套搜尋；手動圖片／黑白選擇仍保留。

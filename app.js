@@ -308,7 +308,7 @@ function variantContainsStone(variant,wanted){
     const phrase=normalizeStonePhrase(part);return phrase===target||(` ${phrase} `).includes(` ${target} `);
   });
 }
-const MULTI_STONE_THRESHOLD=4;
+const MULTI_STONE_THRESHOLD=5;
 const IMAGE_STONE_EXCLUSIONS=new Set(['CDM','DIA']);
 function imageStoneCodesForProduct(p){
   return stoneCodesForProduct(p).filter(code=>!IMAGE_STONE_EXCLUSIONS.has(String(code||'').toUpperCase()));
