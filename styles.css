@@ -250,3 +250,5 @@ button{width:auto}
 /* v0.11.30 GROUP-driven stone and MULTI image matching */
 
 /* v0.11.31 Companion Search uses unified Stone List GROUP colour sorting for all query/filter modes. */
+
+/* v0.11.32 Pictures tolerate missing dot before formal ARTNO suffix; display/layout unchanged. */

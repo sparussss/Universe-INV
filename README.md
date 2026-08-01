@@ -1,4 +1,14 @@
-# Universe Invoice PWA v0.11.31
+# Universe Invoice PWA v0.11.32
+
+## v0.11.32 Missing-dot suffix tolerance for image filenames
+
+- 正式 ARTNO 仍以 Stock 資料為準，例如 `PT-35774.A`、`PT-35774.B`。
+- 圖片檔名如因人手輸入漏了尾碼前的句點，`PT-35774A ...JPG` 會配對到正式 `PT-35774.A`；`PT-35774B ...JPG` 會配對到正式 `PT-35774.B`。
+- 規則適用於任何英數尾碼，不只 `.A`／`.B`。
+- 無尾碼 `PT-35774` 仍只配對自己的圖片，不會誤取 `PT-35774A`、`PT-35774B` 或帶句點尾碼的圖片。
+- 畫面、搜尋、Excel、PDF 仍顯示 Stock 的正式 ARTNO；容錯只用於 Pictures 圖片索引。
+- v0.11.31 的配套搜尋顏色排序，以及 v0.11.30 的 GROUP／MULTI／成色／黑白選圖邏輯全部保留。
+
 
 ## v0.11.31 Unified colour/stone sorting for Companion Search
 

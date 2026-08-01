@@ -274,7 +274,24 @@ $('#stoneMappingInput').onchange=async e=>{const f=e.target.files[0];if(!f)retur
 $('#articleMappingInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importArticleFile(f);status('#articleMappingStatus',`已匯入 ${f.name}：${count} 個 Article 對照。`,'ok');setImportCollapsed('article',true);schedulePreview()}catch(err){status('#articleMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('article',false)}};
 $('#invoiceTemplateInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{await importTemplateFile(f);status('#invoiceTemplateStatus',`已匯入 ${f.name}；匯出文件時會套用此範本。`,'ok');setImportCollapsed('template',true)}catch(err){state.invoiceTemplateBuffer=null;status('#invoiceTemplateStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('template',false)}};
 
-function parseImage(file){const stem=file.name.replace(/\.[^.]+$/,'').trim();const arts=[...new Set([...state.stockCatalog.values(),...state.products.values(),...state.inventoryHistory.values()].map(x=>x.artNo).filter(Boolean))].sort((a,b)=>b.length-a.length);const art=arts.find(a=>stem.toUpperCase()===a||stem.toUpperCase().startsWith(a+' '));if(!art)return null;let variant=stem.slice(art.length).trim().replace(/\s*\(\d+\)$/,'').trim()||'Default';const dup=(stem.match(/\((\d+)\)$/)||[])[1];return{art,variant,dup:dup?Number(dup):0,file}}
+function imageArtAliasWithoutSuffixDot(art){
+  const value=String(art||'').toUpperCase();
+  return /\.[A-Z0-9]+$/.test(value)?value.replace(/\.([A-Z0-9]+)$/,'$1'):'';
+}
+function imageStemMatchesPrefix(stemUpper,prefix){return stemUpper===prefix||stemUpper.startsWith(prefix+' ')}
+function parseImage(file){
+  const stem=file.name.replace(/\.[^.]+$/,'').trim(),stemUpper=stem.toUpperCase();
+  const arts=[...new Set([...state.stockCatalog.values(),...state.products.values(),...state.inventoryHistory.values()].map(x=>normArt(x.artNo)).filter(Boolean))].sort((a,b)=>b.length-a.length);
+  let art='',prefix='';
+  for(const candidate of arts){if(imageStemMatchesPrefix(stemUpper,candidate)){art=candidate;prefix=candidate;break}}
+  if(!art){
+    for(const candidate of arts){const alias=imageArtAliasWithoutSuffixDot(candidate);if(alias&&imageStemMatchesPrefix(stemUpper,alias)){art=candidate;prefix=alias;break}}
+  }
+  if(!art)return null;
+  let variant=stem.slice(prefix.length).trim().replace(/\s*\(\d+\)$/,'').trim()||'Default';
+  const dup=(stem.match(/\((\d+)\)$/)||[])[1];
+  return{art,variant,dup:dup?Number(dup):0,file}
+}
 $('#imageFolderInput').onchange=e=>{const result=importImageFiles(e.target.files);for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);status('#imageStatus',`已選擇圖片 Folder：${result.images} 張圖片，配對 ${result.matched} 個款號。`,'ok');setImportCollapsed('images',true);renderItems()};
 $('#exhibitionPackageInput').onchange=async e=>{
   const files=[...e.target.files];if(!files.length)return;
