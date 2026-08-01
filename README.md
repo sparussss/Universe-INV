@@ -1,4 +1,12 @@
-# Universe Invoice PWA v0.11.25
+# Universe Invoice PWA v0.11.26
+
+## v0.11.26 strict Stone List filters + status filtering
+
+- 石頭篩選只使用匯入 Stone List 的 BREAKDOWN 代號，並依表內次序顯示。
+- 修正 `GGTRD` 誤判為 `GGTR`、`PSARD` 誤判為 `SAR`：現在會辨識為 `GGT`、`PSA`。
+- `SKY BT` 的石頭篩選按鈕簡化顯示為 `SKY`。
+- 石頭／款式按鈕改為自動寬度及換行，不再超出按鈕或橫向擠迫。
+- `Avail / Consign / Sold-OH / Deliv` 改為可多選的狀態篩選按鈕；沒有選擇狀態時顯示全部。
 
 
 ## v0.11.25 wildcard all-stock search + compact filters

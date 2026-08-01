@@ -237,3 +237,12 @@ button{width:auto}
 .stock-filter-panel{margin-top:8px;padding:2px 10px 10px;border:1px solid #e5e9f0;border-radius:11px;background:#fff}
 .stock-filter-panel .filter-group{margin-top:10px}
 @media(max-width:520px){.stock-filter-controls{gap:7px;padding:7px 8px}.stock-filter-selection-summary{font-size:11px}.stock-filter-controls button{padding:7px 8px;font-size:11px}}
+
+
+/* v0.11.26 strict Stone List filters + status buttons */
+.filter-chips{display:flex;flex-wrap:wrap;align-items:center;gap:7px;overflow:visible;padding-bottom:0}
+.filter-chip{flex:0 0 auto;width:auto;min-width:44px;max-width:100%;padding:7px 12px;line-height:1.15;white-space:nowrap}
+.stock-summary-chip{display:flex;width:100%;min-width:0;align-items:center;justify-content:center;border:1px solid transparent;cursor:pointer;font-weight:500;background:#f4f7fb;color:#344054}
+.stock-summary-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.stock-summary-chip:focus-visible{outline:2px solid #8fb1dc;outline-offset:2px}
+@media(max-width:520px){.filter-chips{gap:6px}.filter-chip{min-width:42px;padding:7px 10px;font-size:12px}.stock-summary-chip{padding:7px 2px;font-size:10px}}
