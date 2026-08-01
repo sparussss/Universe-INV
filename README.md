@@ -1,14 +1,17 @@
-# Universe Invoice PWA v0.11.29
+# Universe Invoice PWA v0.11.30
 
+## v0.11.30 Stone List GROUP-driven image matching
 
-## v0.11.29 four-stone MULTI fallback refinement
-
-- **5 個或以上**不同的非鑽石石頭代號：直接優先選擇 `MULTI` 圖片；沒有 `MULTI` 才使用同款參考圖並轉黑白。
-- **剛好 4 個**不同的非鑽石石頭代號：先沿用正常石頭／組合圖片配對；找不到正常對應圖片才改選 `MULTI`；連 `MULTI` 也沒有才轉黑白。
-- **1–3 個**石頭代號：維持原本石頭優先、同石頭再盡量配對成色、找不到才黑白的規則。
-- 不使用 ct 重量判斷；`CDM`／`DIA` 不計入石頭數量，重複代號只計一次。
-- 共用選圖核心同步套用於 Invoice、Consignment、Quotation 及配套搜尋。
-
+- 匯入 `Stone List & Shape & Cutting.xlsx` 時會讀取新增的 `GROUP` 欄。
+- MULTI 不再按石頭數量硬判斷；會按不同顏色群組判斷。三個或以上不同 GROUP 才視為真正多色組合。
+- BTO + LBT + IO + TZ（即使再加入 BSA）都屬 Blue，同色系不會判作 MULTI。
+- QAM + BTO + YCT + GPS 分別跨 Purple/Pink/Rose、Blue、Yellow/Orange、Green，會判作 MULTI。
+- 完整石頭組合圖片仍是最高優先，例如 `BT+L.BT` 會先於 MULTI。
+- 非 MULTI 款會檢查所有 DESC 的有效石頭及 Stone List 內全部 QUOTATION 別名，例如 RQZ、PAM、BT / L.BT。
+- 真正多色款：完整組合圖 → MULTI 圖 → 黑白 fallback。
+- 非多色款：正常石頭／組合圖 → 黑白 fallback。
+- 成色只在石頭配對層級相同時作次級選擇，例如 BT 候選中以 `Y750 → BT (18KY)`。
+- Invoice、Consignment、Quotation、配套搜尋共用同一選圖核心；14K Quotation 仍以原始 18K 成色選圖。
 
 ## v0.11.28 MULTI image matching for five-or-more stones
 

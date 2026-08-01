@@ -247,4 +247,4 @@ button{width:auto}
 .stock-summary-chip:focus-visible{outline:2px solid #8fb1dc;outline-offset:2px}
 @media(max-width:520px){.filter-chips{gap:6px}.filter-chip{min-width:42px;padding:7px 10px;font-size:12px}.stock-summary-chip{padding:7px 2px;font-size:10px}}
 
-/* v0.11.29 MULTI image matching for 5+ distinct non-diamond stones */
+/* v0.11.30 GROUP-driven stone and MULTI image matching */
