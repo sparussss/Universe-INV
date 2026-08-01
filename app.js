@@ -230,7 +230,7 @@ function importImageFiles(files){const map=new Map();for(const f of files){if(!S
 $('#stockInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importStockFile(f);status('#stockStatus',`已匯入 ${f.name}：${count} 件貨品。`,'ok');setImportCollapsed('stock',true);updateTotals()}catch(err){status('#stockStatus','匯入失敗：'+err.message,'error');setImportCollapsed('stock',false)}};
 $('#customerInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importCustomerFile(f);status('#customerStatus',`已匯入 ${f.name}：${count} 位客戶。`,'ok');setImportCollapsed('customer',true);updateTotals()}catch(err){status('#customerStatus','匯入失敗：'+err.message,'error');setImportCollapsed('customer',false)}};
 const FALLBACK_STONE_ALIASES=new Map([
-  ['QAM','AM'],['LBT','LBT'],['BTO','BT'],['SKY','SKY BT'],['YCT','CT'],['GPS','G.AM'],['GPD','PD'],['RQZ','RQZ'],['MG','MG'],['PTQ','PTR'],['AQ','AQ'],['AMCT','AMCT'],['PAM','P.AM'],['MCT','MCT'],['RGT','RGT'],['TZ','TZ'],['IO','IO'],['GT','GT'],['GTQ','GTR'],['ALEX','ALEX'],['KU','KU'],['LQZ','LQZ'],['SQZ','SQZ'],
+  ['QAM','AM'],['LBT','L.BT'],['BTO','BT'],['SKY','SKY BT'],['YCT','CT'],['GPS','GAM'],['GPD','PD'],['RQZ','RQZ'],['MG','MG'],['PTQ','PTR'],['AQ','AQ'],['AMCT','AMCT'],['PAM','PAM'],['MCT','MCT'],['RGT','RGT'],['TZ','TZ'],['IO','IO'],['GT','GT'],['GTQ','GTR'],['ALEX','ALEX'],['KU','KU'],['LQZ','LQZ'],['SQZ','SQZ'],
   ['BSA','BSA'],['PSA','PSA'],['GGT','GGT'],['OSA','OSA'],['YSA','YSA'],['SSU','SSU'],['RRU','RRU'],['GEM','GEM'],['GSA','GSA'],['WSA','WSA'],['ZSA','ZSA'],['ZSP','ZSP'],['DIA','DIA'],
   ['AG','AG'],['AMZ','AMZ'],['BCH','BCH'],['BO','BO'],['GMA','GMA'],['LAB','LAB'],['LAP','LAP'],['MOON','MOON'],['OPAL','OPAL'],['WPL','WPL'],['RCH','RCH'],['TE','TE'],['TQ','TQ']
 ]);
@@ -308,11 +308,21 @@ function variantContainsStone(variant,wanted){
     const phrase=normalizeStonePhrase(part);return phrase===target||(` ${phrase} `).includes(` ${target} `);
   });
 }
+const MULTI_STONE_THRESHOLD=4;
+const IMAGE_STONE_EXCLUSIONS=new Set(['CDM','DIA']);
+function imageStoneCodesForProduct(p){
+  return stoneCodesForProduct(p).filter(code=>!IMAGE_STONE_EXCLUSIONS.has(String(code||'').toUpperCase()));
+}
 function desiredStoneVariants(p){
+  // Four or more distinct non-diamond stone codes represent a multi-colour design.
+  // This uses every DESC line, not only DESC2, so combinations spread across DESC2–DESC6 are counted.
+  const productStoneCodes=imageStoneCodesForProduct(p);
+  if(productStoneCodes.length>=MULTI_STONE_THRESHOLD)return['MULTI'];
+
   const d=(p?.desc2||'').toUpperCase(),hits=[];
   for(const [code,variant] of [...activeStoneAliases().entries()].sort((a,b)=>b[0].length-a[0].length)){
     const c=String(code||'').toUpperCase();
-    if(!c||c==='CDM')continue; // CDM is a side-diamond code; do not let it drive the main reference image.
+    if(!c||IMAGE_STONE_EXCLUSIONS.has(c))continue;
     const pos=d.indexOf(c);if(pos>=0)hits.push({pos,variant:String(variant||'').toUpperCase()});
   }
   hits.sort((a,b)=>a.pos-b.pos);
