@@ -1,4 +1,14 @@
-# Universe Invoice PWA v0.12.0
+# Universe Invoice PWA v0.12.1
+
+
+## v0.12.1 下一輪現場流程修正
+
+- Quotation 可加入 Available、Sold on hand、Consignment、Delivered 四種狀態的 LOTNO；可由配套搜尋或 LOTNO 輸入加入，Confirm Quotation 不改動 jmsdata I:M。
+- Recall Invoice／Consignment 後可刪除全部貨品再 Confirm；最新 Revision 會保存為 `CANCELLED`，所有原貨品恢復到首次加入文件前的 I:M 狀態。
+- Cancelled 文件仍可再次 Recall；重新加入當時仍 Available 的貨品並 Confirm 後，狀態回復為 `CONFIRMED`，原 Document No. 不變。
+- Delivered 貨品新增「取消已交貨」；必須在 Transaction History 找到交貨前狀態，才會回復到 Sold on hand／Consignment，並輸出更新後 jmsdata.xls。
+- 建立文件的 Invoice／Consignment／Quotation 貨品列表，以及配套搜尋長列表，加入右下角浮動 `↑` 回到頂部按鈕。
+- Recall 修訂不再推進下一個文件流水號，避免每次修改舊文件都跳過新文件號碼。
 
 ## v0.12.0 jmsdata document records + Recall
 
