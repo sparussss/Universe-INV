@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.11.32</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.12.0</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -62,7 +62,9 @@
           <label class="file-picker">選擇倉存表 (.xls / .xlsx)
             <input id="stockInput" type="file" accept=".xls,.xlsx">
           </label>
-          <details><summary>倉存欄位規則</summary><p>Barcode = LOTNO、圖片 = ARTNO、U價 = PRICE、Invoice Description = DESC1 至 DESC6、單位 = UNIT。</p></details>
+          <button type="button" id="exportJmsdataBtn" class="ghost" disabled>匯出目前 jmsdata.xls</button>
+          <div id="jmsdataExportStatus" class="notice">Confirm Invoice／Consignment 後會輸出更新後的 jmsdata.xls。</div>
+          <details><summary>倉存欄位規則</summary><p>Barcode = LOTNO、圖片 = ARTNO、U價 = PRICE、Invoice Description = DESC1 至 DESC6、單位 = UNIT。I = Delivered、J = Available、K = Sold on hand、L = Consignment、M = Balance，並檢查 SUM(I:L) = M。</p></details>
         </div>
       </article>
 
@@ -168,6 +170,26 @@
   </section>
 
   <section id="invoice" class="tab-panel">
+    <article class="card recall-card">
+      <div class="section-title-row">
+        <div>
+          <h3>Recall Invoice / Consignment</h3>
+          <p class="muted">按文件號碼、客戶或日期找回已 Confirm 文件，重新開啟原文件修改。</p>
+        </div>
+      </div>
+      <div class="recall-search-row">
+        <select id="recallTypeFilter" aria-label="Recall 文件類型">
+          <option value="all">Invoice + Consignment</option>
+          <option value="invoice">Invoice</option>
+          <option value="consignment">Consignment</option>
+        </select>
+        <input id="recallSearchInput" placeholder="輸入文件號碼、客戶或日期" autocomplete="off">
+        <button type="button" id="recallSearchBtn">搜尋</button>
+      </div>
+      <div id="recallActive" class="recall-active hidden"></div>
+      <button type="button" id="cancelRecallBtn" class="ghost hidden">取消 Recall 修改</button>
+      <div id="recallResults" class="recall-results"></div>
+    </article>
     <article class="card invoice-workspace">
       <h3 id="documentDataHeading">客人 Invoice 資料</h3>
       <div id="selectedCustomerSummary" class="selected-customer"></div>
@@ -234,7 +256,7 @@
         <div class="grand"><span>Total</span><strong id="grandTotal">$0.00</strong></div>
       </div>
       <div class="bottom-remark"><label>Remark<textarea id="remark" rows="3" placeholder="可分行輸入"></textarea></label></div>
-      <div class="confirm-row"><button id="confirmInvoiceBtn" class="primary">Confirm Invoice 並匯出 Remaining Stock</button></div>
+      <div class="confirm-row"><button id="confirmInvoiceBtn" class="primary">Confirm Invoice 並更新 jmsdata</button></div>
     </article>
   </section>
 

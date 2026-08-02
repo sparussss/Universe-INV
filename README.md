@@ -1,4 +1,32 @@
-# Universe Invoice PWA v0.11.32
+# Universe Invoice PWA v0.12.0
+
+## v0.12.0 jmsdata document records + Recall
+
+- 匯入及輸出檔名繼續使用公司沿用多年的 `jmsdata.xls`，不改名為其他 Database 名稱。
+- 第一個工作表保留原本 jmsdata 庫存資料與 53 欄結構，只按 LOTNO 更新 I:M：I Delivered、J Available、K Sold on hand、L Consignment、M Balance。
+- 每次狀態更新遵守 `SUM(I:L)=M`；目前每個 LOTNO 一件，狀態只是在 I:L 之間移動數值 1，M 維持 1。
+- 更新後 `jmsdata.xls` 會加入五個工作表：`Invoice Header`、`Invoice Items`、`Consignment Header`、`Consignment Items`、`Transaction History`。
+- Invoice／Consignment Confirm 後會保存文件 Header、逐件 Items、庫存轉移及 Revision，並輸出更新後的 `jmsdata.xls`。
+- 建立文件頁新增 Recall 搜尋，可按文件號碼、客戶或日期重新開啟原 Invoice／Consignment。
+- Recall 保留原 Document No.；刪除貨品會恢復首次加入文件前的 I:M 狀態，新加入貨品重新 Confirm 後才轉成 Sold on hand／Consignment，保留貨品不會重複扣庫存。
+- 每次 Recall 重新 Confirm 會新增 Revision，不覆蓋舊版本；最新版本用於下一次 Recall。
+- 若某件貨在原文件之後已轉成其他狀態，Recall 不會強行覆蓋後續交易；系統會停止 Confirm 並提示先檢查該 LOTNO。
+- Header 不保存 Total Qty／Total Amount；開啟文件時由 Items、Discount 重新計算，避免 Header 與 Items 不同步。
+- 配套搜尋只容許 Available 貨品加入新文件；已在 Recall 文件中的非 Available 貨品會由 Recall 自動載入。
+- 資料匯入頁新增「匯出目前 jmsdata.xls」，方便在標記 Delivered 或其他狀態更新後重新輸出。
+- 現場上傳／拍照的自訂圖片只記錄檔名；資料包圖片的 variant／黑白選擇可 Recall。自訂圖片本身不會嵌入 jmsdata。
+- v0.11.32 的圖片尾碼容錯、v0.11.31 配套顏色排序、v0.11.30 GROUP／MULTI 選圖、拖曳排序及正式 Excel/PDF 版面全部保留。
+
+### 建議測試流程
+
+1. 匯入現有 `jmsdata.xls` 及完整展覽資料包。
+2. 建立一張兩件貨的 Invoice，Confirm 後儲存新下載的 `jmsdata.xls`。
+3. 重新匯入該 `jmsdata.xls`，在 Recall 搜尋原 Invoice No.。
+4. 刪除其中一件，再重新 Confirm。
+5. 檢查刪除貨品回到 J=1，保留貨品維持 K=1；`Invoice Header` 有 Revision 0 和 1，`Invoice Items` 的 Revision 1 只保留一件。
+6. 以 Consignment 重複測試，確認 L 欄及 `Consignment Header/Items`。
+
+# Previous versions
 
 ## v0.11.32 Missing-dot suffix tolerance for image filenames
 

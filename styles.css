@@ -252,3 +252,19 @@ button{width:auto}
 /* v0.11.31 Companion Search uses unified Stone List GROUP colour sorting for all query/filter modes. */
 
 /* v0.11.32 Pictures tolerate missing dot before formal ARTNO suffix; display/layout unchanged. */
+
+/* v0.12.0 jmsdata document records + Invoice / Consignment Recall */
+.recall-card{margin-bottom:14px}
+.recall-search-row{display:grid;grid-template-columns:minmax(150px,.55fr) minmax(220px,1.45fr) auto;gap:8px;align-items:end}
+.recall-search-row select,.recall-search-row input{width:100%}
+.recall-results{display:grid;gap:8px;margin-top:12px}
+.recall-result{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 12px;border:1px solid #d7dde7;border-radius:12px;background:#fff}
+.recall-result>div{min-width:0;display:grid;gap:2px}
+.recall-result strong{font-size:15px;color:#172033}
+.recall-result span{font-size:12px;color:#475467}
+.recall-result small{font-size:11px;color:#667085;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recall-result button{padding:8px 10px;white-space:nowrap}
+.recall-active{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 12px;border:1px solid #b2ddff;border-radius:11px;background:#eff8ff;color:#175cd3}
+.recall-active strong{font-size:14px}.recall-active span{font-size:12px}
+#cancelRecallBtn{margin-top:8px}
+@media(max-width:620px){.recall-search-row{grid-template-columns:1fr auto}.recall-search-row select{grid-column:1/-1}.recall-result{grid-template-columns:minmax(0,1fr) auto}.recall-active{align-items:flex-start;flex-direction:column}}
