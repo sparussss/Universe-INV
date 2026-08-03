@@ -274,3 +274,36 @@ button{width:auto}
 .back-to-top{position:fixed;z-index:30;right:max(16px,calc(env(safe-area-inset-right) + 12px));bottom:max(20px,calc(env(safe-area-inset-bottom) + 16px));width:48px;height:48px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#183f72;color:#fff;border:1px solid #183f72;box-shadow:0 8px 22px rgba(23,32,51,.28);font-size:23px;line-height:1;touch-action:manipulation}
 .back-to-top:active{transform:translateY(1px)}
 @media(max-width:520px){.back-to-top{right:max(12px,calc(env(safe-area-inset-right) + 10px));bottom:max(16px,calc(env(safe-area-inset-bottom) + 12px));width:46px;height:46px}}
+
+/* v0.12.2 pre-show image review + LOTNO Image Overrides */
+.notice.warn{background:#fff7e6;color:#b54708}
+.image-issue-chip{grid-column:1/-1}
+.image-override-tools{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+.image-override-tools .notice{flex:1;margin-top:0}
+.image-override-tools button{flex:0 0 auto;white-space:nowrap}
+.stock-result-image-wrap{position:relative;min-width:0}
+.stock-result-image-wrap img{display:block}
+.stock-image-badge{position:absolute;left:4px;right:4px;bottom:4px;padding:3px 4px;border-radius:6px;text-align:center;font-size:9px;font-weight:700;line-height:1.1;background:rgba(255,255,255,.92);box-shadow:0 1px 4px rgba(23,32,51,.16)}
+.stock-image-badge.attention{color:#b54708}
+.stock-image-badge.manual{color:#175cd3}
+.stock-image-dialog{width:min(860px,96vw);max-height:88dvh;overflow:auto}
+.stock-image-dialog .dialog-head{align-items:flex-start;gap:12px;position:sticky;top:-16px;z-index:2;background:#fff;padding:16px 0 10px}
+.stock-image-dialog h3{margin:0}
+.stock-image-dialog .muted{margin:4px 0 0}
+.stock-image-choices{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:10px}
+.image-choice-card{display:grid;gap:8px;padding:10px;border:1px solid #d7dde7;border-radius:12px;background:#fff}
+.image-choice-card.selected{border-color:#175cd3;box-shadow:0 0 0 2px rgba(23,92,211,.12)}
+.image-choice-card img{width:100%;height:150px;object-fit:contain;border-radius:9px;background:#f8fafc}
+.image-choice-name{font-size:11px;line-height:1.3;color:#475467;overflow-wrap:anywhere}
+.image-choice-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.image-choice-actions button{padding:8px 5px;font-size:11px}
+.stock-image-dialog-footer{display:flex;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid #e5e9f0}
+@media(max-width:620px){
+  .image-override-tools{align-items:stretch;flex-direction:column}
+  .image-override-tools button{width:100%}
+  .stock-image-choices{grid-template-columns:1fr 1fr;gap:8px}
+  .image-choice-card{padding:8px}
+  .image-choice-card img{height:120px}
+  .image-choice-actions{grid-template-columns:1fr}
+}
+@media(max-width:400px){.stock-image-choices{grid-template-columns:1fr}}

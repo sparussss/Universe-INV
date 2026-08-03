@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xls',stockIntegrityIssues:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',kitcoAsk:0,kitcoTime:'',fetching:false,source:''},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],transactions:[]},recall:null,stockSearch:{query:'',types:[],stones:[],statuses:[],filtersOpen:false},editingItemId:null};
+const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xls',stockIntegrityIssues:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',kitcoAsk:0,kitcoTime:'',fetching:false,source:''},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],transactions:[]},recall:null,stockSearch:{query:'',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null};
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
 function displayItems(){return formalItems().reverse()}
 function normalizeItemSequence(){state.items=formalItems();state.items.forEach((item,i)=>item.seq=i+1)}
@@ -64,6 +64,51 @@ const DOCUMENT_SHEETS={invoiceHeaders:'Invoice Header',invoiceItems:'Invoice Ite
 const HEADER_COLUMNS=['DOCUMENT_NO','REVISION','DOCUMENT_STATUS','DOCUMENT_DATE','CUSTOMER_CODE','CUSTOMER','ADDRESS','SALES_RATE','CURRENCY','FX_RATE','SHIPMENT_METHOD','TERMS','DISCOUNT','REMARK','CREATED_AT','UPDATED_AT'];
 const ITEM_COLUMNS=['DOCUMENT_NO','REVISION','ITEM_SEQ','LOTNO','ARTNO','ARTICLE','DESC1','DESC2','DESC3','DESC4','DESC5','DESC6','QTY','UNIT','PRICE','USD_UNIT_PRICE','UNIT_PRICE','CURRENCY','IMAGE_VARIANT','IMAGE_GRAYSCALE','IMAGE_AUTO_MATCHED','CUSTOM_IMAGE_FILE','ORIGINAL_STATUS','ORIGINAL_I','ORIGINAL_J','ORIGINAL_K','ORIGINAL_L','ORIGINAL_M','AFTER_STATUS','AFTER_I','AFTER_J','AFTER_K','AFTER_L','AFTER_M'];
 const TRANSACTION_COLUMNS=['TIMESTAMP','DOCUMENT_TYPE','DOCUMENT_NO','REVISION','LOTNO','ARTNO','FROM_STATUS','TO_STATUS','FROM_I','FROM_J','FROM_K','FROM_L','FROM_M','TO_I','TO_J','TO_K','TO_L','TO_M'];
+const IMAGE_OVERRIDE_SHEET='Image Overrides';
+const IMAGE_OVERRIDE_COLUMNS=['LOTNO','ARTNO','IMAGE_FILE','IMAGE_VARIANT','GRAYSCALE','MODE','UPDATED_AT'];
+function imageOverrideRow(raw){
+  const lot=norm(field(raw,['LOTNO'])),art=normArt(field(raw,['ARTNO'])),fileName=norm(field(raw,['IMAGE_FILE','IMAGE FILE','FILE_NAME','FILENAME']));
+  if(!lot||!fileName)return null;
+  return{LOTNO:lot,ARTNO:art,IMAGE_FILE:fileName,IMAGE_VARIANT:norm(field(raw,['IMAGE_VARIANT','IMAGE VARIANT','VARIANT'])),GRAYSCALE:numberValue(field(raw,['GRAYSCALE']))?1:0,MODE:'MANUAL',UPDATED_AT:norm(field(raw,['UPDATED_AT','UPDATED AT']))||new Date().toISOString()};
+}
+function importImageOverridesFromWorkbook(wb){
+  const map=new Map();
+  for(const raw of sheetRows(wb,IMAGE_OVERRIDE_SHEET)){const row=imageOverrideRow(raw);if(row)map.set(String(row.LOTNO),row)}
+  state.imageOverrides=map;state.imageOverrideDirtyLots=new Set();state.imageOverrideDirty=0;updateImageOverrideStatus();
+}
+function imageOverrideForLot(lot){return state.imageOverrides.get(String(lot||''))||null}
+function findImageByFileName(fileName,artNo=''){
+  const exact=state.imageFilesByName.get(String(fileName||'').toUpperCase());if(exact)return exact;
+  const arr=state.imageFiles.get(normArt(artNo))||[];return arr.find(x=>String(x.fileName||'').toUpperCase()===String(fileName||'').toUpperCase())||null;
+}
+function resolvedImageOverride(product){
+  const row=imageOverrideForLot(product?.lotNo);if(!row)return null;
+  const image=findImageByFileName(row.IMAGE_FILE,row.ARTNO||product?.artNo);if(!image)return null;
+  return{row,image,variant:row.IMAGE_VARIANT||image.variant,grayscale:!!numberValue(row.GRAYSCALE),fileName:image.fileName,manualOverride:true};
+}
+function updateImageOverrideStatus(){
+  const el=$('#imageOverrideStatus'),count=state.imageOverrides.size,dirty=state.imageOverrideDirty;
+  if(!el)return;
+  if(dirty){el.textContent=`尚有 ${dirty} 項圖片修改未匯出。完成整理後請匯出更新後的 jmsdata.xls。`;el.className='notice warn'}
+  else if(count){el.textContent=`已載入 ${count} 項 LOTNO 手動選圖記錄。`;el.className='notice ok'}
+  else{el.textContent='尚未有 LOTNO 手動選圖記錄。';el.className='notice'}
+}
+function confirmDiscardPendingImageOverrides(){return !state.imageOverrideDirty||confirm(`尚有 ${state.imageOverrideDirty} 項圖片修改未匯出。\n繼續匯入另一個 jmsdata／資料包會清除這些暫存修改，確定繼續？`)}
+function saveImageOverride(product,image,grayscale=false){
+  if(!product||!image)return;
+  const key=String(product.lotNo),previous=state.imageOverrides.get(key),row={LOTNO:key,ARTNO:normArt(product.artNo),IMAGE_FILE:image.fileName,IMAGE_VARIANT:image.variant||'',GRAYSCALE:grayscale?1:0,MODE:'MANUAL',UPDATED_AT:new Date().toISOString()};
+  state.imageOverrides.set(key,row);
+  if(!previous||previous.ARTNO!==row.ARTNO||previous.IMAGE_FILE!==row.IMAGE_FILE||numberValue(previous.GRAYSCALE)!==numberValue(row.GRAYSCALE)){state.imageOverrideDirtyLots.add(key);state.imageOverrideDirty=state.imageOverrideDirtyLots.size}
+  applyImageOverrideToCurrentItem(product);updateImageOverrideStatus();renderStockSearch();renderItems();schedulePreview();
+}
+function clearImageOverride(product){
+  const key=String(product?.lotNo||'');if(!state.imageOverrides.has(key))return;
+  state.imageOverrides.delete(key);state.imageOverrideDirtyLots.add(key);state.imageOverrideDirty=state.imageOverrideDirtyLots.size;applyImageOverrideToCurrentItem(product);updateImageOverrideStatus();renderStockSearch();renderItems();schedulePreview();
+}
+function applyImageOverrideToCurrentItem(product){
+  const item=state.items.find(x=>String(x.lotNo)===String(product?.lotNo));if(!item)return;
+  const match=chooseImageMatch(product);item.imageVariant=match.variant;item.imageGrayscale=!!match.grayscale;item.imageAutoMatched=!match.manualOverride;item.imageOverrideFile=match.fileName||'';
+}
 function emptyDocumentStore(){return{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],transactions:[]}}
 function normalizeDocumentStore(raw){const base=emptyDocumentStore();for(const key of Object.keys(base))base[key]=Array.isArray(raw?.[key])?raw[key]:[];return base}
 function loadDocumentStore(){try{state.documentStore=normalizeDocumentStore(JSON.parse(localStorage.getItem(DOCUMENT_STORE_KEY)||'null'))}catch{state.documentStore=emptyDocumentStore()}}
@@ -91,8 +136,8 @@ function headerRowForCurrentDocument(type,documentNo,revision,createdAt='',docum
 function itemRowForDocument(item,documentNo,revision,original,after){const desc=[...(item.descriptions||[])];return{DOCUMENT_NO:documentNo,REVISION:revision,ITEM_SEQ:Number(item.seq)||1,LOTNO:item.lotNo,ARTNO:item.artNo,ARTICLE:item.article||'',DESC1:desc[0]||'',DESC2:desc[1]||'',DESC3:desc[2]||'',DESC4:desc[3]||'',DESC5:desc[4]||'',DESC6:desc[5]||'',QTY:Number(item.qty)||1,UNIT:item.unit||'PC',PRICE:Number(item.price)||0,USD_UNIT_PRICE:Number(item.usdUnitPrice)||0,UNIT_PRICE:Number(item.unitPrice)||0,CURRENCY:currencyCode(),IMAGE_VARIANT:item.imageVariant||'',IMAGE_GRAYSCALE:item.imageGrayscale?1:0,IMAGE_AUTO_MATCHED:item.imageAutoMatched?1:0,CUSTOM_IMAGE_FILE:item.customImage?.fileName||'',...vectorFields('ORIGINAL',original),...vectorFields('AFTER',after)}}
 function worksheetFromRows(rows,headers){return rows.length?XLSX.utils.json_to_sheet(rows,{header:headers}):XLSX.utils.aoa_to_sheet([headers])}
 function preserveWorksheetLayout(target,source){if(!target||!source)return target;for(const prop of ['!cols','!rows','!merges','!autofilter','!freeze','!margins'])if(source[prop])target[prop]=structuredClone(source[prop]);for(const address of Object.keys(target)){if(address[0]==='!')continue;const old=source[address],cell=target[address];if(!old||!cell)continue;if(old.s)cell.s=structuredClone(old.s);if(old.z)cell.z=old.z}return target}
-function buildJmsdataWorkbook(){if(!state.stockAllRows.length)throw new Error('尚未匯入 jmsdata。');const wb=XLSX.utils.book_new(),stockName=(state.stockSheetName||'jmsdata').slice(0,31),originalStock=state.stockWorkbook?.Sheets?.[state.stockSheetName],stockWs=preserveWorksheetLayout(XLSX.utils.json_to_sheet(state.stockAllRows,{header:state.stockHeaders}),originalStock);if(state.stockWorkbook?.Props)wb.Props=structuredClone(state.stockWorkbook.Props);if(state.stockWorkbook?.Custprops)wb.Custprops=structuredClone(state.stockWorkbook.Custprops);XLSX.utils.book_append_sheet(wb,stockWs,stockName);const managed=new Set([state.stockSheetName,...Object.values(DOCUMENT_SHEETS)]);if(state.stockWorkbook){for(const name of state.stockWorkbook.SheetNames||[]){if(managed.has(name)||name===state.stockSheetName)continue;XLSX.utils.book_append_sheet(wb,state.stockWorkbook.Sheets[name],name.slice(0,31))}}XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.invoiceHeaders,HEADER_COLUMNS),DOCUMENT_SHEETS.invoiceHeaders);XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.invoiceItems,ITEM_COLUMNS),DOCUMENT_SHEETS.invoiceItems);XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.consignmentHeaders,HEADER_COLUMNS),DOCUMENT_SHEETS.consignmentHeaders);XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.consignmentItems,ITEM_COLUMNS),DOCUMENT_SHEETS.consignmentItems);XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.transactions,TRANSACTION_COLUMNS),DOCUMENT_SHEETS.transactions);return wb}
-function exportJmsdata(){try{const wb=buildJmsdataWorkbook();XLSX.writeFile(wb,'jmsdata.xls',{bookType:'xls'});const el=$('#jmsdataExportStatus');if(el){el.textContent='已輸出 jmsdata.xls；請在「檔案」App 儲存時確認取代舊檔。';el.className='notice ok'}return true}catch(err){console.error(err);alert('匯出 jmsdata 失敗：'+(err.message||err));return false}}
+function buildJmsdataWorkbook(){if(!state.stockAllRows.length)throw new Error('尚未匯入 jmsdata。');const wb=XLSX.utils.book_new(),stockName=(state.stockSheetName||'jmsdata').slice(0,31),originalStock=state.stockWorkbook?.Sheets?.[state.stockSheetName],stockWs=preserveWorksheetLayout(XLSX.utils.json_to_sheet(state.stockAllRows,{header:state.stockHeaders}),originalStock);if(state.stockWorkbook?.Props)wb.Props=structuredClone(state.stockWorkbook.Props);if(state.stockWorkbook?.Custprops)wb.Custprops=structuredClone(state.stockWorkbook.Custprops);XLSX.utils.book_append_sheet(wb,stockWs,stockName);const managed=new Set([state.stockSheetName,...Object.values(DOCUMENT_SHEETS),IMAGE_OVERRIDE_SHEET]);if(state.stockWorkbook){for(const name of state.stockWorkbook.SheetNames||[]){if(managed.has(name)||name===state.stockSheetName)continue;XLSX.utils.book_append_sheet(wb,state.stockWorkbook.Sheets[name],name.slice(0,31))}}XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.invoiceHeaders,HEADER_COLUMNS),DOCUMENT_SHEETS.invoiceHeaders);XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.invoiceItems,ITEM_COLUMNS),DOCUMENT_SHEETS.invoiceItems);XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.consignmentHeaders,HEADER_COLUMNS),DOCUMENT_SHEETS.consignmentHeaders);XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.consignmentItems,ITEM_COLUMNS),DOCUMENT_SHEETS.consignmentItems);XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.transactions,TRANSACTION_COLUMNS),DOCUMENT_SHEETS.transactions);XLSX.utils.book_append_sheet(wb,worksheetFromRows([...state.imageOverrides.values()],IMAGE_OVERRIDE_COLUMNS),IMAGE_OVERRIDE_SHEET);return wb}
+function exportJmsdata(){try{const wb=buildJmsdataWorkbook();XLSX.writeFile(wb,'jmsdata.xls',{bookType:'xls'});state.imageOverrideDirtyLots=new Set();state.imageOverrideDirty=0;updateImageOverrideStatus();const el=$('#jmsdataExportStatus');if(el){el.textContent=`已輸出 jmsdata.xls${state.imageOverrides.size?`，包括 ${state.imageOverrides.size} 項 LOTNO 圖片選擇`:''}；請在「檔案」App 儲存時確認取代舊檔。`;el.className='notice ok'}return true}catch(err){console.error(err);alert('匯出 jmsdata 失敗：'+(err.message||err));return false}}
 function setRecallLock(locked){$$('input[name="documentType"]').forEach(r=>r.disabled=!!locked);const no=$('#invoiceNo');if(no)no.readOnly=!!locked;$('#cancelRecallBtn')?.classList.toggle('hidden',!locked)}
 function clearCurrentDocument({keepCustomer=true}={}){releaseCustomImages();state.items=[];state.editingItemId=null;$('#discountAmount').value=0;$('#remark').value='';if(!keepCustomer){$('#customerCode').value='';$('#customerName').value='';$('#customerAddress').value='';$('#salesRate').value='';$('#customerTerms').value=''}renderItems();renderCustomerSummary();schedulePreview()}
 function restoreDocumentFields(header){$('#invoiceNo').value=norm(docValue(header,'DOCUMENT_NO'));$('#invoiceDate').value=norm(docValue(header,'DOCUMENT_DATE'))||today();$('#customerCode').value=norm(docValue(header,'CUSTOMER_CODE'));$('#customerName').value=norm(docValue(header,'CUSTOMER'));$('#customerAddress').value=norm(docValue(header,'ADDRESS'));$('#salesRate').value=numberValue(docValue(header,'SALES_RATE'));$('#currency').value=norm(docValue(header,'CURRENCY'))||'USD';$('#fxRate').value=numberValue(docValue(header,'FX_RATE'))||'';state.fx={rate:numberValue(docValue(header,'FX_RATE'))||1,date:'',source:'manual',fetching:false};$('#shipmentMethod').value=norm(docValue(header,'SHIPMENT_METHOD'));$('#customerTerms').value=norm(docValue(header,'TERMS'));$('#discountAmount').value=numberValue(docValue(header,'DISCOUNT'));$('#remark').value=norm(docValue(header,'REMARK'))}
@@ -261,7 +306,7 @@ async function importStockFile(f){
   state.stockWorkbook=wb;state.stockSheetName=sheetName||'jmsdata';state.stockFileName=f.name||'jmsdata.xls';state.stockHeaders=Object.keys(rows[0]||{});state.stockAllRows=rows;state.stockRowByLot=new Map();state.stockIntegrityIssues=[];
   const fullMap=new Map();
   for(const r of rows){const lot=norm(field(r,['LOTNO'])),art=normArt(field(r,['ARTNO'])),price=Number(field(r,['PRICE']));if(!lot||!art||!Number.isFinite(price))continue;const desc=[];for(let i=1;i<=6;i++){const v=norm(field(r,[`DESC${i}`]));if(v)desc.push(v)}const p={lotNo:lot,artNo:art,price,unit:norm(field(r,['UNIT']))||'PC',article:norm(field(r,['ARTICLE']))||'',descriptions:desc,desc2:norm(field(r,['DESC2']))};fullMap.set(lot,p);state.stockRowByLot.set(lot,r);let vector=inventoryVectorFromRow(r),sum=vector.i+vector.j+vector.k+vector.l;if(sum!==vector.m||!['AVAILABLE','CONSIGNED','SOLD_ON_HAND','SOLD_DELIVERED'].includes(inventoryStatusFromVector(vector)))state.stockIntegrityIssues.push({lotNo:lot,vector});}
-  if(!fullMap.size)throw new Error('找不到有效 LOTNO / ARTNO / PRICE');state.stockCatalog=fullMap;importDocumentStoreFromWorkbook(wb);rebuildInventoryMaps();const exportBtn=$('#exportJmsdataBtn');if(exportBtn)exportBtn.disabled=false;renderRecallResults();return fullMap.size;
+  if(!fullMap.size)throw new Error('找不到有效 LOTNO / ARTNO / PRICE');state.stockCatalog=fullMap;importDocumentStoreFromWorkbook(wb);importImageOverridesFromWorkbook(wb);rebuildInventoryMaps();for(const id of ['#exportJmsdataBtn','#exportImageOverridesBtn']){const exportBtn=$(id);if(exportBtn)exportBtn.disabled=false}renderRecallResults();return fullMap.size;
 }
 async function importCustomerFile(f){
   const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();
@@ -283,8 +328,8 @@ async function importStoneFile(f){
 }
 async function importArticleFile(f){const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();for(const row of rows){const prefix=normCode(row[0]),description=norm(row[1]);if(!prefix||!description||prefix==='PREFIX')continue;map.set(prefix,description)}if(!map.size)throw new Error('找不到 Prefix / Article Description 對照');state.articleMap=map;state.articleMappingName=f.name;return map.size}
 async function importTemplateFile(f){const buf=await f.arrayBuffer();if(typeof ExcelJS==='undefined')throw new Error('Excel 範本程式未載入');const test=new ExcelJS.Workbook();await test.xlsx.load(buf.slice(0));if(!test.worksheets.length)throw new Error('範本沒有工作表');state.invoiceTemplateBuffer=buf;state.invoiceTemplateName=f.name;return true}
-function importImageFiles(files){const map=new Map();for(const f of files){if(!String(f.type).startsWith('image/')&&!/\.(jpe?g|png|webp)$/i.test(f.name))continue;const p=parseImage(f);if(!p)continue;const key=p.art+'|'+p.variant.toUpperCase(),existing=map.get(key);if(!existing||p.dup<existing.dup)map.set(key,p)}state.imageFiles=new Map();for(const p of map.values()){const arr=state.imageFiles.get(p.art)||[];arr.push({variant:p.variant,url:URL.createObjectURL(p.file),fileName:p.file.name,file:p.file});state.imageFiles.set(p.art,arr)}for(const arr of state.imageFiles.values())arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));return {images:[...files].filter(f=>String(f.type).startsWith('image/')||/\.(jpe?g|png|webp)$/i.test(f.name)).length,matched:state.imageFiles.size}}
-$('#stockInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importStockFile(f),issues=state.stockIntegrityIssues.length;status('#stockStatus',`已匯入 ${f.name}：${count} 件貨品；Available ${state.products.size} 件；文件記錄 ${state.documentStore.invoiceHeaders.length+state.documentStore.consignmentHeaders.length} 筆${issues?`；${issues} 列 I:M 需要檢查`:''}。`,issues?'warn':'ok');setImportCollapsed('stock',true);updateTotals()}catch(err){status('#stockStatus','匯入失敗：'+err.message,'error');setImportCollapsed('stock',false)}};
+function importImageFiles(files){const map=new Map();for(const f of files){if(!String(f.type).startsWith('image/')&&!/\.(jpe?g|png|webp)$/i.test(f.name))continue;const p=parseImage(f);if(!p)continue;const key=p.art+'|'+p.variant.toUpperCase(),existing=map.get(key);if(!existing||p.dup<existing.dup)map.set(key,p)}state.imageFiles=new Map();state.imageFilesByName=new Map();for(const p of map.values()){const image={variant:p.variant,url:URL.createObjectURL(p.file),fileName:p.file.name,file:p.file};const arr=state.imageFiles.get(p.art)||[];arr.push(image);state.imageFiles.set(p.art,arr);state.imageFilesByName.set(String(p.file.name||'').toUpperCase(),image)}for(const arr of state.imageFiles.values())arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);updateImageOverrideStatus();return {images:[...files].filter(f=>String(f.type).startsWith('image/')||/\.(jpe?g|png|webp)$/i.test(f.name)).length,matched:state.imageFiles.size}}
+$('#stockInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;if(!confirmDiscardPendingImageOverrides()){e.target.value='';return}try{const count=await importStockFile(f),issues=state.stockIntegrityIssues.length;status('#stockStatus',`已匯入 ${f.name}：${count} 件貨品；Available ${state.products.size} 件；文件記錄 ${state.documentStore.invoiceHeaders.length+state.documentStore.consignmentHeaders.length} 筆；圖片選擇 ${state.imageOverrides.size} 項${issues?`；${issues} 列 I:M 需要檢查`:''}。`,issues?'warn':'ok');setImportCollapsed('stock',true);updateTotals()}catch(err){status('#stockStatus','匯入失敗：'+err.message,'error');setImportCollapsed('stock',false)}};
 $('#customerInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importCustomerFile(f);status('#customerStatus',`已匯入 ${f.name}：${count} 位客戶。`,'ok');setImportCollapsed('customer',true);updateTotals()}catch(err){status('#customerStatus','匯入失敗：'+err.message,'error');setImportCollapsed('customer',false)}};
 const FALLBACK_STONE_VARIANTS=new Map([
   ['QAM',['AM']],['LBT',['LBT','L.BT']],['BTO',['BT']],['SKY',['SKY','SKY BT']],['YCT',['CT']],['GPS',['G.AM','GAM']],['GPD',['PD']],['RQZ',['RQZ']],['MG',['MG']],['PTQ',['PTR']],['AQ',['AQ']],['AMCT',['AMCT']],['PAM',['P.AM','PAM']],['MCT',['MCT']],['RGT',['RGT']],['TZ',['TZ']],['IO',['IO']],['GT',['GT']],['GTQ',['GTR']],['ALEX',['ALEX']],['KU',['KU']],['LQZ',['LQZ']],['SQZ',['SQZ']],
@@ -342,6 +387,7 @@ function parseImage(file){
 $('#imageFolderInput').onchange=e=>{const result=importImageFiles(e.target.files);for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);status('#imageStatus',`已選擇圖片 Folder：${result.images} 張圖片，配對 ${result.matched} 個款號。`,'ok');setImportCollapsed('images',true);renderItems()};
 $('#exhibitionPackageInput').onchange=async e=>{
   const files=[...e.target.files];if(!files.length)return;
+  if(!confirmDiscardPendingImageOverrides()){e.target.value='';return}
   const root=(files[0].webkitRelativePath||'').split('/')[0]||'Exhibition Package';state.packageName=root;
   const excels=files.filter(f=>/\.(xlsx?|xls)$/i.test(f.name));
   const byName=(re)=>excels.find(f=>re.test(f.name));
@@ -354,7 +400,7 @@ $('#exhibitionPackageInput').onchange=async e=>{
   const lines=[];let errors=[];
   status('#packageStatus',`正在讀取 ${root}…`);
   try{
-    if(!stock)errors.push('找不到 jmsdata.xls / jmsdata.xlsx');else{const n=await importStockFile(stock);lines.push(`✓ ${stock.name} · ${n} 件貨品 · Available ${state.products.size} · Invoice/Consignment 記錄 ${state.documentStore.invoiceHeaders.length+state.documentStore.consignmentHeaders.length} 筆 · ${new Date(stock.lastModified).toLocaleString('zh-HK')}`)}
+    if(!stock)errors.push('找不到 jmsdata.xls / jmsdata.xlsx');else{const n=await importStockFile(stock);lines.push(`✓ ${stock.name} · ${n} 件貨品 · Available ${state.products.size} · Invoice/Consignment 記錄 ${state.documentStore.invoiceHeaders.length+state.documentStore.consignmentHeaders.length} 筆 · 圖片選擇 ${state.imageOverrides.size} 項 · ${new Date(stock.lastModified).toLocaleString('zh-HK')}`)}
     if(!customer)errors.push('找不到客戶 Excel');else{const n=await importCustomerFile(customer);lines.push(`✓ ${customer.name} · ${n} 位客戶`)}
     if(!stone)errors.push('找不到 Stone List & Shape & Cutting.xlsx');else{const n=await importStoneFile(stone);lines.push(`✓ ${stone.name} · ${n} 個石種代碼`)}
     if(!template)errors.push('找不到 Invoice Template.xlsx');else{await importTemplateFile(template);lines.push(`✓ ${template.name} · Template 已載入`)}
@@ -362,7 +408,7 @@ $('#exhibitionPackageInput').onchange=async e=>{
     if(!imageFiles.length)errors.push('找不到 Pictures 內的圖片');else{const r=importImageFiles(imageFiles);for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);lines.push(`✓ Pictures · ${r.images} 張圖片 · 配對 ${r.matched} 個款號`)}
     $('#packageSummary').innerHTML=lines.map(x=>`<div>${esc(x)}</div>`).join('')+(errors.length?`<div class="package-errors">${errors.map(x=>'✕ '+esc(x)).join('<br>')}</div>`:'');
     if(errors.length)status('#packageStatus',`${root} 未完整載入，請補回缺少的資料。`,'error');else{status('#packageStatus',`${root} 已完成匯入，可以開始建立文件。`,'ok');document.querySelector('.advanced-imports').open=false}
-    status('#stockStatus',stock?`已由資料包匯入 ${stock.name}：${state.products.size} 件貨品。`:'尚未匯入倉存。',stock?'ok':'error');
+    status('#stockStatus',stock?`已由資料包匯入 ${stock.name}：Available ${state.products.size} 件；圖片選擇 ${state.imageOverrides.size} 項。`:'尚未匯入倉存。',stock?'ok':'error');
     status('#customerStatus',customer?`已由資料包匯入 ${customer.name}：${state.customers.size} 位客戶。`:'尚未匯入客戶。',customer?'ok':'error');
     status('#imageStatus',imageFiles.length?`已由資料包匯入 Pictures：${imageFiles.length} 張圖片，配對 ${state.imageFiles.size} 個款號。`:'尚未匯入圖片。',imageFiles.length?'ok':'error');
     if(stone)status('#stoneMappingStatus',`已由資料包匯入 ${stone.name}。`,'ok');
@@ -425,7 +471,7 @@ function imageStoneTokenCount(variant){const signature=imageStoneSignature(varia
 function isMultiImageVariant(variant){return imageStoneSignature(variant).split('+').some(x=>x.trim()==='MULTI')}
 function variantMatchesProductStoneCode(variant,code){return stoneImageAliasesForCode(code).some(alias=>variantContainsStone(variant,alias))}
 function matchedProductStoneIndexes(variant,codes){const out=[];codes.forEach((code,index)=>{if(variantMatchesProductStoneCode(variant,code))out.push(index)});return out}
-function chooseImageMatch(p){
+function chooseAutomaticImageMatch(p){
   const imgs=state.imageFiles.get(p?.artNo)||[];
   if(!imgs.length)return{variant:'Default',grayscale:false,stoneMatched:false,colorMatched:false};
   const codes=imageStoneCodesForProduct(p),metal=originalMetalToken(p),multiColor=isMultiColorProduct(p);
@@ -456,10 +502,15 @@ function chooseImageMatch(p){
   const fallback=imgs.find(x=>x.variant==='Default')||imgs[0];
   return{variant:fallback.variant,grayscale:false,stoneMatched:false,colorMatched:metalScore(fallback)===2};
 }
+function chooseImageMatch(p){
+  const override=resolvedImageOverride(p);
+  if(override)return{variant:override.variant,grayscale:override.grayscale,stoneMatched:true,colorMatched:true,manualOverride:true,fileName:override.fileName};
+  return chooseAutomaticImageMatch(p);
+}
 function chooseVariant(p){return chooseImageMatch(p).variant}
 function applyAutoImageMatch(item){
   if(!item)return;
-  const match=chooseImageMatch(item);item.imageVariant=match.variant;item.imageGrayscale=!!match.grayscale;item.imageAutoMatched=true;
+  const match=chooseImageMatch(item);item.imageVariant=match.variant;item.imageGrayscale=!!match.grayscale;item.imageAutoMatched=!match.manualOverride;item.imageOverrideFile=match.fileName||'';
 }
 function normalizeLotInput(raw){
   const map={'零':'0','〇':'0','一':'1','二':'2','兩':'2','两':'2','三':'3','四':'4','五':'5','六':'6','七':'7','八':'8','九':'9'};
@@ -479,7 +530,7 @@ function refocusLotInput(selectAll=false){
 function addProductToDocument(p,{fromSearch=false}={}){
   if(!p)return false;const lot=String(p.lotNo);
   if(state.items.some(x=>x.lotNo===lot)){status('#addMessage',`LOTNO ${lot} 已在 ${documentLabels().short}。`,'error');return false}
-  const rate=Number($('#salesRate').value)||0,usdUnitPrice=Math.ceil((Number(p.price)||0)*rate),match=chooseImageMatch(p);const item={...productSnapshot(p),id:Date.now()+Math.random(),seq:state.items.length+1,qty:1,usdUnitPrice,currencyPrices:{},quote14kCurrencyPrices:{},unitPrice:0,imageVariant:match.variant,imageGrayscale:!!match.grayscale,imageAutoMatched:true};state.items.push(item);item.unitPrice=convertedFromUsd(effectiveUsdPrice(item));
+  const rate=Number($('#salesRate').value)||0,usdUnitPrice=Math.ceil((Number(p.price)||0)*rate),match=chooseImageMatch(p);const item={...productSnapshot(p),id:Date.now()+Math.random(),seq:state.items.length+1,qty:1,usdUnitPrice,currencyPrices:{},quote14kCurrencyPrices:{},unitPrice:0,imageVariant:match.variant,imageGrayscale:!!match.grayscale,imageAutoMatched:!match.manualOverride,imageOverrideFile:match.fileName||''};state.items.push(item);item.unitPrice=convertedFromUsd(effectiveUsdPrice(item));
   status('#addMessage',`已加入 ${p.artNo} / LOTNO ${lot}`,'ok');renderItems();if(fromSearch)renderStockSearch();return true;
 }
 function addLot(raw){
@@ -496,9 +547,38 @@ $('#lotInput').oninput=e=>{e.target.value=e.target.value.replace(/[，,。\.\-�
 $('#lotInput').onfocus=e=>setTimeout(()=>e.target.select(),50);
 function getImg(item){
   if(item?.customImage?.file&&item.customImage.url)return {...item.customImage,grayscale:false};
+  const overrideRow=imageOverrideForLot(item?.lotNo),overrideFile=item?.imageOverrideFile||overrideRow?.IMAGE_FILE;
+  if(overrideFile){const selected=findImageByFileName(overrideFile,item?.artNo);if(selected)return{...selected,grayscale:item?.imageOverrideFile?!!item?.imageGrayscale:!!numberValue(overrideRow?.GRAYSCALE)}}
   const arr=state.imageFiles.get(item.artNo)||[];
   const selected=arr.find(x=>x.variant===item.imageVariant)||arr[0];
   return selected?{...selected,grayscale:!!item?.imageGrayscale}:selected;
+}
+function imageDisplayForProduct(product){
+  const match=chooseImageMatch(product),arr=state.imageFiles.get(product?.artNo)||[];
+  const image=match.fileName?findImageByFileName(match.fileName,product?.artNo):arr.find(x=>x.variant===match.variant)||arr.find(x=>String(x.variant).toUpperCase()===String(match.variant).toUpperCase())||arr.find(x=>x.variant==='Default')||arr[0]||null;
+  return{match,image,src:image?.url||placeholder(product?.artNo||'No Image'),grayscale:!!match.grayscale,manual:!!match.manualOverride};
+}
+function imageNeedsAttention(product){
+  if(resolvedImageOverride(product))return false;
+  const arr=state.imageFiles.get(product?.artNo)||[];if(!arr.length)return true;
+  return !!chooseAutomaticImageMatch(product).grayscale;
+}
+function openStockImageEditor(product){
+  const dialog=$('#stockImageDialog'),grid=$('#stockImageChoices');if(!dialog||!grid)return;
+  state.stockImageEditLot=String(product.lotNo);$('#stockImageEditorTitle').textContent=`編輯圖片 · ${product.artNo}`;$('#stockImageEditorMeta').textContent=`LOTNO ${product.lotNo} · 手動選圖會寫入 jmsdata 的 ${IMAGE_OVERRIDE_SHEET} 工作表。`;
+  grid.innerHTML='';const arr=state.imageFiles.get(product.artNo)||[],current=resolvedImageOverride(product);
+  if(!arr.length)grid.innerHTML='<div class="notice warn">這個款號在 Pictures 內沒有可選圖片。</div>';
+  for(const image of arr){
+    const card=document.createElement('div');card.className='image-choice-card';if(current?.image?.fileName===image.fileName)card.classList.add('selected');
+    const preview=document.createElement('img');preview.src=image.url;preview.alt=image.fileName;
+    const name=document.createElement('div');name.className='image-choice-name';name.textContent=image.fileName;
+    const buttons=document.createElement('div');buttons.className='image-choice-actions';
+    const color=document.createElement('button');color.type='button';color.textContent='選用彩色';color.onclick=()=>{saveImageOverride(product,image,false);dialog.close()};
+    const gray=document.createElement('button');gray.type='button';gray.className='ghost';gray.textContent='選用黑白';gray.onclick=()=>{saveImageOverride(product,image,true);dialog.close()};
+    buttons.append(color,gray);card.append(preview,name,buttons);grid.appendChild(card);
+  }
+  const restore=$('#restoreAutoImageBtn');restore.disabled=!imageOverrideForLot(product.lotNo);restore.onclick=()=>{clearImageOverride(product);dialog.close()};
+  if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','');
 }
 function placeholder(t){return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="#f1f5f9"/><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="18" fill="#64748b">${t}</text></svg>`)}`}
 function revokeCustomImage(item){
@@ -1348,25 +1428,46 @@ function toggleStockFilter(kind,value){
   if(selected.has(value))selected.delete(value);else selected.add(value);
   state.stockSearch[key]=[...selected];renderStockSearch();
 }
-function stockFilterSummaryText(){const t=selectedStockFilters('type'),s=selectedStockFilters('stone');return `款式：${t.length?t.join(', '):'全部'} · 石頭：${s.length?s.map(stoneFilterLabel).join(', '):'全部'}`}
-function runStockSearch(){const raw=norm($('#stockSearchInput').value).toUpperCase(),core=raw==='*'?'*':articleCore(raw);state.stockSearch.query=core||raw;state.stockSearch.types=[];state.stockSearch.stones=[];state.stockSearch.statuses=[];state.stockSearch.filtersOpen=false;renderStockSearch()}
+function stockFilterSummaryText(){const t=selectedStockFilters('type'),s=selectedStockFilters('stone'),image=state.stockSearch.imageIssuesOnly?' · 圖片：待處理':'';return `款式：${t.length?t.join(', '):'全部'} · 石頭：${s.length?s.map(stoneFilterLabel).join(', '):'全部'}${image}`}
+function runStockSearch(){const raw=norm($('#stockSearchInput').value).toUpperCase(),core=raw==='*'?'*':articleCore(raw);state.stockSearch.query=core||raw;state.stockSearch.types=[];state.stockSearch.stones=[];state.stockSearch.statuses=[];state.stockSearch.imageIssuesOnly=false;state.stockSearch.filtersOpen=false;renderStockSearch()}
 function renderStockSearch(){
-  const resultsEl=$('#stockSearchResults');if(!resultsEl)return;const q=norm(state.stockSearch.query||$('#stockSearchInput')?.value).toUpperCase(),filterControls=$('#stockFilterControls'),filterPanel=$('#stockFilterPanel');if(!q){resultsEl.innerHTML='';$('#stockSearchMessage').textContent='請輸入款號搜尋。';$('#stockTypeFilters').classList.add('hidden');$('#stockStoneFilters').classList.add('hidden');$('#stockSearchSummary').classList.add('hidden');filterControls?.classList.add('hidden');filterPanel?.classList.add('hidden');return}
-  const wildcard=q==='*',core=wildcard?'*':articleCore(q),all=wildcard?inventorySearchRecords():inventorySearchRecords().filter(x=>articleCore(x.artNo)===core||normArt(x.artNo).includes(normArt(q)));const types=[...new Set(all.map(x=>articleType(x.artNo)))].sort(compareStockTypes),stones=[...new Set(all.flatMap(stoneCodesForProduct))].sort((a,b)=>stoneOrderRank(a)-stoneOrderRank(b)||a.localeCompare(b));
+  const resultsEl=$('#stockSearchResults');if(!resultsEl)return;
+  const q=norm(state.stockSearch.query||$('#stockSearchInput')?.value).toUpperCase(),filterControls=$('#stockFilterControls'),filterPanel=$('#stockFilterPanel');
+  if(!q){resultsEl.innerHTML='';$('#stockSearchMessage').textContent='請輸入款號搜尋。';$('#stockTypeFilters').classList.add('hidden');$('#stockStoneFilters').classList.add('hidden');$('#stockSearchSummary').classList.add('hidden');filterControls?.classList.add('hidden');filterPanel?.classList.add('hidden');return}
+  const wildcard=q==='*',core=wildcard?'*':articleCore(q),all=wildcard?inventorySearchRecords():inventorySearchRecords().filter(x=>articleCore(x.artNo)===core||normArt(x.artNo).includes(normArt(q)));
+  const types=[...new Set(all.map(x=>articleType(x.artNo)))].sort(compareStockTypes),stones=[...new Set(all.flatMap(stoneCodesForProduct))].sort((a,b)=>stoneOrderRank(a)-stoneOrderRank(b)||a.localeCompare(b));
   const selectedTypes=selectedStockFilters('type'),selectedStones=selectedStockFilters('stone'),selectedStatuses=selectedStockFilters('status');
-  const typeBox=$('#stockTypeFilters'),stoneBox=$('#stockStoneFilters');typeBox.dataset.kind='type';stoneBox.dataset.kind='stone';typeBox.innerHTML=`<div class="filter-chips">${filterButtonHTML('ALL','全部',selectedTypes.length===0)}${types.map(x=>filterButtonHTML(x,x,selectedTypes.includes(x))).join('')}</div>`;stoneBox.innerHTML=`<div class="filter-chips">${filterButtonHTML('ALL','全部',selectedStones.length===0)}${stones.map(x=>filterButtonHTML(x,stoneFilterLabel(x),selectedStones.includes(x))).join('')}</div>`;typeBox.classList.toggle('hidden',!types.length);stoneBox.classList.toggle('hidden',!stones.length);typeBox.querySelectorAll('.filter-chip').forEach(b=>b.onclick=()=>toggleStockFilter('type',b.dataset.value));stoneBox.querySelectorAll('.filter-chip').forEach(b=>b.onclick=()=>toggleStockFilter('stone',b.dataset.value));
+  const typeBox=$('#stockTypeFilters'),stoneBox=$('#stockStoneFilters');typeBox.dataset.kind='type';stoneBox.dataset.kind='stone';
+  typeBox.innerHTML=`<div class="filter-chips">${filterButtonHTML('ALL','全部',selectedTypes.length===0)}${types.map(x=>filterButtonHTML(x,x,selectedTypes.includes(x))).join('')}</div>`;
+  stoneBox.innerHTML=`<div class="filter-chips">${filterButtonHTML('ALL','全部',selectedStones.length===0)}${stones.map(x=>filterButtonHTML(x,stoneFilterLabel(x),selectedStones.includes(x))).join('')}</div>`;
+  typeBox.classList.toggle('hidden',!types.length);stoneBox.classList.toggle('hidden',!stones.length);
+  typeBox.querySelectorAll('.filter-chip').forEach(b=>b.onclick=()=>toggleStockFilter('type',b.dataset.value));stoneBox.querySelectorAll('.filter-chip').forEach(b=>b.onclick=()=>toggleStockFilter('stone',b.dataset.value));
   const hasFilters=types.length||stones.length;if(filterControls){filterControls.classList.toggle('hidden',!hasFilters);$('#stockFilterSelectionSummary').textContent=stockFilterSummaryText();$('#stockFilterToggle').textContent=state.stockSearch.filtersOpen?'收起篩選':'展開篩選'}if(filterPanel)filterPanel.classList.toggle('hidden',!hasFilters||!state.stockSearch.filtersOpen);
-  const shown=all.filter(x=>(selectedTypes.length===0||selectedTypes.includes(articleType(x.artNo)))&&(selectedStones.length===0||stoneCodesForProduct(x).some(code=>selectedStones.includes(code)))&&(selectedStatuses.length===0||selectedStatuses.includes(x.status))).sort((a,b)=>compareColorSortedStock(a,b,selectedStones));
-  const counts={AVAILABLE:0,CONSIGNED:0,SOLD_ON_HAND:0,SOLD_DELIVERED:0};for(const x of all)counts[x.status]=(counts[x.status]||0)+1;$('#stockSearchMessage').textContent=wildcard?`全部庫存：找到 ${all.length} 件，目前顯示 ${shown.length} 件。`:`搜尋 ${core}：找到 ${all.length} 件，目前顯示 ${shown.length} 件。`;const summary=$('#stockSearchSummary');summary.innerHTML=`<button type="button" class="stock-summary-chip${selectedStatuses.includes('AVAILABLE')?' active':''}" data-status="AVAILABLE" aria-pressed="${selectedStatuses.includes('AVAILABLE')?'true':'false'}">Avail ${counts.AVAILABLE||0}</button><button type="button" class="stock-summary-chip${selectedStatuses.includes('CONSIGNED')?' active':''}" data-status="CONSIGNED" aria-pressed="${selectedStatuses.includes('CONSIGNED')?'true':'false'}">Consign ${counts.CONSIGNED||0}</button><button type="button" class="stock-summary-chip${selectedStatuses.includes('SOLD_ON_HAND')?' active':''}" data-status="SOLD_ON_HAND" aria-pressed="${selectedStatuses.includes('SOLD_ON_HAND')?'true':'false'}">Sold-OH ${counts.SOLD_ON_HAND||0}</button><button type="button" class="stock-summary-chip${selectedStatuses.includes('SOLD_DELIVERED')?' active':''}" data-status="SOLD_DELIVERED" aria-pressed="${selectedStatuses.includes('SOLD_DELIVERED')?'true':'false'}">Deliv ${counts.SOLD_DELIVERED||0}</button>`;summary.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>toggleStockFilter('status',b.dataset.status));summary.classList.remove('hidden');
-  if(!shown.length){resultsEl.innerHTML='<div class="notice">沒有符合目前款式／石頭／狀態篩選的貨品。</div>';return}
-  resultsEl.innerHTML='';for(const x of shown){const card=document.createElement('div');card.className='stock-result';const imageList=state.imageFiles.get(x.artNo)||[],imageMatch=chooseImageMatch(x),matchedImage=imageList.find(img=>img.variant===imageMatch.variant)||imageList.find(img=>img.variant.toUpperCase()===String(imageMatch.variant).toUpperCase())||imageList.find(img=>img.variant==='Default')||imageList[0],img=matchedImage?.url||placeholder(x.artNo),grayClass=imageMatch.grayscale?'grayscale-image':'',inDoc=state.items.some(i=>String(i.lotNo)===String(x.lotNo)),canAdd=x.status==='AVAILABLE'||state.documentType==='quotation'&&['CONSIGNED','SOLD_ON_HAND','SOLD_DELIVERED'].includes(x.status);card.innerHTML=`<img class="${grayClass}" src="${esc(img)}" alt="${esc(x.artNo)}"><div><h4>${esc(x.artNo)}</h4><div class="lot">LOTNO ${esc(x.lotNo)}</div><div class="desc">${esc((x.descriptions||[]).join('\n'))}</div></div><div class="stock-result-actions"><span class="stock-status ${historyStatusClass(x.status)}">${esc(historyStatusLabel(x.status))}</span>${inDoc?'<span class="stock-current-doc">已在目前文件</span>':''}</div>`;const actions=$('.stock-result-actions',card);if(canAdd&&!inDoc){const b=document.createElement('button');b.type='button';b.textContent=`加入目前 ${documentLabels().short}`;b.onclick=()=>{if(addProductToDocument(x,{fromSearch:true})){b.disabled=true;b.textContent='已加入';renderStockSearch()}};actions.appendChild(b)}if(x.status==='SOLD_ON_HAND'){const d=document.createElement('button');d.type='button';d.className='ghost';d.textContent='標記已交貨';d.onclick=()=>{if(confirm(`${x.artNo} / LOTNO ${x.lotNo}\n標記為 Sold - Delivered？`))markInventoryDelivered(x.lotNo)};actions.appendChild(d)}if(x.status==='SOLD_DELIVERED'){const u=document.createElement('button');u.type='button';u.className='ghost';u.textContent='取消已交貨';u.onclick=()=>{if(confirm(`${x.artNo} / LOTNO ${x.lotNo}\n已確認貨品由客人退回，並取消 Delivered？\n系統會恢復到交貨前狀態。`))undoInventoryDelivered(x.lotNo)};actions.appendChild(u)}resultsEl.appendChild(card)}
+  const baseShown=all.filter(x=>(selectedTypes.length===0||selectedTypes.includes(articleType(x.artNo)))&&(selectedStones.length===0||stoneCodesForProduct(x).some(code=>selectedStones.includes(code)))&&(selectedStatuses.length===0||selectedStatuses.includes(x.status)));
+  const issueCount=baseShown.filter(imageNeedsAttention).length,shown=(state.stockSearch.imageIssuesOnly?baseShown.filter(imageNeedsAttention):baseShown).sort((a,b)=>compareColorSortedStock(a,b,selectedStones));
+  const counts={AVAILABLE:0,CONSIGNED:0,SOLD_ON_HAND:0,SOLD_DELIVERED:0};for(const x of all)counts[x.status]=(counts[x.status]||0)+1;
+  $('#stockSearchMessage').textContent=(wildcard?`全部庫存：找到 ${all.length} 件`:`搜尋 ${core}：找到 ${all.length} 件`)+`，目前顯示 ${shown.length} 件。`;
+  const summary=$('#stockSearchSummary');summary.innerHTML=`<button type="button" class="stock-summary-chip${selectedStatuses.includes('AVAILABLE')?' active':''}" data-status="AVAILABLE" aria-pressed="${selectedStatuses.includes('AVAILABLE')?'true':'false'}">Avail ${counts.AVAILABLE||0}</button><button type="button" class="stock-summary-chip${selectedStatuses.includes('CONSIGNED')?' active':''}" data-status="CONSIGNED" aria-pressed="${selectedStatuses.includes('CONSIGNED')?'true':'false'}">Consign ${counts.CONSIGNED||0}</button><button type="button" class="stock-summary-chip${selectedStatuses.includes('SOLD_ON_HAND')?' active':''}" data-status="SOLD_ON_HAND" aria-pressed="${selectedStatuses.includes('SOLD_ON_HAND')?'true':'false'}">Sold-OH ${counts.SOLD_ON_HAND||0}</button><button type="button" class="stock-summary-chip${selectedStatuses.includes('SOLD_DELIVERED')?' active':''}" data-status="SOLD_DELIVERED" aria-pressed="${selectedStatuses.includes('SOLD_DELIVERED')?'true':'false'}">Deliv ${counts.SOLD_DELIVERED||0}</button><button type="button" class="stock-summary-chip image-issue-chip${state.stockSearch.imageIssuesOnly?' active':''}" data-image-issues="1" aria-pressed="${state.stockSearch.imageIssuesOnly?'true':'false'}">圖片待處理 ${issueCount}</button>`;
+  summary.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>toggleStockFilter('status',b.dataset.status));const issueBtn=summary.querySelector('[data-image-issues]');if(issueBtn)issueBtn.onclick=()=>{state.stockSearch.imageIssuesOnly=!state.stockSearch.imageIssuesOnly;renderStockSearch()};summary.classList.remove('hidden');
+  if(!shown.length){resultsEl.innerHTML=`<div class="notice">沒有符合目前${state.stockSearch.imageIssuesOnly?'圖片待處理／':''}款式／石頭／狀態篩選的貨品。</div>`;return}
+  resultsEl.innerHTML='';
+  for(const x of shown){
+    const card=document.createElement('div');card.className='stock-result';const display=imageDisplayForProduct(x),grayClass=display.grayscale?'grayscale-image':'',inDoc=state.items.some(i=>String(i.lotNo)===String(x.lotNo)),canAdd=x.status==='AVAILABLE'||state.documentType==='quotation'&&['CONSIGNED','SOLD_ON_HAND','SOLD_DELIVERED'].includes(x.status);
+    const imageBadge=display.manual?'<span class="stock-image-badge manual">手動圖片</span>':imageNeedsAttention(x)?'<span class="stock-image-badge attention">圖片待處理</span>':'';
+    card.innerHTML=`<div class="stock-result-image-wrap"><img class="${grayClass}" src="${esc(display.src)}" alt="${esc(x.artNo)}">${imageBadge}</div><div><h4>${esc(x.artNo)}</h4><div class="lot">LOTNO ${esc(x.lotNo)}</div><div class="desc">${esc((x.descriptions||[]).join('\n'))}</div></div><div class="stock-result-actions"><span class="stock-status ${historyStatusClass(x.status)}">${esc(historyStatusLabel(x.status))}</span>${inDoc?'<span class="stock-current-doc">已在目前文件</span>':''}</div>`;
+    const actions=$('.stock-result-actions',card);const edit=document.createElement('button');edit.type='button';edit.className='ghost';edit.textContent='編輯圖片';edit.onclick=()=>openStockImageEditor(x);actions.appendChild(edit);
+    if(canAdd&&!inDoc){const b=document.createElement('button');b.type='button';b.textContent=`加入目前 ${documentLabels().short}`;b.onclick=()=>{if(addProductToDocument(x,{fromSearch:true})){b.disabled=true;b.textContent='已加入';renderStockSearch()}};actions.appendChild(b)}
+    if(x.status==='SOLD_ON_HAND'){const d=document.createElement('button');d.type='button';d.className='ghost';d.textContent='標記已交貨';d.onclick=()=>{if(confirm(`${x.artNo} / LOTNO ${x.lotNo}\n標記為 Sold - Delivered？`))markInventoryDelivered(x.lotNo)};actions.appendChild(d)}
+    if(x.status==='SOLD_DELIVERED'){const u=document.createElement('button');u.type='button';u.className='ghost';u.textContent='取消已交貨';u.onclick=()=>{if(confirm(`${x.artNo} / LOTNO ${x.lotNo}\n已確認貨品由客人退回，並取消 Delivered？\n系統會恢復到交貨前狀態。`))undoInventoryDelivered(x.lotNo)};actions.appendChild(u)}
+    resultsEl.appendChild(card);
+  }
 }
 function activePanelId(){return $('.tab.active')?.dataset.tab||''}
 function updateBackToTopButton(){const btn=$('#backToTopBtn');if(!btn)return;const panel=activePanelId();let visible=false,title='回到頂部';if(panel==='invoice'){visible=($('#invoiceItems')?.scrollTop||0)>180;title=`回到 ${documentLabels().short} 貨品列表頂部`}else if(panel==='stockSearch'){const section=$('#stockSearch'),hasResults=($('#stockSearchResults')?.children.length||0)>0;visible=!!section&&hasResults&&window.scrollY>section.offsetTop+260;title='回到配套搜尋頂部'}btn.title=title;btn.setAttribute('aria-label',title);btn.classList.toggle('hidden',!visible)}
 function scrollCurrentPanelToTop(){const panel=activePanelId();if(panel==='invoice')$('#invoiceItems')?.scrollTo({top:0,behavior:'smooth'});else if(panel==='stockSearch'){const section=$('#stockSearch');if(section)window.scrollTo({top:Math.max(0,section.offsetTop-72),behavior:'smooth'})}setTimeout(updateBackToTopButton,350)}
 $('#backToTopBtn').onclick=scrollCurrentPanelToTop;$('#invoiceItems').addEventListener('scroll',updateBackToTopButton,{passive:true});window.addEventListener('scroll',updateBackToTopButton,{passive:true});window.addEventListener('resize',updateBackToTopButton,{passive:true});
 $('#stockSearchBtn').onclick=runStockSearch;$('#stockSearchInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runStockSearch()}};$('#stockSearchInput').oninput=e=>{e.target.value=e.target.value.toUpperCase()};$('#stockFilterToggle').onclick=()=>{state.stockSearch.filtersOpen=!state.stockSearch.filtersOpen;renderStockSearch()};
-$('#exportJmsdataBtn').onclick=exportJmsdata;$('#recallSearchBtn').onclick=renderRecallResults;$('#recallSearchInput').oninput=renderRecallResults;$('#recallSearchInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();renderRecallResults()}};$('#recallTypeFilter').onchange=renderRecallResults;$('#cancelRecallBtn').onclick=cancelRecall;
+$('#exportJmsdataBtn').onclick=exportJmsdata;$('#exportImageOverridesBtn').onclick=exportJmsdata;$('#closeStockImageDialogBtn').onclick=()=>$('#stockImageDialog').close();$('#stockImageDialog').addEventListener('close',()=>{state.stockImageEditLot=null});window.addEventListener('beforeunload',e=>{if(!state.imageOverrideDirty)return;e.preventDefault();e.returnValue=''});$('#recallSearchBtn').onclick=renderRecallResults;$('#recallSearchInput').oninput=renderRecallResults;$('#recallSearchInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();renderRecallResults()}};$('#recallTypeFilter').onchange=renderRecallResults;$('#cancelRecallBtn').onclick=cancelRecall;
 $$('input[name="quoteKarat"]').forEach(r=>r.onchange=e=>setQuoteKarat(e.target.value));$('#refreshGoldBtn').onclick=()=>fetchKitcoAsk();let goldInputTimer=null;$('#kitcoAskInput').oninput=e=>{clearTimeout(goldInputTimer);goldInputTimer=setTimeout(()=>{const n=Number(e.target.value);if(n>0)setKitcoAsk(n,{source:'manual',message:`手動 Kitco Ask：USD ${n.toFixed(2)} / oz`});else{state.quote.kitcoAsk=0;syncEffectivePrices({clearCurrentOverride:true});renderItems();updateGoldQuoteUI('請輸入大於 0 的 Kitco Ask。','error')}},180)};
 
-updateFxPanel();updateDocumentTypeUI();updateGoldQuoteUI();renderCustomerSummary();renderItems();renderRecallResults();schedulePreview();updateBackToTopButton();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+updateFxPanel();updateDocumentTypeUI();updateGoldQuoteUI();renderCustomerSummary();renderItems();renderRecallResults();updateImageOverrideStatus();schedulePreview();updateBackToTopButton();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});

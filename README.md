@@ -1,5 +1,15 @@
-# Universe Invoice PWA v0.12.1
+# Universe Invoice PWA v0.12.2
 
+
+## v0.12.2 展覽前圖片整理
+
+- 配套搜尋新增「圖片待處理」篩選：包含完全沒有圖片，以及自動選圖只能使用黑白 fallback 的貨品。
+- 每件配套搜尋結果新增「編輯圖片」，可從該 ARTNO 的 Pictures 候選中選用彩色或黑白圖片。
+- 手動選圖以 LOTNO 儲存，優先於 GROUP／MULTI／成色／黑白自動選圖，並同步用於文件、預覽、Excel 及 PDF。
+- `jmsdata.xls` 新增 `Image Overrides` 工作表，記錄 LOTNO、ARTNO、圖片檔名、Variant、黑白狀態及更新時間。
+- 匯入更新後的 jmsdata 及原 Pictures 資料夾後，其他同事亦可取得相同選圖結果。
+- 配套搜尋顯示尚未匯出的圖片修改數量；完成展覽前整理後一次過匯出更新後的 `jmsdata.xls` 即可。
+- 提供「恢復自動選圖」，刪除該 LOTNO 的手動覆蓋記錄。
 
 ## v0.12.1 下一輪現場流程修正
 

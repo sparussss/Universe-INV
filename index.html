@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.12.1</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.12.2</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -279,6 +279,10 @@
         <div id="stockStoneFilters" class="filter-group hidden"></div>
       </div>
       <div id="stockSearchSummary" class="stock-search-summary hidden"></div>
+      <div class="image-override-tools">
+        <div id="imageOverrideStatus" class="notice">尚未有 LOTNO 手動選圖記錄。</div>
+        <button id="exportImageOverridesBtn" type="button" class="ghost" disabled>匯出更新後 jmsdata</button>
+      </div>
       <div id="stockSearchResults" class="stock-search-results"></div>
     </article>
   </section>
@@ -295,6 +299,12 @@
 </main>
 
 <button id="backToTopBtn" type="button" class="back-to-top hidden" aria-label="回到頂部" title="回到頂部">↑</button>
+
+<dialog id="stockImageDialog" class="stock-image-dialog">
+  <div class="dialog-head"><div><h3 id="stockImageEditorTitle">編輯圖片</h3><p id="stockImageEditorMeta" class="muted"></p></div><button id="closeStockImageDialogBtn" type="button" class="ghost">關閉</button></div>
+  <div id="stockImageChoices" class="stock-image-choices"></div>
+  <div class="stock-image-dialog-footer"><button id="restoreAutoImageBtn" type="button" class="ghost">恢復自動選圖</button></div>
+</dialog>
 
 <dialog id="scannerDialog">
   <div class="dialog-head"><h3>掃 Barcode</h3><button id="closeScannerBtn" class="ghost">關閉</button></div>
