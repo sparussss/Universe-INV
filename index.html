@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.12.2</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.12.3</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -263,13 +263,13 @@
   <section id="stockSearch" class="tab-panel">
     <article class="card">
       <div class="section-title-row stock-search-title">
-        <div><h3>配套／庫存搜尋</h3><p class="muted">輸入核心款號，例如 34686；輸入 * 可顯示全部貨品，並按核心款號、石頭及款式排序。</p></div>
+        <div><h3>配套／庫存搜尋</h3></div>
       </div>
       <div class="stock-search-row">
-        <input id="stockSearchInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="輸入 34686、RG-34686 或 *">
+        <input id="stockSearchInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="輸入款號">
         <button id="stockSearchBtn" class="primary">搜尋</button>
       </div>
-      <div id="stockSearchMessage" class="notice">請輸入款號搜尋。</div>
+      <div id="stockSearchMessage" class="notice">尚未匯入 jmsdata。</div>
       <div id="stockFilterControls" class="stock-filter-controls hidden">
         <div id="stockFilterSelectionSummary" class="stock-filter-selection-summary">款式：全部 · 石頭：全部</div>
         <button id="stockFilterToggle" type="button" class="ghost">展開篩選</button>
@@ -281,7 +281,10 @@
       <div id="stockSearchSummary" class="stock-search-summary hidden"></div>
       <div class="image-override-tools">
         <div id="imageOverrideStatus" class="notice">尚未有 LOTNO 手動選圖記錄。</div>
-        <button id="exportImageOverridesBtn" type="button" class="ghost" disabled>匯出更新後 jmsdata</button>
+        <div class="image-override-buttons">
+          <button id="exportImageOverridesBtn" type="button" class="ghost" disabled>匯出更新後 jmsdata</button>
+          <button id="exportUpdatedPackageBtn" type="button" class="ghost" disabled>匯出更新後資料包</button>
+        </div>
       </div>
       <div id="stockSearchResults" class="stock-search-results"></div>
     </article>
@@ -302,6 +305,13 @@
 
 <dialog id="stockImageDialog" class="stock-image-dialog">
   <div class="dialog-head"><div><h3 id="stockImageEditorTitle">編輯圖片</h3><p id="stockImageEditorMeta" class="muted"></p></div><button id="closeStockImageDialogBtn" type="button" class="ghost">關閉</button></div>
+  <div class="stock-image-source-actions">
+    <button id="stockUploadImageBtn" type="button" class="ghost">上傳圖片</button>
+    <button id="stockCameraImageBtn" type="button" class="ghost">即時拍照</button>
+    <input id="stockUploadImageInput" type="file" accept="image/*" hidden>
+    <input id="stockCameraImageInput" type="file" accept="image/*" capture="environment" hidden>
+  </div>
+  <div id="stockImageSourceStatus" class="notice hidden"></div>
   <div id="stockImageChoices" class="stock-image-choices"></div>
   <div class="stock-image-dialog-footer"><button id="restoreAutoImageBtn" type="button" class="ghost">恢復自動選圖</button></div>
 </dialog>
@@ -332,17 +342,14 @@
       <div class="item-full-desc"></div>
       <div class="item-price-note"></div>
       <div class="item-controls compact-controls">
-        <select class="variant-select"></select>
-        <div class="item-image-actions">
-          <button type="button" class="upload-image-btn ghost">上傳圖片</button>
-          <button type="button" class="camera-image-btn ghost">📷 即時拍照</button>
-          <input class="upload-image-input" type="file" accept="image/*" hidden>
-          <input class="camera-image-input" type="file" accept="image/*" capture="environment" hidden>
+        <div class="item-image-editor-row">
+          <div class="item-image-selection">圖片：自動</div>
+          <button type="button" class="edit-item-image-btn ghost">編輯圖片</button>
         </div>
-        <button type="button" class="restore-db-image ghost hidden">使用原資料庫圖片</button>
-        <div class="custom-image-note hidden"></div>
-        <label>Quantity<input class="qty-input" type="number" min="1" step="1"></label>
-        <label>Unit Price<input class="price-input" type="number" min="0" step="1"></label>
+        <div class="item-price-grid">
+          <label>Quantity<input class="qty-input" type="number" min="1" step="1"></label>
+          <label>Unit Price<input class="price-input" type="number" min="0" step="1"></label>
+        </div>
       </div>
     </div>
     <div class="item-side-actions">
@@ -356,6 +363,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

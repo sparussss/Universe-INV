@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xls',stockIntegrityIssues:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',kitcoAsk:0,kitcoTime:'',fetching:false,source:''},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],transactions:[]},recall:null,stockSearch:{query:'',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null};
+const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xls',stockIntegrityIssues:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',kitcoAsk:0,kitcoTime:'',fetching:false,source:''},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],transactions:[]},recall:null,stockSearch:{query:'*',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null,packageFiles:[],customPackageImages:new Map(),packageImageDirtyFiles:new Set()};
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
 function displayItems(){return formalItems().reverse()}
 function normalizeItemSequence(){state.items=formalItems();state.items.forEach((item,i)=>item.seq=i+1)}
@@ -87,23 +87,35 @@ function resolvedImageOverride(product){
   return{row,image,variant:row.IMAGE_VARIANT||image.variant,grayscale:!!numberValue(row.GRAYSCALE),fileName:image.fileName,manualOverride:true};
 }
 function updateImageOverrideStatus(){
-  const el=$('#imageOverrideStatus'),count=state.imageOverrides.size,dirty=state.imageOverrideDirty;
+  const el=$('#imageOverrideStatus'),count=state.imageOverrides.size,dirty=state.imageOverrideDirty,newImages=state.packageImageDirtyFiles?.size||0;
+  const exportJms=$('#exportImageOverridesBtn'),exportPackage=$('#exportUpdatedPackageBtn');
+  if(exportJms)exportJms.disabled=!state.stockAllRows.length;
+  if(exportPackage)exportPackage.disabled=!state.stockAllRows.length||!state.packageFiles.length||typeof JSZip==='undefined';
   if(!el)return;
-  if(dirty){el.textContent=`尚有 ${dirty} 項圖片修改未匯出。完成整理後請匯出更新後的 jmsdata.xls。`;el.className='notice warn'}
-  else if(count){el.textContent=`已載入 ${count} 項 LOTNO 手動選圖記錄。`;el.className='notice ok'}
+  if(dirty||newImages){
+    const parts=[];if(dirty)parts.push(`${dirty} 項選圖`);if(newImages)parts.push(`${newImages} 張新增圖片`);
+    el.textContent=`尚有 ${parts.join('、')} 未匯出。完成整理後請匯出更新後資料包。`;el.className='notice warn';
+  }else if(count){el.textContent=`已載入 ${count} 項 LOTNO 手動選圖記錄。`;el.className='notice ok'}
   else{el.textContent='尚未有 LOTNO 手動選圖記錄。';el.className='notice'}
 }
-function confirmDiscardPendingImageOverrides(){return !state.imageOverrideDirty||confirm(`尚有 ${state.imageOverrideDirty} 項圖片修改未匯出。\n繼續匯入另一個 jmsdata／資料包會清除這些暫存修改，確定繼續？`)}
+function confirmDiscardPendingImageOverrides(){const pending=state.imageOverrideDirty+(state.packageImageDirtyFiles?.size||0);return !pending||confirm(`尚有 ${pending} 項圖片修改未匯出。\n繼續匯入另一個 jmsdata／資料包會清除這些暫存修改，確定繼續？`)}
 function saveImageOverride(product,image,grayscale=false){
   if(!product||!image)return;
   const key=String(product.lotNo),previous=state.imageOverrides.get(key),row={LOTNO:key,ARTNO:normArt(product.artNo),IMAGE_FILE:image.fileName,IMAGE_VARIANT:image.variant||'',GRAYSCALE:grayscale?1:0,MODE:'MANUAL',UPDATED_AT:new Date().toISOString()};
   state.imageOverrides.set(key,row);
+  if(previous&&String(previous.IMAGE_FILE||'').toUpperCase()!==String(row.IMAGE_FILE||'').toUpperCase()){
+    const oldKey=String(previous.IMAGE_FILE||'').toUpperCase(),stillUsed=[...state.imageOverrides.values()].some(entry=>String(entry.IMAGE_FILE||'').toUpperCase()===oldKey);
+    if(!stillUsed&&state.customPackageImages.has(oldKey)){state.customPackageImages.delete(oldKey);state.packageImageDirtyFiles.delete(oldKey)}
+  }
+  if(image.manualSource&&image.file){const imageKey=String(image.fileName||'').toUpperCase();state.customPackageImages.set(imageKey,image.file);state.packageImageDirtyFiles.add(imageKey)}
   if(!previous||previous.ARTNO!==row.ARTNO||previous.IMAGE_FILE!==row.IMAGE_FILE||numberValue(previous.GRAYSCALE)!==numberValue(row.GRAYSCALE)){state.imageOverrideDirtyLots.add(key);state.imageOverrideDirty=state.imageOverrideDirtyLots.size}
   applyImageOverrideToCurrentItem(product);updateImageOverrideStatus();renderStockSearch();renderItems();schedulePreview();
 }
 function clearImageOverride(product){
-  const key=String(product?.lotNo||'');if(!state.imageOverrides.has(key))return;
-  state.imageOverrides.delete(key);state.imageOverrideDirtyLots.add(key);state.imageOverrideDirty=state.imageOverrideDirtyLots.size;applyImageOverrideToCurrentItem(product);updateImageOverrideStatus();renderStockSearch();renderItems();schedulePreview();
+  const key=String(product?.lotNo||''),previous=state.imageOverrides.get(key);if(!previous)return;
+  state.imageOverrides.delete(key);const imageKey=String(previous.IMAGE_FILE||'').toUpperCase(),stillUsed=[...state.imageOverrides.values()].some(row=>String(row.IMAGE_FILE||'').toUpperCase()===imageKey);
+  if(!stillUsed&&state.customPackageImages.has(imageKey)){state.customPackageImages.delete(imageKey);state.packageImageDirtyFiles.delete(imageKey)}
+  state.imageOverrideDirtyLots.add(key);state.imageOverrideDirty=state.imageOverrideDirtyLots.size;applyImageOverrideToCurrentItem(product);updateImageOverrideStatus();renderStockSearch();renderItems();schedulePreview();
 }
 function applyImageOverrideToCurrentItem(product){
   const item=state.items.find(x=>String(x.lotNo)===String(product?.lotNo));if(!item)return;
@@ -138,6 +150,22 @@ function worksheetFromRows(rows,headers){return rows.length?XLSX.utils.json_to_s
 function preserveWorksheetLayout(target,source){if(!target||!source)return target;for(const prop of ['!cols','!rows','!merges','!autofilter','!freeze','!margins'])if(source[prop])target[prop]=structuredClone(source[prop]);for(const address of Object.keys(target)){if(address[0]==='!')continue;const old=source[address],cell=target[address];if(!old||!cell)continue;if(old.s)cell.s=structuredClone(old.s);if(old.z)cell.z=old.z}return target}
 function buildJmsdataWorkbook(){if(!state.stockAllRows.length)throw new Error('尚未匯入 jmsdata。');const wb=XLSX.utils.book_new(),stockName=(state.stockSheetName||'jmsdata').slice(0,31),originalStock=state.stockWorkbook?.Sheets?.[state.stockSheetName],stockWs=preserveWorksheetLayout(XLSX.utils.json_to_sheet(state.stockAllRows,{header:state.stockHeaders}),originalStock);if(state.stockWorkbook?.Props)wb.Props=structuredClone(state.stockWorkbook.Props);if(state.stockWorkbook?.Custprops)wb.Custprops=structuredClone(state.stockWorkbook.Custprops);XLSX.utils.book_append_sheet(wb,stockWs,stockName);const managed=new Set([state.stockSheetName,...Object.values(DOCUMENT_SHEETS),IMAGE_OVERRIDE_SHEET]);if(state.stockWorkbook){for(const name of state.stockWorkbook.SheetNames||[]){if(managed.has(name)||name===state.stockSheetName)continue;XLSX.utils.book_append_sheet(wb,state.stockWorkbook.Sheets[name],name.slice(0,31))}}XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.invoiceHeaders,HEADER_COLUMNS),DOCUMENT_SHEETS.invoiceHeaders);XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.invoiceItems,ITEM_COLUMNS),DOCUMENT_SHEETS.invoiceItems);XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.consignmentHeaders,HEADER_COLUMNS),DOCUMENT_SHEETS.consignmentHeaders);XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.consignmentItems,ITEM_COLUMNS),DOCUMENT_SHEETS.consignmentItems);XLSX.utils.book_append_sheet(wb,worksheetFromRows(state.documentStore.transactions,TRANSACTION_COLUMNS),DOCUMENT_SHEETS.transactions);XLSX.utils.book_append_sheet(wb,worksheetFromRows([...state.imageOverrides.values()],IMAGE_OVERRIDE_COLUMNS),IMAGE_OVERRIDE_SHEET);return wb}
 function exportJmsdata(){try{const wb=buildJmsdataWorkbook();XLSX.writeFile(wb,'jmsdata.xls',{bookType:'xls'});state.imageOverrideDirtyLots=new Set();state.imageOverrideDirty=0;updateImageOverrideStatus();const el=$('#jmsdataExportStatus');if(el){el.textContent=`已輸出 jmsdata.xls${state.imageOverrides.size?`，包括 ${state.imageOverrides.size} 項 LOTNO 圖片選擇`:''}；請在「檔案」App 儲存時確認取代舊檔。`;el.className='notice ok'}return true}catch(err){console.error(err);alert('匯出 jmsdata 失敗：'+(err.message||err));return false}}
+function packageFilePath(file){return String(file?.webkitRelativePath||file?.name||'').replace(/^\/+/, '')}
+function packagePicturesFolder(){const sample=(state.packageFiles||[]).find(f=>/\/(?:pictures?|images?)\//i.test('/'+packageFilePath(f))&&(String(f.type||'').startsWith('image/')||/\.(jpe?g|png|webp)$/i.test(f.name||'')));if(sample){const path=packageFilePath(sample);return path.slice(0,path.lastIndexOf('/'))}return `${state.packageName||'Exhibition Package'}/Pictures`}
+async function exportUpdatedPackage(){
+  if(!state.packageFiles.length)return alert('請先使用「匯入展覽資料包」載入完整 Folder。');
+  if(typeof JSZip==='undefined')return alert('資料包輸出程式未載入，請連接網絡後重新開啟 PWA。');
+  const btn=$('#exportUpdatedPackageBtn');if(btn){btn.disabled=true;btn.textContent='正在建立資料包…'}
+  try{
+    const zip=new JSZip(),jmsBuffer=XLSX.write(buildJmsdataWorkbook(),{bookType:'xls',type:'array'}),jmsOriginal=(state.packageFiles||[]).find(f=>/^jmsdata(?:\s.*)?\.(xls|xlsx)$/i.test(f.name)||/jmsdata/i.test(f.name)),jmsPath=jmsOriginal?packageFilePath(jmsOriginal):`${state.packageName||'Exhibition Package'}/jmsdata.xls`;
+    const referencedNames=new Set([...state.imageOverrides.values()].map(row=>String(row.IMAGE_FILE||'').toUpperCase()).filter(Boolean)),replacementNames=new Set([...state.customPackageImages.keys()].filter(name=>referencedNames.has(name)));
+    for(const file of state.packageFiles){const path=packageFilePath(file);if(!path)continue;if(file===jmsOriginal)continue;if(replacementNames.has(String(file.name||'').toUpperCase()))continue;zip.file(path,file)}
+    zip.file(jmsPath,jmsBuffer);
+    const pictureDir=packagePicturesFolder();for(const [name,file] of state.customPackageImages){if(referencedNames.has(name))zip.file(`${pictureDir}/${file.name}`,file)};
+    const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:3}},meta=>{if(btn)btn.textContent=`建立資料包 ${Math.round(meta.percent)}%`});
+    downloadBlob(blob,`${state.packageName||'Exhibition Package'}_Updated.zip`);state.imageOverrideDirtyLots=new Set();state.imageOverrideDirty=0;state.packageImageDirtyFiles=new Set();updateImageOverrideStatus();
+  }catch(err){console.error(err);alert('匯出更新後資料包失敗：'+(err.message||err))}finally{if(btn){btn.textContent='匯出更新後資料包';updateImageOverrideStatus()}}
+}
 function setRecallLock(locked){$$('input[name="documentType"]').forEach(r=>r.disabled=!!locked);const no=$('#invoiceNo');if(no)no.readOnly=!!locked;$('#cancelRecallBtn')?.classList.toggle('hidden',!locked)}
 function clearCurrentDocument({keepCustomer=true}={}){releaseCustomImages();state.items=[];state.editingItemId=null;$('#discountAmount').value=0;$('#remark').value='';if(!keepCustomer){$('#customerCode').value='';$('#customerName').value='';$('#customerAddress').value='';$('#salesRate').value='';$('#customerTerms').value=''}renderItems();renderCustomerSummary();schedulePreview()}
 function restoreDocumentFields(header){$('#invoiceNo').value=norm(docValue(header,'DOCUMENT_NO'));$('#invoiceDate').value=norm(docValue(header,'DOCUMENT_DATE'))||today();$('#customerCode').value=norm(docValue(header,'CUSTOMER_CODE'));$('#customerName').value=norm(docValue(header,'CUSTOMER'));$('#customerAddress').value=norm(docValue(header,'ADDRESS'));$('#salesRate').value=numberValue(docValue(header,'SALES_RATE'));$('#currency').value=norm(docValue(header,'CURRENCY'))||'USD';$('#fxRate').value=numberValue(docValue(header,'FX_RATE'))||'';state.fx={rate:numberValue(docValue(header,'FX_RATE'))||1,date:'',source:'manual',fetching:false};$('#shipmentMethod').value=norm(docValue(header,'SHIPMENT_METHOD'));$('#customerTerms').value=norm(docValue(header,'TERMS'));$('#discountAmount').value=numberValue(docValue(header,'DISCOUNT'));$('#remark').value=norm(docValue(header,'REMARK'))}
@@ -306,7 +334,7 @@ async function importStockFile(f){
   state.stockWorkbook=wb;state.stockSheetName=sheetName||'jmsdata';state.stockFileName=f.name||'jmsdata.xls';state.stockHeaders=Object.keys(rows[0]||{});state.stockAllRows=rows;state.stockRowByLot=new Map();state.stockIntegrityIssues=[];
   const fullMap=new Map();
   for(const r of rows){const lot=norm(field(r,['LOTNO'])),art=normArt(field(r,['ARTNO'])),price=Number(field(r,['PRICE']));if(!lot||!art||!Number.isFinite(price))continue;const desc=[];for(let i=1;i<=6;i++){const v=norm(field(r,[`DESC${i}`]));if(v)desc.push(v)}const p={lotNo:lot,artNo:art,price,unit:norm(field(r,['UNIT']))||'PC',article:norm(field(r,['ARTICLE']))||'',descriptions:desc,desc2:norm(field(r,['DESC2']))};fullMap.set(lot,p);state.stockRowByLot.set(lot,r);let vector=inventoryVectorFromRow(r),sum=vector.i+vector.j+vector.k+vector.l;if(sum!==vector.m||!['AVAILABLE','CONSIGNED','SOLD_ON_HAND','SOLD_DELIVERED'].includes(inventoryStatusFromVector(vector)))state.stockIntegrityIssues.push({lotNo:lot,vector});}
-  if(!fullMap.size)throw new Error('找不到有效 LOTNO / ARTNO / PRICE');state.stockCatalog=fullMap;importDocumentStoreFromWorkbook(wb);importImageOverridesFromWorkbook(wb);rebuildInventoryMaps();for(const id of ['#exportJmsdataBtn','#exportImageOverridesBtn']){const exportBtn=$(id);if(exportBtn)exportBtn.disabled=false}renderRecallResults();return fullMap.size;
+  if(!fullMap.size)throw new Error('找不到有效 LOTNO / ARTNO / PRICE');state.stockCatalog=fullMap;importDocumentStoreFromWorkbook(wb);importImageOverridesFromWorkbook(wb);rebuildInventoryMaps();for(const id of ['#exportJmsdataBtn','#exportImageOverridesBtn','#exportUpdatedPackageBtn']){const exportBtn=$(id);if(exportBtn)exportBtn.disabled=false}renderRecallResults();return fullMap.size;
 }
 async function importCustomerFile(f){
   const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();
@@ -328,7 +356,8 @@ async function importStoneFile(f){
 }
 async function importArticleFile(f){const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();for(const row of rows){const prefix=normCode(row[0]),description=norm(row[1]);if(!prefix||!description||prefix==='PREFIX')continue;map.set(prefix,description)}if(!map.size)throw new Error('找不到 Prefix / Article Description 對照');state.articleMap=map;state.articleMappingName=f.name;return map.size}
 async function importTemplateFile(f){const buf=await f.arrayBuffer();if(typeof ExcelJS==='undefined')throw new Error('Excel 範本程式未載入');const test=new ExcelJS.Workbook();await test.xlsx.load(buf.slice(0));if(!test.worksheets.length)throw new Error('範本沒有工作表');state.invoiceTemplateBuffer=buf;state.invoiceTemplateName=f.name;return true}
-function importImageFiles(files){const map=new Map();for(const f of files){if(!String(f.type).startsWith('image/')&&!/\.(jpe?g|png|webp)$/i.test(f.name))continue;const p=parseImage(f);if(!p)continue;const key=p.art+'|'+p.variant.toUpperCase(),existing=map.get(key);if(!existing||p.dup<existing.dup)map.set(key,p)}state.imageFiles=new Map();state.imageFilesByName=new Map();for(const p of map.values()){const image={variant:p.variant,url:URL.createObjectURL(p.file),fileName:p.file.name,file:p.file};const arr=state.imageFiles.get(p.art)||[];arr.push(image);state.imageFiles.set(p.art,arr);state.imageFilesByName.set(String(p.file.name||'').toUpperCase(),image)}for(const arr of state.imageFiles.values())arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);updateImageOverrideStatus();return {images:[...files].filter(f=>String(f.type).startsWith('image/')||/\.(jpe?g|png|webp)$/i.test(f.name)).length,matched:state.imageFiles.size}}
+function imageDuplicatePreference(p){const nl=articleType(p?.art)==='NL';if(nl)return p?.dup===1?0:p?.dup===0?1:2+(Number(p?.dup)||0);return p?.dup===0?0:1+(Number(p?.dup)||0)}
+function importImageFiles(files){const map=new Map();for(const f of files){if(!String(f.type).startsWith('image/')&&!/\.(jpe?g|png|webp)$/i.test(f.name))continue;const p=parseImage(f);if(!p)continue;const key=p.art+'|'+p.variant.toUpperCase(),existing=map.get(key);if(!existing||imageDuplicatePreference(p)<imageDuplicatePreference(existing))map.set(key,p)}state.imageFiles=new Map();state.imageFilesByName=new Map();for(const p of map.values()){const image={variant:p.variant,url:URL.createObjectURL(p.file),fileName:p.file.name,file:p.file,dup:p.dup||0};const arr=state.imageFiles.get(p.art)||[];arr.push(image);state.imageFiles.set(p.art,arr);state.imageFilesByName.set(String(p.file.name||'').toUpperCase(),image)}for(const arr of state.imageFiles.values())arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);updateImageOverrideStatus();return {images:[...files].filter(f=>String(f.type).startsWith('image/')||/\.(jpe?g|png|webp)$/i.test(f.name)).length,matched:state.imageFiles.size}}
 $('#stockInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;if(!confirmDiscardPendingImageOverrides()){e.target.value='';return}try{const count=await importStockFile(f),issues=state.stockIntegrityIssues.length;status('#stockStatus',`已匯入 ${f.name}：${count} 件貨品；Available ${state.products.size} 件；文件記錄 ${state.documentStore.invoiceHeaders.length+state.documentStore.consignmentHeaders.length} 筆；圖片選擇 ${state.imageOverrides.size} 項${issues?`；${issues} 列 I:M 需要檢查`:''}。`,issues?'warn':'ok');setImportCollapsed('stock',true);updateTotals()}catch(err){status('#stockStatus','匯入失敗：'+err.message,'error');setImportCollapsed('stock',false)}};
 $('#customerInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importCustomerFile(f);status('#customerStatus',`已匯入 ${f.name}：${count} 位客戶。`,'ok');setImportCollapsed('customer',true);updateTotals()}catch(err){status('#customerStatus','匯入失敗：'+err.message,'error');setImportCollapsed('customer',false)}};
 const FALLBACK_STONE_VARIANTS=new Map([
@@ -388,7 +417,7 @@ $('#imageFolderInput').onchange=e=>{const result=importImageFiles(e.target.files
 $('#exhibitionPackageInput').onchange=async e=>{
   const files=[...e.target.files];if(!files.length)return;
   if(!confirmDiscardPendingImageOverrides()){e.target.value='';return}
-  const root=(files[0].webkitRelativePath||'').split('/')[0]||'Exhibition Package';state.packageName=root;
+  const root=(files[0].webkitRelativePath||'').split('/')[0]||'Exhibition Package';state.packageName=root;state.packageFiles=files;state.customPackageImages=new Map();state.packageImageDirtyFiles=new Set();
   const excels=files.filter(f=>/\.(xlsx?|xls)$/i.test(f.name));
   const byName=(re)=>excels.find(f=>re.test(f.name));
   let stock=byName(/^jmsdata(?:\s.*)?\.(xls|xlsx)$/i)||byName(/jmsdata/i);
@@ -563,11 +592,39 @@ function imageNeedsAttention(product){
   const arr=state.imageFiles.get(product?.artNo)||[];if(!arr.length)return true;
   return !!chooseAutomaticImageMatch(product).grayscale;
 }
-function openStockImageEditor(product){
-  const dialog=$('#stockImageDialog'),grid=$('#stockImageChoices');if(!dialog||!grid)return;
-  state.stockImageEditLot=String(product.lotNo);$('#stockImageEditorTitle').textContent=`編輯圖片 · ${product.artNo}`;$('#stockImageEditorMeta').textContent=`LOTNO ${product.lotNo} · 手動選圖會寫入 jmsdata 的 ${IMAGE_OVERRIDE_SHEET} 工作表。`;
+function imageEditorProduct(){
+  const lot=String(state.stockImageEditLot||'');
+  return state.items.find(x=>String(x.lotNo)===lot)||state.stockCatalog.get(lot)||state.products.get(lot)||state.inventoryHistory.get(lot)||null;
+}
+function registerManualImage(product,file,source='upload'){
+  const image={variant:`MANUAL ${product.lotNo}`,url:URL.createObjectURL(file),fileName:file.name,file,dup:0,manualSource:source};
+  const arr=state.imageFiles.get(product.artNo)||[];
+  const previousIndex=arr.findIndex(x=>String(x.fileName).toUpperCase()===String(image.fileName).toUpperCase());
+  if(previousIndex>=0){const old=arr[previousIndex];if(old?.url?.startsWith('blob:'))try{URL.revokeObjectURL(old.url)}catch{}arr[previousIndex]=image}else arr.unshift(image);
+  state.imageFiles.set(product.artNo,arr);state.imageFilesByName.set(String(image.fileName).toUpperCase(),image);
+  return image;
+}
+async function compressManualImage(file,product,source='upload'){
+  if(!file||!product)throw new Error('沒有選擇圖片。');
+  if(!String(file.type||'').startsWith('image/')&&!/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name||''))throw new Error('請選擇圖片檔案。');
+  let blob=file;
+  try{
+    const sourceUrl=URL.createObjectURL(file);
+    try{
+      const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=sourceUrl});
+      const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,maxSide=1800,scale=Math.min(1,maxSide/Math.max(iw,ih)),w=Math.max(1,Math.round(iw*scale)),h=Math.max(1,Math.round(ih*scale));
+      const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
+      const converted=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.88));if(converted)blob=converted;
+    }finally{URL.revokeObjectURL(sourceUrl)}
+  }catch(err){console.warn('圖片壓縮失敗，改用原圖。',err)}
+  const safeArt=String(product.artNo||'ITEM').replace(/[^0-9A-Za-z._-]+/g,'_'),safeLot=String(product.lotNo||'').replace(/[^0-9A-Za-z._-]+/g,'_'),tag=source==='camera'?'CAMERA':'UPLOAD';
+  return new File([blob],`${safeArt} MANUAL ${safeLot} ${tag}.JPG`,{type:'image/jpeg',lastModified:Date.now()});
+}
+function renderStockImageEditor(product){
+  const dialog=$('#stockImageDialog'),grid=$('#stockImageChoices');if(!dialog||!grid||!product)return;
+  $('#stockImageEditorTitle').textContent=`編輯圖片 · ${product.artNo}`;$('#stockImageEditorMeta').textContent=`LOTNO ${product.lotNo} · 最後選用圖片會寫入 jmsdata 的 ${IMAGE_OVERRIDE_SHEET} 工作表。`;
   grid.innerHTML='';const arr=state.imageFiles.get(product.artNo)||[],current=resolvedImageOverride(product);
-  if(!arr.length)grid.innerHTML='<div class="notice warn">這個款號在 Pictures 內沒有可選圖片。</div>';
+  if(!arr.length)grid.innerHTML='<div class="notice warn">這個款號在 Pictures 內沒有可選圖片，可使用上傳圖片或即時拍照。</div>';
   for(const image of arr){
     const card=document.createElement('div');card.className='image-choice-card';if(current?.image?.fileName===image.fileName)card.classList.add('selected');
     const preview=document.createElement('img');preview.src=image.url;preview.alt=image.fileName;
@@ -578,7 +635,17 @@ function openStockImageEditor(product){
     buttons.append(color,gray);card.append(preview,name,buttons);grid.appendChild(card);
   }
   const restore=$('#restoreAutoImageBtn');restore.disabled=!imageOverrideForLot(product.lotNo);restore.onclick=()=>{clearImageOverride(product);dialog.close()};
-  if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','');
+}
+function openStockImageEditor(product){
+  const dialog=$('#stockImageDialog');if(!dialog||!product)return;
+  state.stockImageEditLot=String(product.lotNo);renderStockImageEditor(product);
+  const statusEl=$('#stockImageSourceStatus');if(statusEl)statusEl.className='notice hidden';
+  if(!dialog.open){if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','')}
+}
+async function handleImageEditorFile(file,source){
+  const product=imageEditorProduct(),statusEl=$('#stockImageSourceStatus');if(!file||!product)return;
+  if(statusEl){statusEl.textContent='正在處理圖片…';statusEl.className='notice'}
+  try{const output=await compressManualImage(file,product,source),image=registerManualImage(product,output,source);renderStockImageEditor(product);if(statusEl){statusEl.textContent=`已加入 ${image.fileName}，請選擇彩色或黑白。`;statusEl.className='notice ok'}}catch(err){if(statusEl){statusEl.textContent=err.message||String(err);statusEl.className='notice error'}}
 }
 function placeholder(t){return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="#f1f5f9"/><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="18" fill="#64748b">${t}</text></svg>`)}`}
 function revokeCustomImage(item){
@@ -634,37 +701,9 @@ function renderItems(){
       const isOpen=String(state.editingItemId??'')===String(item.id);
       setEditingItem(box,isOpen?null:item.id);
     };
-    const sel=$('.variant-select',node),arr=state.imageFiles.get(item.artNo)||[],custom=item.customImage;
-    if(custom){
-      const o=document.createElement('option');o.value='__custom__';o.textContent=custom.source==='camera'?'圖片：即時拍照':'圖片：上傳';o.selected=true;sel.appendChild(o);
-    }
-    if(arr.length){
-      arr.forEach(x=>{const o=document.createElement('option');o.value=x.variant;o.textContent='圖片：'+x.variant;o.selected=!custom&&!item.imageGrayscale&&x.variant===item.imageVariant;sel.appendChild(o)});
-      const mono=document.createElement('option');mono.value='__grayscale__';mono.textContent='圖片：黑白';mono.selected=!custom&&!!item.imageGrayscale;sel.appendChild(mono);
-      sel.disabled=false;
-    }else if(!custom){sel.innerHTML='<option>沒有圖片</option>';sel.disabled=true}
-    sel.onchange=e=>{
-      const value=e.target.value;
-      if(value==='__custom__')return;
-      if(custom)revokeCustomImage(item);
-      if(value==='__grayscale__'){
-        if(!item.imageVariant||!arr.some(x=>x.variant===item.imageVariant))item.imageVariant=chooseImageMatch(item).variant;
-        item.imageGrayscale=true;item.imageAutoMatched=false;
-      }else{
-        item.imageVariant=value;item.imageGrayscale=false;item.imageAutoMatched=false;
-      }
-      renderItems();schedulePreview();
-    };
-    const uploadBtn=$('.upload-image-btn',node),cameraBtn=$('.camera-image-btn',node),uploadInput=$('.upload-image-input',node),cameraInput=$('.camera-image-input',node),restoreBtn=$('.restore-db-image',node),customNote=$('.custom-image-note',node);
-    uploadBtn.onclick=()=>uploadInput.click();
-    cameraBtn.onclick=()=>cameraInput.click();
-    uploadInput.onchange=async e=>{const f=e.target.files?.[0];if(!f)return;uploadBtn.disabled=true;uploadBtn.textContent='處理中…';try{await prepareItemImageFile(f,item,'upload')}catch(err){alert(err.message||err)}finally{uploadBtn.disabled=false;uploadBtn.textContent='上傳圖片';e.target.value=''}};
-    cameraInput.onchange=async e=>{const f=e.target.files?.[0];if(!f)return;cameraBtn.disabled=true;cameraBtn.textContent='處理中…';try{await prepareItemImageFile(f,item,'camera')}catch(err){alert(err.message||err)}finally{cameraBtn.disabled=false;cameraBtn.textContent='📷 即時拍照';e.target.value=''}};
-    if(custom){
-      restoreBtn.classList.remove('hidden');restoreBtn.textContent=arr.length?'使用原資料庫圖片':'移除現場圖片';
-      customNote.classList.remove('hidden');customNote.textContent=custom.source==='camera'?'目前使用：即時拍照圖片':'目前使用：上傳圖片';
-      restoreBtn.onclick=()=>{revokeCustomImage(item);renderItems();schedulePreview()};
-    }
+    const imageSelection=$('.item-image-selection',node),editImageBtn=$('.edit-item-image-btn',node),selectedImage=getImg(item);
+    if(imageSelection){const source=imageOverrideForLot(item.lotNo)?'手動':item.imageAutoMatched?'自動':'文件選擇';imageSelection.textContent=`圖片：${selectedImage?.fileName||item.imageVariant||'沒有圖片'} · ${item.imageGrayscale?'黑白':'彩色'} · ${source}`}
+    if(editImageBtn)editImageBtn.onclick=()=>openStockImageEditor(item);
     $('.qty-input',node).value=item.qty;$('.price-input',node).value=item.unitPrice;
     $('.qty-input',node).onchange=e=>{item.qty=Math.max(1,Number(e.target.value)||1);updateTotals()};
     $('.price-input',node).onchange=e=>{const code=currencyCode(),raw=Math.max(0,Number(e.target.value)||0),value=code==='EUR'?Math.round(raw):(code==='USD'&&quote14KMode()?Math.ceil(raw-1e-9):roundUnitPrice(raw,code)),overrides=activePriceOverrides(item);overrides[code]=value;item.unitPrice=value;if(code==='USD'&&!quote14KMode())item.usdUnitPrice=value;e.target.value=value;updateTotals()};
@@ -783,11 +822,16 @@ function currencyWords(code){
   return ({USD:'US DOLLARS',EUR:'EUROS',GBP:'BRITISH POUNDS',CNY:'CHINESE YUAN',JPY:'JAPANESE YEN',HKD:'HONG KONG DOLLARS'})[String(code||'').toUpperCase()]||String(code||'').toUpperCase();
 }
 function renderPreview(){
-  const t=totals();
-  const rows=formalItems().map((x,i)=>{const selected=getImg(x),img=selected?.url||placeholder('No Image'),gray=selected?.grayscale?' grayscale-image':'';return `<tr><td>${i+1}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${effectiveDescriptions(x).filter(Boolean).map(esc).join('<br>')}</td><td class="preview-picture"><img class="${gray.trim()}" src="${esc(img)}" alt="${esc(x.artNo)}"></td><td class="qty-cell">${x.qty}</td><td class="unit-cell">${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`}).join('');
-  $('#invoiceDocument').innerHTML=`<div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid screen-preview"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div><div class="doc-meta print-only print-banker"><strong>Vendor's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road,Hung Hom,Kowloon,Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div></div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Picture</th><th class="qty-head">Quantity</th><th class="unit-head">Unit</th><th class="num">Unit Price</th><th class="num amount-head"><span>Amount</span><small>F.O.B. Value</small></th></tr></thead><tbody>${rows}</tbody></table><div class="doc-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc(currencyCode())})</span><strong>${fmt(t.total)}</strong></div></div><p class="remark-preview"><strong>Remark :</strong><br>${esc($('#remark').value).replace(/\n/g,'<br>')}</p></div>`;
+  const t=totals(),items=formalItems(),perPage=10,pages=[];
+  if(items.length){for(let i=0;i<items.length;i+=perPage)pages.push(items.slice(i,i+perPage))}else pages.push([]);
+  const totalPages=pages.length,banker=`<div class="doc-meta preview-banker"><strong>Vendor's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road, Hung Hom, Kowloon, Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div>`;
+  const html=pages.map((pageItems,pageIndex)=>{
+    const rows=pageItems.map((x,index)=>{const selected=getImg(x),img=selected?.url||placeholder('No Image'),gray=selected?.grayscale?' grayscale-image':'',formalNo=pageIndex*perPage+index+1,descriptions=[articleDescriptionFor(x),...effectiveDescriptions(x)].filter(Boolean).map(esc).join('<br>');return `<tr class="preview-item-row"><td>${formalNo}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${descriptions}</td><td class="preview-picture"><img class="${gray.trim()}" src="${esc(img)}" alt="${esc(x.artNo)}"></td><td class="qty-cell">${x.qty}</td><td class="unit-cell">${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`}).join('');
+    const last=pageIndex===totalPages-1,footer=last?`<div class="doc-footer preview-final-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc(currencyCode())})</span><strong>${fmt(t.total)}</strong></div></div><p class="remark-preview"><strong>Remark :</strong><br>${esc($('#remark').value).replace(/\n/g,'<br>')}</p></div>`:'<div class="preview-page-spacer"></div>';
+    return `<section class="preview-page"><div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid screen-preview"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div>${banker}</div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Picture</th><th class="qty-head">Quantity</th><th class="unit-head">Unit</th><th class="num">Unit Price</th><th class="num amount-head"><span>Amount</span><small>F.O.B. Value</small></th></tr></thead><tbody>${rows}</tbody></table>${footer}<div class="preview-page-number">Page ${pageIndex+1} of ${totalPages}</div></section>`;
+  }).join('');
+  $('#invoiceDocument').innerHTML=html;
 }
-
 
 function setExcelExportStatus(message,type=''){
   const el=$('#excelExportStatus');
@@ -1429,12 +1473,12 @@ function toggleStockFilter(kind,value){
   state.stockSearch[key]=[...selected];renderStockSearch();
 }
 function stockFilterSummaryText(){const t=selectedStockFilters('type'),s=selectedStockFilters('stone'),image=state.stockSearch.imageIssuesOnly?' · 圖片：待處理':'';return `款式：${t.length?t.join(', '):'全部'} · 石頭：${s.length?s.map(stoneFilterLabel).join(', '):'全部'}${image}`}
-function runStockSearch(){const raw=norm($('#stockSearchInput').value).toUpperCase(),core=raw==='*'?'*':articleCore(raw);state.stockSearch.query=core||raw;state.stockSearch.types=[];state.stockSearch.stones=[];state.stockSearch.statuses=[];state.stockSearch.imageIssuesOnly=false;state.stockSearch.filtersOpen=false;renderStockSearch()}
+function runStockSearch(){const raw=norm($('#stockSearchInput').value).toUpperCase(),core=!raw||raw==='*'?'*':articleCore(raw);state.stockSearch.query=core||raw||'*';state.stockSearch.types=[];state.stockSearch.stones=[];state.stockSearch.statuses=[];state.stockSearch.imageIssuesOnly=false;state.stockSearch.filtersOpen=false;renderStockSearch()}
 function renderStockSearch(){
   const resultsEl=$('#stockSearchResults');if(!resultsEl)return;
-  const q=norm(state.stockSearch.query||$('#stockSearchInput')?.value).toUpperCase(),filterControls=$('#stockFilterControls'),filterPanel=$('#stockFilterPanel');
-  if(!q){resultsEl.innerHTML='';$('#stockSearchMessage').textContent='請輸入款號搜尋。';$('#stockTypeFilters').classList.add('hidden');$('#stockStoneFilters').classList.add('hidden');$('#stockSearchSummary').classList.add('hidden');filterControls?.classList.add('hidden');filterPanel?.classList.add('hidden');return}
-  const wildcard=q==='*',core=wildcard?'*':articleCore(q),all=wildcard?inventorySearchRecords():inventorySearchRecords().filter(x=>articleCore(x.artNo)===core||normArt(x.artNo).includes(normArt(q)));
+  const q=norm(state.stockSearch.query||$('#stockSearchInput')?.value||'*').toUpperCase(),filterControls=$('#stockFilterControls'),filterPanel=$('#stockFilterPanel'),records=inventorySearchRecords();
+  if(!records.length){resultsEl.innerHTML='';$('#stockSearchMessage').textContent='尚未匯入 jmsdata。';$('#stockTypeFilters').classList.add('hidden');$('#stockStoneFilters').classList.add('hidden');$('#stockSearchSummary').classList.add('hidden');filterControls?.classList.add('hidden');filterPanel?.classList.add('hidden');return}
+  const wildcard=!q||q==='*',core=wildcard?'*':articleCore(q),all=wildcard?records:records.filter(x=>articleCore(x.artNo)===core||normArt(x.artNo).includes(normArt(q)));
   const types=[...new Set(all.map(x=>articleType(x.artNo)))].sort(compareStockTypes),stones=[...new Set(all.flatMap(stoneCodesForProduct))].sort((a,b)=>stoneOrderRank(a)-stoneOrderRank(b)||a.localeCompare(b));
   const selectedTypes=selectedStockFilters('type'),selectedStones=selectedStockFilters('stone'),selectedStatuses=selectedStockFilters('status');
   const typeBox=$('#stockTypeFilters'),stoneBox=$('#stockStoneFilters');typeBox.dataset.kind='type';stoneBox.dataset.kind='stone';
@@ -1466,8 +1510,8 @@ function activePanelId(){return $('.tab.active')?.dataset.tab||''}
 function updateBackToTopButton(){const btn=$('#backToTopBtn');if(!btn)return;const panel=activePanelId();let visible=false,title='回到頂部';if(panel==='invoice'){visible=($('#invoiceItems')?.scrollTop||0)>180;title=`回到 ${documentLabels().short} 貨品列表頂部`}else if(panel==='stockSearch'){const section=$('#stockSearch'),hasResults=($('#stockSearchResults')?.children.length||0)>0;visible=!!section&&hasResults&&window.scrollY>section.offsetTop+260;title='回到配套搜尋頂部'}btn.title=title;btn.setAttribute('aria-label',title);btn.classList.toggle('hidden',!visible)}
 function scrollCurrentPanelToTop(){const panel=activePanelId();if(panel==='invoice')$('#invoiceItems')?.scrollTo({top:0,behavior:'smooth'});else if(panel==='stockSearch'){const section=$('#stockSearch');if(section)window.scrollTo({top:Math.max(0,section.offsetTop-72),behavior:'smooth'})}setTimeout(updateBackToTopButton,350)}
 $('#backToTopBtn').onclick=scrollCurrentPanelToTop;$('#invoiceItems').addEventListener('scroll',updateBackToTopButton,{passive:true});window.addEventListener('scroll',updateBackToTopButton,{passive:true});window.addEventListener('resize',updateBackToTopButton,{passive:true});
-$('#stockSearchBtn').onclick=runStockSearch;$('#stockSearchInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runStockSearch()}};$('#stockSearchInput').oninput=e=>{e.target.value=e.target.value.toUpperCase()};$('#stockFilterToggle').onclick=()=>{state.stockSearch.filtersOpen=!state.stockSearch.filtersOpen;renderStockSearch()};
-$('#exportJmsdataBtn').onclick=exportJmsdata;$('#exportImageOverridesBtn').onclick=exportJmsdata;$('#closeStockImageDialogBtn').onclick=()=>$('#stockImageDialog').close();$('#stockImageDialog').addEventListener('close',()=>{state.stockImageEditLot=null});window.addEventListener('beforeunload',e=>{if(!state.imageOverrideDirty)return;e.preventDefault();e.returnValue=''});$('#recallSearchBtn').onclick=renderRecallResults;$('#recallSearchInput').oninput=renderRecallResults;$('#recallSearchInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();renderRecallResults()}};$('#recallTypeFilter').onchange=renderRecallResults;$('#cancelRecallBtn').onclick=cancelRecall;
+$('#stockSearchBtn').onclick=runStockSearch;$('#stockSearchInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runStockSearch()}};$('#stockSearchInput').oninput=e=>{e.target.value=e.target.value.toUpperCase();if(!norm(e.target.value)){state.stockSearch.query='*';state.stockSearch.types=[];state.stockSearch.stones=[];state.stockSearch.statuses=[];state.stockSearch.imageIssuesOnly=false;renderStockSearch()}};$('#stockFilterToggle').onclick=()=>{state.stockSearch.filtersOpen=!state.stockSearch.filtersOpen;renderStockSearch()};
+$('#exportJmsdataBtn').onclick=exportJmsdata;$('#exportImageOverridesBtn').onclick=exportJmsdata;$('#exportUpdatedPackageBtn').onclick=exportUpdatedPackage;$('#closeStockImageDialogBtn').onclick=()=>$('#stockImageDialog').close();$('#stockImageDialog').addEventListener('close',()=>{state.stockImageEditLot=null});$('#stockUploadImageBtn').onclick=()=>$('#stockUploadImageInput').click();$('#stockCameraImageBtn').onclick=()=>$('#stockCameraImageInput').click();$('#stockUploadImageInput').onchange=async e=>{const f=e.target.files?.[0];e.target.value='';if(f)await handleImageEditorFile(f,'upload')};$('#stockCameraImageInput').onchange=async e=>{const f=e.target.files?.[0];e.target.value='';if(f)await handleImageEditorFile(f,'camera')};window.addEventListener('beforeunload',e=>{if(!state.imageOverrideDirty&&!(state.packageImageDirtyFiles?.size||0))return;e.preventDefault();e.returnValue=''});$('#recallSearchBtn').onclick=renderRecallResults;$('#recallSearchInput').oninput=renderRecallResults;$('#recallSearchInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();renderRecallResults()}};$('#recallTypeFilter').onchange=renderRecallResults;$('#cancelRecallBtn').onclick=cancelRecall;
 $$('input[name="quoteKarat"]').forEach(r=>r.onchange=e=>setQuoteKarat(e.target.value));$('#refreshGoldBtn').onclick=()=>fetchKitcoAsk();let goldInputTimer=null;$('#kitcoAskInput').oninput=e=>{clearTimeout(goldInputTimer);goldInputTimer=setTimeout(()=>{const n=Number(e.target.value);if(n>0)setKitcoAsk(n,{source:'manual',message:`手動 Kitco Ask：USD ${n.toFixed(2)} / oz`});else{state.quote.kitcoAsk=0;syncEffectivePrices({clearCurrentOverride:true});renderItems();updateGoldQuoteUI('請輸入大於 0 的 Kitco Ask。','error')}},180)};
 
-updateFxPanel();updateDocumentTypeUI();updateGoldQuoteUI();renderCustomerSummary();renderItems();renderRecallResults();updateImageOverrideStatus();schedulePreview();updateBackToTopButton();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+updateFxPanel();updateDocumentTypeUI();updateGoldQuoteUI();renderCustomerSummary();renderItems();renderRecallResults();updateImageOverrideStatus();renderStockSearch();schedulePreview();updateBackToTopButton();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});

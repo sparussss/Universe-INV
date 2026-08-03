@@ -1,5 +1,15 @@
-# Universe Invoice PWA v0.12.2
+# Universe Invoice PWA v0.12.3
 
+
+## v0.12.3 操作與預覽更新
+
+- 配套搜尋進入後直接顯示全部貨品；輸入框改為「輸入款號」，清空後回復全部。
+- 配套搜尋與文件貨品共用圖片彈窗；彩色／黑白平排，並加入上傳圖片／即時拍照。
+- Quantity 與 Unit Price 平排。
+- 只有 NL 自動選圖時，同一候選優先使用檔名 `(1)` 版本。
+- Confirm Invoice／Consignment 匯出的 jmsdata 會包含最後手動選圖的 Image Overrides。
+- 新增「匯出更新後資料包」，將更新後 jmsdata 及現場新增圖片一併打包。
+- 文件預覽改成 A4 分頁、每頁最多 10 款，版面與 Excel 欄位及分頁方向一致。
 
 ## v0.12.2 展覽前圖片整理
 
