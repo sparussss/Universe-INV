@@ -1,5 +1,15 @@
-# Universe Invoice PWA v0.12.3
+# Universe Invoice PWA v0.12.4
 
+
+## v0.12.4 Excel-aligned A4 preview / direct PDF trial
+
+- 文件預覽改用固定 794 × 1123 px 的 A4 畫布，再按手機寬度等比例縮放；不再因手機寬度重新排列欄位。
+- 預覽表格欄寬重新按 Excel 版面配置，Description、Picture、Quantity、Unit、Unit Price、Amount 的比例固定。
+- 預覽採用 Excel 相同的分頁概念：一般頁最多 10 款；最後一頁最多 7 款時同頁顯示 Footer，8–10 款時 Footer 另開一頁。
+- PDF 不再使用瀏覽器列印網頁；改以同一張 A4 預覽逐頁轉成 PDF，因此 PDF 與畫面預覽一致。
+- Excel 輸出程式及已確認的 Excel Template 版面不作修改。
+- 圖片自動判定不使用重量；石頭代號本身也會作圖片別名，若款式屬多色但沒有 MULTI 圖，會改用實際存在的精確單石圖（例如 RQZ／OPAL），而不是直接轉黑白。
+- 這是預覽／PDF 對齊 Excel 的試驗版，實際字型渲染仍可能與 Microsoft Excel 有細微差異。
 
 ## v0.12.3 操作與預覽更新
 

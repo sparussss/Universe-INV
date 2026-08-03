@@ -389,7 +389,7 @@ function articleDescriptionFor(item){
 function activeStoneAliases(){return state.stoneAliases.size?state.stoneAliases:FALLBACK_STONE_ALIASES}
 function activeStoneVariantAliases(){return state.stoneVariantAliases.size?state.stoneVariantAliases:FALLBACK_STONE_VARIANTS}
 function activeStoneGroups(){return state.stoneGroups.size?state.stoneGroups:FALLBACK_STONE_GROUPS}
-function stoneImageAliasesForCode(code){const c=String(code||'').toUpperCase(),list=activeStoneVariantAliases().get(c);if(Array.isArray(list)&&list.length)return list;const single=activeStoneAliases().get(c);return single?[String(single).toUpperCase()]:[]}
+function stoneImageAliasesForCode(code){const c=String(code||'').toUpperCase(),out=[];if(c)out.push(c);const list=activeStoneVariantAliases().get(c);if(Array.isArray(list))for(const value of list){const v=String(value||'').toUpperCase();if(v&&!out.includes(v))out.push(v)}const single=activeStoneAliases().get(c),v=String(single||'').toUpperCase();if(v&&!out.includes(v))out.push(v);return out}
 function stoneGroupForCode(code){return norm(activeStoneGroups().get(String(code||'').toUpperCase())).toUpperCase()}
 $('#stoneMappingInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importStoneFile(f);status('#stoneMappingStatus',`已匯入 ${f.name}：${count} 個石種代碼對照。`,'ok');setImportCollapsed('stone',true);for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);renderItems()}catch(err){status('#stoneMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('stone',false)}};
 $('#articleMappingInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importArticleFile(f);status('#articleMappingStatus',`已匯入 ${f.name}：${count} 個 Article 對照。`,'ok');setImportCollapsed('article',true);schedulePreview()}catch(err){status('#articleMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('article',false)}};
@@ -519,6 +519,10 @@ function chooseAutomaticImageMatch(p){
   if(multiColor){
     const multi=imgs.filter(x=>isMultiImageVariant(x.variant)).map((img,index)=>({img,index,metalScore:metalScore(img)})).sort((a,b)=>b.metalScore-a.metalScore||a.img.variant.length-b.img.variant.length||a.index-b.index)[0];
     if(multi)return{variant:multi.img.variant,grayscale:false,stoneMatched:true,colorMatched:multi.metalScore===2};
+    // No MULTI image exists: use a real single-stone match before falling back to grayscale.
+    // This deliberately does not use carat weight. Product stone order and exact aliases decide the result.
+    const normal=regularImgs.map((img,index)=>scoreRegular(img,index)).filter(Boolean).sort(sortScored)[0];
+    if(normal)return{variant:normal.img.variant,grayscale:false,stoneMatched:true,colorMatched:normal.metalScore===2};
     const fallback=[...imgs].sort((a,b)=>metalScore(b)-metalScore(a)||(a.variant==='Default'?-1:b.variant==='Default'?1:0)||a.variant.length-b.variant.length)[0];
     return{variant:fallback.variant,grayscale:true,stoneMatched:false,colorMatched:metalScore(fallback)===2};
   }
@@ -821,16 +825,74 @@ function numberToWords(value){
 function currencyWords(code){
   return ({USD:'US DOLLARS',EUR:'EUROS',GBP:'BRITISH POUNDS',CNY:'CHINESE YUAN',JPY:'JAPANESE YEN',HKD:'HONG KONG DOLLARS'})[String(code||'').toUpperCase()]||String(code||'').toUpperCase();
 }
+function previewPagePlan(items){
+  const pages=[];
+  for(let i=0;i<items.length;i+=10)pages.push({items:items.slice(i,i+10),footer:false});
+  if(!pages.length)pages.push({items:[],footer:true});
+  else{
+    const last=pages[pages.length-1];
+    if(last.items.length<=7)last.footer=true;
+    else pages.push({items:[],footer:true,footerOnly:true});
+  }
+  return pages;
+}
+function updatePreviewScale(){
+  const host=$('#invoiceDocument');if(!host)return;
+  const available=Math.max(260,host.clientWidth||794);
+  $$('.preview-page-shell',host).forEach(shell=>{
+    const page=shell.querySelector('.preview-page');if(!page)return;
+    const scale=Math.min(1,available/794);
+    page.style.transform=`scale(${scale})`;
+    shell.style.height=`${Math.ceil(1123*scale)}px`;
+  });
+}
 function renderPreview(){
-  const t=totals(),items=formalItems(),perPage=10,pages=[];
-  if(items.length){for(let i=0;i<items.length;i+=perPage)pages.push(items.slice(i,i+perPage))}else pages.push([]);
-  const totalPages=pages.length,banker=`<div class="doc-meta preview-banker"><strong>Vendor's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road, Hung Hom, Kowloon, Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div>`;
-  const html=pages.map((pageItems,pageIndex)=>{
-    const rows=pageItems.map((x,index)=>{const selected=getImg(x),img=selected?.url||placeholder('No Image'),gray=selected?.grayscale?' grayscale-image':'',formalNo=pageIndex*perPage+index+1,descriptions=[articleDescriptionFor(x),...effectiveDescriptions(x)].filter(Boolean).map(esc).join('<br>');return `<tr class="preview-item-row"><td>${formalNo}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${descriptions}</td><td class="preview-picture"><img class="${gray.trim()}" src="${esc(img)}" alt="${esc(x.artNo)}"></td><td class="qty-cell">${x.qty}</td><td class="unit-cell">${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`}).join('');
-    const last=pageIndex===totalPages-1,footer=last?`<div class="doc-footer preview-final-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total:</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount:</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc(currencyCode())})</span><strong>${fmt(t.total)}</strong></div></div><p class="remark-preview"><strong>Remark :</strong><br>${esc($('#remark').value).replace(/\n/g,'<br>')}</p></div>`:'<div class="preview-page-spacer"></div>';
-    return `<section class="preview-page"><div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid screen-preview"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div>${banker}</div><table class="doc-table"><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Picture</th><th class="qty-head">Quantity</th><th class="unit-head">Unit</th><th class="num">Unit Price</th><th class="num amount-head"><span>Amount</span><small>F.O.B. Value</small></th></tr></thead><tbody>${rows}</tbody></table>${footer}<div class="preview-page-number">Page ${pageIndex+1} of ${totalPages}</div></section>`;
+  const t=totals(),items=formalItems(),pages=previewPagePlan(items),totalPages=pages.length;
+  const banker=`<div class="doc-meta preview-banker"><strong>Vendor's Banker</strong><br>The Hong Kong &amp; Shanghai Banking Corporation Ltd.<br>Address : 41 Ma Tau Wai Road, Hung Hom, Kowloon, Hong Kong<br>A/C # : 012-593570-001<br>A/C Name : Universe Gems &amp; Jewellery Co.</div>`;
+  const html=pages.map((page,pageIndex)=>{
+    const rows=page.items.map((x,index)=>{
+      const selected=getImg(x),img=selected?.url||placeholder('No Image'),gray=selected?.grayscale?' grayscale-image':'',formalNo=pages.slice(0,pageIndex).reduce((n,p)=>n+p.items.length,0)+index+1;
+      const descriptions=[articleDescriptionFor(x),...effectiveDescriptions(x)].filter(Boolean).slice(0,4).map(esc).join('<br>');
+      return `<tr class="preview-item-row"><td>${formalNo}</td><td>Lot.No. : ${esc(x.lotNo)}<br>${esc(x.artNo)}</td><td>${descriptions}</td><td class="preview-picture"><img class="${gray.trim()}" src="${esc(img)}" alt="${esc(x.artNo)}"></td><td class="qty-cell">${x.qty}</td><td class="unit-cell">${esc(x.unit)}</td><td class="num">${fmt(x.unitPrice)}</td><td class="num">${fmt(x.qty*x.unitPrice)}</td></tr>`;
+    }).join('');
+    const emptyRows=page.footer?0:Math.max(0,10-page.items.length);
+    const fillers=Array.from({length:emptyRows},()=>'<tr class="preview-item-row preview-empty-row"><td colspan="8"></td></tr>').join('');
+    const footer=page.footer?`<div class="doc-footer preview-final-footer"><div class="doc-totals"><div><span>Total Quantity :</span><strong>${t.qty}</strong></div><div><span>Sub Total :</span><strong>${fmt(t.sub)}</strong></div><div><span>Discount :</span><strong>${discountDisplay(t.discount)}</strong></div><div class="total"><span>Total : (${esc(currencyCode())})</span><strong>${fmt(t.total)}</strong></div></div><div class="remark-preview"><strong>Remark :</strong><div>${esc($('#remark').value).replace(/\n/g,'<br>')||'&nbsp;'}</div></div><div class="signature-row"><span>Vender Signature : ____________________</span><span>Accept By : ____________________</span></div></div>`:'';
+    return `<div class="preview-page-shell"><section class="preview-page${page.footerOnly?' footer-only-page':''}"><div class="letterhead"><h2>UNIVERSE GEMS &amp; JEWELLERY CO.</h2><p>UNIT 11-12, 10/F., FU HANG INDUSTRIAL BUILDING, NO. 1 HOK YUEN STREET EAST,<br>HUNG HOM, KOWLOON, HONG KONG · TEL : (852) 2363 5409 · FAX : (852) 2765 0343</p></div><div class="doc-title">${documentLabels().title}</div><div class="doc-grid screen-preview"><div class="doc-meta">No. : <strong>${esc($('#invoiceNo').value)}</strong><br>${documentLabels().date} : ${esc(englishInvoiceDate($('#invoiceDate').value))}<br>Shipment Method : ${esc($('#shipmentMethod').value)}<br>Currency : ${esc($('#currency').value)}<br><br>Customer : <strong>${esc($('#customerName').value)}</strong><br>${esc($('#customerAddress').value).replace(/\n/g,'<br>')}</div>${banker}</div><table class="doc-table"><colgroup><col class="col-no"><col class="col-article"><col class="col-desc"><col class="col-picture"><col class="col-qty"><col class="col-unit"><col class="col-price"><col class="col-amount"></colgroup><thead><tr><th>No.</th><th>Article No.</th><th>Description</th><th>Picture</th><th class="qty-head">Quantity</th><th class="unit-head">Unit</th><th class="num">Unit Price</th><th class="num amount-head"><span>Amount</span><small>F.O.B. Value</small></th></tr></thead><tbody>${rows}${fillers}</tbody></table>${footer}<div class="preview-page-number">Page ${pageIndex+1} of ${totalPages}</div></section></div>`;
   }).join('');
   $('#invoiceDocument').innerHTML=html;
+  requestAnimationFrame(updatePreviewScale);
+}
+async function waitForPreviewImages(page){
+  const images=[...page.querySelectorAll('img')];
+  await Promise.all(images.map(img=>img.complete?Promise.resolve():new Promise(resolve=>{img.onload=img.onerror=resolve})));
+}
+async function exportInvoicePdf(){
+  if(!quote14KReady())return alert('14K 參考報價尚未取得 Kitco Ask，請先線上更新或手動輸入。');
+  if(!state.items.length)return alert(`${documentLabels().short} 沒有貨品。`);
+  if(typeof html2canvas==='undefined'||!window.jspdf?.jsPDF){
+    alert('PDF 程式未載入，請連接網絡後重新開啟 PWA。');return;
+  }
+  const btn=$('#exportPdfBtn');btn.disabled=true;setExcelExportStatus('正在建立與預覽一致的 PDF…');
+  try{
+    renderPreview();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    const pageNodes=[...document.querySelectorAll('#invoiceDocument .preview-page')];
+    const {jsPDF}=window.jspdf,pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
+    for(let i=0;i<pageNodes.length;i++){
+      const captureHost=document.createElement('div');captureHost.className='pdf-capture-container';
+      const page=pageNodes[i].cloneNode(true);page.style.transform='none';captureHost.appendChild(page);document.body.appendChild(captureHost);
+      try{
+        await waitForPreviewImages(page);
+        const canvas=await html2canvas(page,{scale:2,useCORS:true,allowTaint:true,backgroundColor:'#ffffff',logging:false,width:794,height:1123,windowWidth:794,windowHeight:1123,scrollX:0,scrollY:0});
+        if(i)pdf.addPage('a4','portrait');
+        pdf.addImage(canvas.toDataURL('image/jpeg',.94),'JPEG',0,0,210,297,undefined,'FAST');
+      }finally{captureHost.remove()}
+      setExcelExportStatus(`正在建立 PDF… ${i+1}/${pageNodes.length}`);
+    }
+    const inv=norm($('#invoiceNo').value)||formatDocumentNo();
+    pdf.save(`${inv}.pdf`);setExcelExportStatus('PDF 已輸出；內容與固定 A4 預覽一致。','ok');
+  }catch(err){console.error(err);setExcelExportStatus('PDF 輸出失敗：'+(err.message||err),'error')}
+  finally{btn.disabled=false;updatePreviewScale()}
 }
 
 function setExcelExportStatus(message,type=''){
@@ -1315,7 +1377,7 @@ async function exportInvoiceExcel(){
   finally{btn.disabled=false}
 }
 
-$('#exportExcelBtn').onclick=exportInvoiceExcel;$('#exportPdfBtn').onclick=()=>{if(!quote14KReady())return alert('14K 參考報價尚未取得 Kitco Ask，請先線上更新或手動輸入。');renderPreview();setTimeout(()=>window.print(),80)};
+$('#exportExcelBtn').onclick=exportInvoiceExcel;$('#exportPdfBtn').onclick=exportInvoicePdf;
 function updateZoomButtons(){
   $$('.zoom-btn').forEach(btn=>{
     const z=Number(btn.dataset.zoom);
@@ -1341,6 +1403,7 @@ async function setScannerZoom(requested){
   }
 }
 $$('.zoom-btn').forEach(btn=>btn.onclick=()=>setScannerZoom(Number(btn.dataset.zoom)));
+window.addEventListener('resize',()=>requestAnimationFrame(updatePreviewScale));
 async function startScanner(){
   if(state.scannerBusy)return;
   state.scannerBusy=true;
