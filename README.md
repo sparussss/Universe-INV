@@ -1,5 +1,16 @@
-# Universe Invoice PWA v0.12.5
+# Universe Invoice PWA v0.12.6
 
+
+
+## v0.12.6 London PM Quotation 金價重算 / 配套搜尋圖片操作
+
+- 18K 及 14K Quotation 均以最新 Kitco London PM 對比貨品完成日 London PM。
+- 完成日期讀取 jmsdata Column R（LDATE）；同一完成日只需輸入一次歷史 London PM，並儲存在本機。
+- 公司金價：London PM × 1.01，再向上取至下一個 USD 10。
+- 18K／14K 每克金值均加入 12% 生產消耗；14K 金重按 0.83 並每 0.05g 向上進位。
+- Quotation 調整：（最新成色金總值－完成日 18K 金總值）× 4 × Sales Rate，再加入 PRICE × Sales Rate 後向上取整。
+- 金價區改為兩欄排列，最新 London PM 輸入值靠左。
+- 配套搜尋的「編輯圖片」移到左邊縮圖下方。
 
 
 ## v0.12.5 continuous preview / Excel-only export / item image actions
@@ -197,10 +208,12 @@
 - Fixes the iPhone `≡` move-to-position action: after entering a new formal position and tapping OK, the requested order is now preserved and all item sequence numbers are rebuilt continuously.
 - EUR selling prices are rounded to whole euros after all USD / FX / 14K calculations. Preview, item cards, Amount, Sub Total, Discount, Total, Excel and PDF use the same zero-decimal EUR money format. USD behaviour is unchanged.
 - 配套搜尋 款式 and 石頭 filters now support multiple selection. Multiple choices inside one group use OR logic (e.g. ER + PT); the 款式 and 石頭 groups combine with AND logic. `全部` clears that group.
-- Existing v0.11.16 14K Quotation, Kitco Ask lookup and stock-search status logic are otherwise unchanged.
+- The v0.11.16 stock-search status logic remains; its old Kitco Ask quotation method is superseded by the v0.12.6 London PM completion-date repricing method above.
 
 
 ## v0.11.16 14K Quotation reference + companion stock search
+
+> Historical release note: the quotation gold-price method below is retained for version history only and is superseded by v0.12.6.
 
 ### Quotation 14K reference
 - Only **Quotation** shows a document-level karat selector: **18K 原款** (default) or **14K 參考報價**. Invoice and Consignment always stay on original stock data.
