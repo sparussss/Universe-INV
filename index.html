@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.12.4</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.12.5</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -293,7 +293,7 @@
   <section id="preview" class="tab-panel">
     <article class="card preview-actions no-print">
       <div class="preview-status"><strong>預覽會自動更新</strong><span id="previewUpdatedAt">尚未更新</span></div>
-      <div class="preview-export-buttons"><button id="exportExcelBtn">匯出 Excel Invoice</button><button id="exportPdfBtn">輸出 PDF</button></div>
+      <div class="preview-export-buttons"><button id="exportExcelBtn">匯出 Excel Invoice</button></div>
       <div id="excelExportStatus" class="notice hidden"></div>
     </article>
     <article id="invoiceDocument" class="invoice-document"></article>
@@ -334,6 +334,7 @@
     <div class="item-seq"></div>
     <div class="item-thumb-stack">
       <img class="item-thumb" alt="產品圖片">
+      <button type="button" class="edit-item-image-btn ghost">編輯圖片</button>
       <button type="button" class="delete-item danger ghost">刪除</button>
     </div>
     <div class="item-main">
@@ -342,10 +343,6 @@
       <div class="item-full-desc"></div>
       <div class="item-price-note"></div>
       <div class="item-controls compact-controls">
-        <div class="item-image-editor-row">
-          <div class="item-image-selection">圖片：自動</div>
-          <button type="button" class="edit-item-image-btn ghost">編輯圖片</button>
-        </div>
         <div class="item-price-grid">
           <label>Quantity<input class="qty-input" type="number" min="1" step="1"></label>
           <label>Unit Price<input class="price-input" type="number" min="0" step="1"></label>
@@ -364,8 +361,6 @@
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

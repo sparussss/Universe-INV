@@ -1,5 +1,16 @@
-# Universe Invoice PWA v0.12.4
+# Universe Invoice PWA v0.12.5
 
+
+
+## v0.12.5 continuous preview / Excel-only export / item image actions
+
+- 完整移除 PWA 的 PDF 輸出功能：按鈕、產生程式、下載流程、第三方 PDF／畫面擷取依賴及相關提示全部移除；文件預覽只保留 Excel 匯出。
+- 文件預覽取消 A4 分頁及頁碼，改為單一連續長頁面；Excel 的正式 A4 分頁、每頁 10 款及現有版面完全不變。
+- Invoice、Consignment、Quotation 的每件貨品左側統一改為「圖片 → 編輯圖片 → 刪除」。
+- 右側「編輯／完成」只處理 Quantity 與 Unit Price；兩個輸入欄位繼續平排。
+- 圖片編輯仍共用配套搜尋的候選圖片視窗，保留彩色／黑白、上傳圖片、即時拍照及恢復自動選圖。
+- NL 自動選圖仍優先使用同候選檔名帶 `(1)` 的版本。
+- RQZ／OPAL 選圖不使用重量：真正多色款若沒有 MULTI 圖，會使用 Description 中實際存在的精確單石圖片，再考慮黑白 fallback。
 
 ## v0.12.4 Excel-aligned A4 preview / direct PDF trial
 
