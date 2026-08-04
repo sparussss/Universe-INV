@@ -1,4 +1,11 @@
-# Universe Invoice PWA v0.12.11
+# Universe Invoice PWA v0.12.12
+
+## v0.12.12 Excel 圖片保持原比例
+
+- Excel 匯出圖片統一使用 `contain` 方式，圖片寬度及高度採用同一縮放比例。
+- 修正極橫 BL 圖片被拉高，以及直向圖片被壓扁的問題。
+- 圖片完整顯示、不裁切，並在固定四行 Picture 區域內水平及垂直置中。
+- 使用 Invoice Template 及沒有範本的 Excel 匯出路徑，均使用同一套圖片放置邏輯。
 
 ## v0.12.11 配套搜尋顯示 u價
 

@@ -955,6 +955,26 @@ function excelColPixels(ws,colNo){const width=Number(ws.getColumn(colNo).width)|
 function excelRowPixels(ws,rowNo){const points=Number(ws.getRow(rowNo).height)||15;return Math.max(8,points*96/72)}
 function imageAnchorCol(ws,startColNo,endColNo,offsetPx){let col=startColNo-1,remain=Math.max(0,offsetPx);for(let c=startColNo;c<=endColNo;c++){const px=excelColPixels(ws,c);if(remain<=px)return col+remain/px;remain-=px;col+=1}return endColNo}
 function imageAnchorRow(ws,startRow,endRow,offsetPx){let row=startRow-1,remain=Math.max(0,offsetPx);for(let r=startRow;r<=endRow;r++){const px=excelRowPixels(ws,r);if(remain<=px)return row+remain/px;remain-=px;row+=1}return endRow}
+function excelImageContainPlacement(ws,startColNo,endColNo,startRow,endRow,asset,padPx=1){
+  let boxW=0,boxH=0;
+  for(let c=startColNo;c<=endColNo;c++)boxW+=excelColPixels(ws,c);
+  for(let r=startRow;r<=endRow;r++)boxH+=excelRowPixels(ws,r);
+  const sourceW=Math.max(1,Number(asset?.width)||1),sourceH=Math.max(1,Number(asset?.height)||1);
+  const pad=Math.max(0,Number(padPx)||0);
+  const maxW=Math.max(1,boxW-pad*2),maxH=Math.max(1,boxH-pad*2);
+  const scale=Math.min(maxW/sourceW,maxH/sourceH);
+  // Width and height must use exactly the same scale. Do not apply an
+  // independent minimum to either side, because that distorts very wide BL
+  // images and very tall pendant images.
+  const width=Math.max(1,sourceW*scale);
+  const height=Math.max(1,sourceH*scale);
+  const xOffset=Math.max(0,(boxW-width)/2),yOffset=Math.max(0,(boxH-height)/2);
+  return {
+    tl:{col:imageAnchorCol(ws,startColNo,endColNo,xOffset),row:imageAnchorRow(ws,startRow,endRow,yOffset)},
+    ext:{width,height},
+    editAs:'oneCell'
+  };
+}
 function rowRangeHeightPoints(ws,start,end){let total=0;for(let r=start;r<=end;r++)total+=Number(ws.getRow(r).height)||15;return total}
 function copyTemplateRowStyle(ws,sourceRow,targetRow){
   const src=ws.getRow(sourceRow),dst=ws.getRow(targetRow);dst.height=src.height;
@@ -1196,15 +1216,7 @@ async function exportInvoiceFromTemplate(){
         const imageId=wb.addImage({base64:asset.base64,extension:'jpeg'});
         const imageStartColNo=excelColNumber(imageStartCol),imageEndColNo=excelColNumber(imageEndCol);
         const imageEndRow=start+3;
-        let boxW=0,boxH=0;
-        for(let c=imageStartColNo;c<=imageEndColNo;c++)boxW+=excelColPixels(ws,c);
-        for(let r=start;r<=imageEndRow;r++)boxH+=excelRowPixels(ws,r);
-        const pad=1,maxW=Math.max(20,boxW-pad*2),maxH=Math.max(20,boxH-pad*2);
-        const scale=Math.min(maxW/asset.width,maxH/asset.height);
-        const width=Math.max(20,Math.round(asset.width*scale));
-        const height=Math.max(20,Math.round(asset.height*scale));
-        const xOffset=(boxW-width)/2,yOffset=(boxH-height)/2;
-        ws.addImage(imageId,{tl:{col:imageAnchorCol(ws,imageStartColNo,imageEndColNo,xOffset),row:imageAnchorRow(ws,start,imageEndRow,yOffset)},ext:{width,height},editAs:'oneCell'});
+        ws.addImage(imageId,excelImageContainPlacement(ws,imageStartColNo,imageEndColNo,start,imageEndRow,asset,1));
       }catch{missingImages++}
     }else missingImages++;
 
@@ -1356,9 +1368,9 @@ async function exportInvoiceExcel(){
       const selected=getImg(item);
       if(selected?.file){
         try{
-          const dataUrl=await imageFileToJpegDataUrl(selected.file,620,.82,!!selected.grayscale);
-          const imageId=wb.addImage({base64:dataUrl,extension:'jpeg'});
-          ws.addImage(imageId,{tl:{col:3.01,row:start-1+.01},br:{col:3.99,row:start+3.99},editAs:'oneCell'});
+          const asset=await imageFileToJpegAsset(selected.file,620,.82,!!selected.grayscale);
+          const imageId=wb.addImage({base64:asset.base64,extension:'jpeg'});
+          ws.addImage(imageId,excelImageContainPlacement(ws,4,4,start,start+3,asset,1));
         }catch{missingImages++}
       }else missingImages++;
       row=end+1;
