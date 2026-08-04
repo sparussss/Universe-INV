@@ -1,6 +1,16 @@
-# Universe Invoice PWA v0.12.6
+# Universe Invoice PWA v0.12.7
 
 
+
+
+## v0.12.7 最新已公布 London PM（完全取代現貨 Ask）
+
+- Quotation 金價來源只使用 Kitco 歷史頁最近一個已公布的 London PM，不再讀取或使用即時現貨 Ask。
+- 最新 London PM 必須同時輸入日期及金價；例如 2026-08-04 使用 2026-08-03 的 USD 4026.60 / oz。
+- 最新 London PM 日期不會自動假設為今天或前一天，方便遇到星期六、星期日及休市日時輸入真正最新的已公布日期。
+- 最新 London PM 及各款完成日 London PM 都採用相同公司金價、18K／14K 金值及 Quotation 差額公式。
+- 如果貨品完成日剛好等於最新 London PM 日期，系統會直接共用該最新金價，毋須重複輸入。
+- 使用全新本機快取欄位，不會沿用舊版可能保存的現貨 Ask 數值。
 
 ## v0.12.6 London PM Quotation 金價重算 / 配套搜尋圖片操作
 
@@ -208,7 +218,7 @@
 - Fixes the iPhone `≡` move-to-position action: after entering a new formal position and tapping OK, the requested order is now preserved and all item sequence numbers are rebuilt continuously.
 - EUR selling prices are rounded to whole euros after all USD / FX / 14K calculations. Preview, item cards, Amount, Sub Total, Discount, Total, Excel and PDF use the same zero-decimal EUR money format. USD behaviour is unchanged.
 - 配套搜尋 款式 and 石頭 filters now support multiple selection. Multiple choices inside one group use OR logic (e.g. ER + PT); the 款式 and 石頭 groups combine with AND logic. `全部` clears that group.
-- The v0.11.16 stock-search status logic remains; its old Kitco Ask quotation method is superseded by the v0.12.6 London PM completion-date repricing method above.
+- The v0.11.16 stock-search status logic remains; its former live-price quotation method is retired and removed from the current build.
 
 
 ## v0.11.16 14K Quotation reference + companion stock search
@@ -216,14 +226,8 @@
 > Historical release note: the quotation gold-price method below is retained for version history only and is superseded by v0.12.6.
 
 ### Quotation 14K reference
-- Only **Quotation** shows a document-level karat selector: **18K 原款** (default) or **14K 參考報價**. Invoice and Consignment always stay on original stock data.
-- Choosing 14K automatically requests the current **Kitco Gold Ask** online. The PWA first tries Kitco's live quote gateway and has a Kitco public-page fallback; the latest cached Ask and manual Ask input remain available if the online request is blocked.
-- Company gold quotation rule: `Kitco Ask × 1.01`, rounded upward to the next USD 10. Production gold value then includes 12% consumption.
-- 18K gold value / g: `Company Gold / 31.1034768 × 0.750 × 1.12`.
-- 14K gold value / g: `Company Gold / 31.1034768 × 0.585 × 1.12`.
-- Same-design 14K weight is estimated as `18K weight × 0.83`, then rounded **up** to the next 0.05g. Example: `3.15g → 2.65g`.
-- DESC1 is rewritten only for the 14K Quotation, while preserving the original in brackets, e.g. `3.15Y750 → 2.65Y585 (3.15Y750)`. Preview, Excel and PDF use the same transformed description and reference Unit Price.
-- Returning to Invoice / Consignment immediately restores original DESC1, gold weight, fineness and Unit Price. Stock source data is never rewritten.
+
+> 舊版即時現貨金價流程已完全停用及移除。現行版本只使用上方 v0.12.7 所述的最新已公布 London PM 與完成日 London PM。
 
 ### 配套／庫存搜尋
 - Adds a fourth top-level tab after 文件預覽: **配套搜尋**.
@@ -481,3 +485,13 @@ UI 改善：
 - Service Worker now ignores cross-origin requests so iPhone/Safari fetches the FX API directly instead of routing it through the PWA cache handler.
 - Frankfurter v2 remains the primary source, with Frankfurter v1 as a fallback.
 - FX request timeout increased to 12 seconds.
+
+
+## v0.12.8 GoldSilver.xlsx and Quotation modes
+
+- The exhibition package can include `GoldSilver.xlsx`. The PWA reads the `Date` and `Gold PM` columns from the `GoldSilver.com` sheet.
+- The newest valid Gold PM date/value is automatically placed in the editable latest London PM fields.
+- For each item LDATE, the PWA uses the same date or the nearest earlier trading date in GoldSilver.xlsx.
+- Historical values remain manually editable as overrides.
+- Added a third quotation mode: `14K 同金重報價`, which converts 18K to 14K while retaining the original 18K metal weight.
+- Existing `18K 原款` and `14K 參考報價` calculations are retained.

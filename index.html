@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.12.6</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.12.8</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -41,7 +41,7 @@
 
   <section id="setup" class="tab-panel active">
     <article class="card package-card">
-      <div class="section-title-row"><div><h3>匯入展覽資料包</h3><p class="muted">選擇包含 jmsdata、客戶表、Stone List、Template、Pictures 的展覽 Folder。</p></div></div>
+      <div class="section-title-row"><div><h3>匯入展覽資料包</h3><p class="muted">選擇包含 jmsdata、客戶表、Stone List、GoldSilver.xlsx、Template、Pictures 的展覽 Folder。</p></div></div>
       <label class="file-picker package-picker">選擇展覽資料包 Folder
         <input id="exhibitionPackageInput" type="file" multiple webkitdirectory directory>
       </label>
@@ -210,26 +210,31 @@
         <div class="quote-karat-switch" role="group" aria-label="Quotation Karat">
           <label><input type="radio" name="quoteKarat" value="18K" checked> 18K 原款</label>
           <label><input type="radio" name="quoteKarat" value="14K"> 14K 參考報價</label>
+          <label><input type="radio" name="quoteKarat" value="14K_SAME_WEIGHT"> 14K 同金重報價</label>
         </div>
         <div id="goldQuotePanel" class="gold-quote-panel hidden">
           <div class="gold-quote-head">
-            <div><strong>Kitco London PM</strong><span>USD / troy oz</span></div>
-            <button type="button" id="refreshGoldBtn" class="ghost">開啟 Kitco</button>
+            <div><strong>London PM 歷史金價</strong><span>由資料包 GoldSilver.xlsx 自動讀取，仍可人手覆蓋</span></div>
+            <button type="button" id="refreshGoldBtn" class="ghost">開啟 GoldSilver</button>
           </div>
           <div class="gold-pricing-grid">
-            <label class="gold-current-input">最新 London PM
-              <input id="kitcoAskInput" type="number" min="0" step="0.01" inputmode="decimal" placeholder="例如 4026.60">
+            <label class="gold-current-input"><span>最新 London PM</span>
+              <small id="currentLondonPmMeta" class="gold-current-meta">GoldSilver.xlsx 未載入，可人手輸入日期及金價。</small>
+              <div class="gold-current-fields">
+                <span class="gold-current-field"><small>日期</small><input id="currentLondonPmDate" type="date" aria-label="最新 London PM 日期"></span>
+                <span class="gold-current-field"><small>USD / oz</small><input id="currentLondonPmInput" type="number" min="0" step="0.01" inputmode="decimal" aria-label="最新 London PM 金價" placeholder="例如 4028.15"></span>
+              </div>
             </label>
             <div class="gold-metric-card"><span>公司報價金價</span><strong id="companyGoldBase">—</strong></div>
             <div class="gold-metric-card"><span>18K 金值 / g</span><strong id="gold18PerGram">—</strong></div>
             <div class="gold-metric-card"><span>14K 金值 / g</span><strong id="gold14PerGram">—</strong></div>
           </div>
           <div class="historical-gold-section">
-            <div class="historical-gold-head"><strong>完成日 London PM</strong><span>按 jmsdata Column R（LDATE）列出</span></div>
+            <div class="historical-gold-head"><strong>完成日 London PM</strong><span>按 LDATE 自動使用同日或之前最近交易日</span></div>
             <div id="historicalGoldInputs" class="historical-gold-inputs"></div>
           </div>
-          <div id="goldQuoteStatus" class="fx-status">請輸入最新 Kitco London PM。</div>
-          <p class="gold-rule-note">完成日及最新公司金價：London PM × 1.01，再向上取至下一個 USD 10。18K／14K 每克金值均加 12% 生產消耗。Quotation 調整＝（最新成色金總值－完成日 18K 金總值）× 4 × Sales Rate；14K 金重按 18K 金重 × 0.83，再每 0.05g 向上進位。</p>
+          <div id="goldQuoteStatus" class="fx-status">請匯入 GoldSilver.xlsx，或人手輸入最新 London PM 的日期及金價。</div>
+          <p class="gold-rule-note">最新 London PM 由 GoldSilver.xlsx 日期最新的一筆自動填入，價錢及日期仍可人手覆蓋。完成日若沒有同日 Gold PM，使用完成日前最近一個有 Gold PM 的交易日。完成日及最新公司金價：London PM × 1.01，再向上取至下一個 USD 10。18K／14K 每克金值均加 12% 生產消耗。Quotation 調整＝（最新成色金總值－完成日 18K 金總值）× 4 × Sales Rate。14K 參考報價：金重按 18K 金重 × 0.83，再每 0.05g 向上進位；14K 同金重報價：直接沿用原本 18K 金重。</p>
         </div>
       </div>
 
