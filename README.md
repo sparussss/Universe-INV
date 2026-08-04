@@ -1,4 +1,10 @@
-# Universe Invoice PWA v0.12.10
+# Universe Invoice PWA v0.12.11
+
+## v0.12.11 配套搜尋顯示 u價
+
+- 配套／庫存搜尋的每張貨品卡，會在 `LOTNO` 旁顯示 jmsdata `PRICE` 原始 u價，例如 `LOTNO 139418 · 3092u`。
+- u價只作庫存搜尋參考，不會乘 Sales Rate，亦不會改動 Invoice／Quotation 計算。
+- 如 PRICE 無有效數值，卡片只顯示 LOTNO。
 
 ## v0.12.10 London PM 輸入及 MULTI 判定修正
 
