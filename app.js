@@ -237,7 +237,7 @@ function historicalLondonPmDetails(item){
 function historicalLondonPm(item){return historicalLondonPmDetails(item).pm}
 function quotationPriceDetails(item){
   const p=parse18KDesc1((item?.descriptions||[])[0]),date=normalizeStockDate(item?.completionDate),latestDate=normalizeStockDate(state.quote.currentLondonPmDate),current=goldMetrics(),historicalDetail=historicalLondonPmDetails(item),historicalPm=historicalDetail.pm,historical=goldMetrics(historicalPm),rate=Number($('#salesRate')?.value)||0;
-  const missing=[];if(!p)missing.push('DESC1 金重');if(!date)missing.push('LDATE');if(!latestDate)missing.push('最新 London PM 日期');if(!current)missing.push('最新 London PM 金價');if(date&&!historical)missing.push(`${date} 或之前的 London PM`);
+  const missing=[];if(!p)missing.push('DESC1 金重');if(!date)missing.push('LDATE');if(!latestDate)missing.push('GoldSilver.xlsx 最新交易日期');if(!current)missing.push('最新 London PM 金價');if(date&&!historical)missing.push(`${date} 或之前的 London PM`);
   if(missing.length)return{ready:false,missing,date,latestDate,p,current,historical,historicalPm,historicalSourceDate:historicalDetail.sourceDate,historicalSource:historicalDetail.source};
   const currentWeight=quotationCurrentWeight(p),currentPerGram=quote14KMode()?current.g14:current.g18;
   const historicalTotal=p.weight*historical.g18,currentTotal=currentWeight*currentPerGram,adjustment=(currentTotal-historicalTotal)*GOLD_PRICE_MULTIPLIER*rate,rawBase=Math.max(0,(Number(item.price)||0)*rate),rawPrice=Math.max(0,rawBase+adjustment),finalPrice=Math.ceil(rawPrice-1e-9);
@@ -265,7 +265,7 @@ function renderHistoricalGoldInputs(){
   }
   if(missingDate){const warn=document.createElement('div');warn.className='notice error';warn.textContent=`有 ${missingDate} 款貨品沒有有效 LDATE，未能完成金價調整。`;box.appendChild(warn)}
 }
-function missingGoldSummary(){if(!normalizeStockDate(state.quote.currentLondonPmDate)||!goldMetrics())return'請輸入最新可用 London PM 的日期及金價。';if(!state.items.length)return state.quote.goldDataRows?`已載入 ${state.quote.goldDataName}；加入 Quotation 貨品後會自動配對完成日金價。`:'加入 Quotation 貨品後，請輸入各完成日的 London PM。';const missing=[];for(const item of state.items){const d=quotationPriceDetails(item);if(!d.ready)for(const x of d.missing)if(!missing.includes(x))missing.push(x)}return missing.length?`尚欠：${missing.join('、')}`:'最新及完成日金價已齊全，Quotation 已重新計價。'}
+function missingGoldSummary(){if(!normalizeStockDate(state.quote.currentLondonPmDate))return'請匯入包含有效 Gold PM 日期的 GoldSilver.xlsx。';if(!goldMetrics())return'請輸入最新 London PM 金價。';if(!state.items.length)return state.quote.goldDataRows?`已載入 ${state.quote.goldDataName}；加入 Quotation 貨品後會自動配對完成日金價。`:'加入 Quotation 貨品後，請輸入各完成日的 London PM。';const missing=[];for(const item of state.items){const d=quotationPriceDetails(item);if(!d.ready)for(const x of d.missing)if(!missing.includes(x))missing.push(x)}return missing.length?`尚欠：${missing.join('、')}`:'最新及完成日金價已齊全，Quotation 已重新計價。'}
 function setGoldQuoteExpanded(expanded){
   const details=$('#goldQuoteDetails'),button=$('#toggleGoldQuoteBtn'),action=$('#goldQuoteToggleAction');if(!details||!button)return;
   details.classList.toggle('hidden',!expanded);button.setAttribute('aria-expanded',expanded?'true':'false');button.classList.toggle('expanded',expanded);if(action)action.textContent=expanded?'收起':'展開';
@@ -274,14 +274,12 @@ function toggleGoldQuoteDetails(){const details=$('#goldQuoteDetails');if(detail
 function updateGoldQuoteUI(message='',type=''){
   const panel=$('#quotationKaratPanel'),gold=$('#goldQuotePanel');if(!panel)return;
   panel.classList.toggle('hidden',!quoteMode());gold?.classList.toggle('hidden',!quoteMode());
-  const dateInput=$('#currentLondonPmDate');if(dateInput&&document.activeElement!==dateInput)dateInput.value=normalizeStockDate(state.quote.currentLondonPmDate);
   const pmInput=$('#currentLondonPmInput');if(pmInput&&document.activeElement!==pmInput)pmInput.value=state.quote.currentLondonPm>0?String(state.quote.currentLondonPm):'';
-  const m=goldMetrics(),fileLatest=goldFileLatest(),meta=$('#currentLondonPmMeta'),toggleSummary=$('#goldQuoteToggleSummary');$('#companyGoldBase').textContent=m?`USD ${m.base.toFixed(0)} / oz`:'—';$('#gold18PerGram').textContent=m?`USD ${m.g18.toFixed(3)}`:'—';$('#gold14PerGram').textContent=m?`USD ${m.g14.toFixed(3)}`:'—';if(meta)meta.textContent=fileLatest?`${state.quote.goldDataName} 最新：${fileLatest.date} · USD ${fileLatest.pm.toFixed(2)} / oz`:'GoldSilver.xlsx 未載入，可人手輸入日期及金價。';if(toggleSummary){const date=normalizeStockDate(state.quote.currentLondonPmDate),pm=Number(state.quote.currentLondonPm)||0;toggleSummary.textContent=date&&pm>0?`最新 ${date} · USD ${pm.toFixed(2)} / oz`:fileLatest?`最新 ${fileLatest.date} · USD ${fileLatest.pm.toFixed(2)} / oz`:'按此展開並輸入金價資料'}renderHistoricalGoldInputs();
+  const m=goldMetrics(),fileLatest=goldFileLatest(),meta=$('#currentLondonPmMeta'),toggleSummary=$('#goldQuoteToggleSummary');$('#companyGoldBase').textContent=m?`USD ${m.base.toFixed(0)} / oz`:'—';$('#gold18PerGram').textContent=m?`USD ${m.g18.toFixed(3)}`:'—';$('#gold14PerGram').textContent=m?`USD ${m.g14.toFixed(3)}`:'—';if(meta)meta.textContent=fileLatest?`${state.quote.goldDataName} 最新：${fileLatest.date} · USD ${fileLatest.pm.toFixed(2)} / oz`:'GoldSilver.xlsx 未載入，請先更新並匯入資料包。';if(toggleSummary){const date=normalizeStockDate(state.quote.currentLondonPmDate),pm=Number(state.quote.currentLondonPm)||0;toggleSummary.textContent=date&&pm>0?`最新 ${date} · USD ${pm.toFixed(2)} / oz`:fileLatest?`最新 ${fileLatest.date} · USD ${fileLatest.pm.toFixed(2)} / oz`:'按此展開並輸入金價資料'}renderHistoricalGoldInputs();
   const el=$('#goldQuoteStatus');if(el){el.textContent=message||missingGoldSummary();el.className='fx-status'+(type?' '+type:quotationGoldReady()&&state.items.length?' ok':' warn')}
 }
-function latestLondonPmStatus(){const date=normalizeStockDate(state.quote.currentLondonPmDate),n=Number(state.quote.currentLondonPm)||0;return date&&n>0?`最新可用 London PM：${date} · USD ${n.toFixed(2)} / oz`:date?'請輸入最新可用 London PM 金價。':'請輸入最新可用 London PM 日期及金價。'}
+function latestLondonPmStatus(){const date=normalizeStockDate(state.quote.currentLondonPmDate),n=Number(state.quote.currentLondonPm)||0;return date&&n>0?`最新可用 London PM：${date} · USD ${n.toFixed(2)} / oz`:date?'請輸入最新可用 London PM 金價。':'請匯入包含有效 Gold PM 日期的 GoldSilver.xlsx。'}
 function setCurrentLondonPmValue(value){const n=Number(value);state.quote.currentLondonPm=Number.isFinite(n)&&n>0?n:0;state.quote.source='manual';saveLatestLondonPmCache();syncEffectivePrices({clearCurrentOverride:true});renderItems();updateGoldQuoteUI(latestLondonPmStatus(),state.quote.currentLondonPm>0?'ok':'warn');schedulePreview();return state.quote.currentLondonPm>0}
-function setCurrentLondonPmDate(value){state.quote.currentLondonPmDate=normalizeStockDate(value);state.quote.source='manual';saveLatestLondonPmCache();syncEffectivePrices({clearCurrentOverride:true});renderItems();updateGoldQuoteUI(latestLondonPmStatus(),state.quote.currentLondonPmDate?'ok':'warn');schedulePreview();return !!state.quote.currentLondonPmDate}
 function setHistoricalLondonPm(date,value){const key=normalizeStockDate(date),n=Number(value);if(!key)return;if(Number.isFinite(n)&&n>0)state.quote.historicalPm[key]=n;else delete state.quote.historicalPm[key];saveHistoricalGoldCache();syncEffectivePrices({clearCurrentOverride:true});renderItems();updateGoldQuoteUI(n>0?`${key} London PM 已設為 USD ${n.toFixed(2)} / oz。`:`已清除 ${key} London PM。`,n>0?'ok':'warn');schedulePreview()}
 function openGoldSilverLondonHistory(){window.open(GOLDSILVER_HISTORY_PAGE,'_blank','noopener,noreferrer');updateGoldQuoteUI('已開啟 GoldSilver Historical London Fix 頁面。資料包內 GoldSilver.xlsx 仍是目前自動配對來源。','warn')}
 function setQuoteKarat(value){state.quote.karat=['18K','14K','14K_SAME_WEIGHT'].includes(value)?value:'18K';$$('input[name="quoteKarat"]').forEach(x=>x.checked=x.value===state.quote.karat);syncEffectivePrices({clearCurrentOverride:true});updateGoldQuoteUI();renderItems();schedulePreview()}
@@ -484,7 +482,7 @@ $('#exhibitionPackageInput').onchange=async e=>{
     if(!stone)errors.push('找不到 Stone List & Shape & Cutting.xlsx');else{const n=await importStoneFile(stone);lines.push(`✓ ${stone.name} · ${n} 個石種代碼`)}
     if(!template)errors.push('找不到 Invoice Template.xlsx');else{await importTemplateFile(template);lines.push(`✓ ${template.name} · Template 已載入`)}
     if(article){const n=await importArticleFile(article);lines.push(`✓ ${article.name} · ${n} 個 Article 對照`)}else lines.push('○ Article Mapping 未提供（不顯示 Article）');
-    if(gold){const g=await importGoldSilverFile(gold);lines.push(`✓ ${gold.name} · ${g.count} 個 Gold PM 交易日 · 最新 ${g.latestDate} USD ${g.latestPm.toFixed(2)} / oz`)}else{state.quote.goldPrices=new Map();state.quote.goldDates=[];state.quote.goldDataName='';state.quote.goldDataRows=0;lines.push('○ GoldSilver.xlsx 未提供（London PM 可人手輸入）')}
+    if(gold){const g=await importGoldSilverFile(gold);lines.push(`✓ ${gold.name} · ${g.count} 個 Gold PM 交易日 · 最新 ${g.latestDate} USD ${g.latestPm.toFixed(2)} / oz`)}else{state.quote.goldPrices=new Map();state.quote.goldDates=[];state.quote.goldDataName='';state.quote.goldDataRows=0;lines.push('○ GoldSilver.xlsx 未提供（Quotation 金價日期無法自動配對）')}
     if(!imageFiles.length)errors.push('找不到 Pictures 內的圖片');else{const r=importImageFiles(imageFiles);for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);lines.push(`✓ Pictures · ${r.images} 張圖片 · 配對 ${r.matched} 個款號`)}
     $('#packageSummary').innerHTML=lines.map(x=>`<div>${esc(x)}</div>`).join('')+(errors.length?`<div class="package-errors">${errors.map(x=>'✕ '+esc(x)).join('<br>')}</div>`:'');
     if(errors.length)status('#packageStatus',`${root} 未完整載入，請補回缺少的資料。`,'error');else{status('#packageStatus',`${root} 已完成匯入，可以開始建立文件。`,'ok');document.querySelector('.advanced-imports').open=false}
@@ -494,7 +492,7 @@ $('#exhibitionPackageInput').onchange=async e=>{
     if(stone)status('#stoneMappingStatus',`已由資料包匯入 ${stone.name}。`,'ok');
     if(template)status('#invoiceTemplateStatus',`已由資料包匯入 ${template.name}。`,'ok');
     if(article)status('#articleMappingStatus',`已由資料包匯入 ${article.name}。`,'ok');
-    updateGoldQuoteUI(gold?`已由 ${gold.name} 載入最新及歷史 London PM。`:'GoldSilver.xlsx 未載入，London PM 需人手輸入。',gold?'ok':'warn');
+    updateGoldQuoteUI(gold?`已由 ${gold.name} 載入最新及歷史 London PM。`:'GoldSilver.xlsx 未載入；請先更新檔案並重新匯入資料包。',gold?'ok':'warn');
     updateTotals();renderItems();
   }catch(err){console.error(err);status('#packageStatus','資料包匯入失敗：'+(err.message||err),'error')}
 };
@@ -519,7 +517,7 @@ function variantContainsStone(variant,wanted){
     const phrase=normalizeStonePhrase(part.replace(/\([^)]*\)/g,''));return phrase===target||(` ${phrase} `).includes(` ${target} `);
   });
 }
-const MULTI_COLOR_GROUP_THRESHOLD=3;
+const MULTI_COLOR_GROUP_THRESHOLD=3,MULTI_STONE_CODE_THRESHOLD=3,MULTI_MIN_COLOR_GROUPS=2;
 const IMAGE_STONE_EXCLUSIONS=new Set(['CDM','DIA']);
 function imageStoneCodesForProduct(p){
   return stoneCodesForProduct(p).filter(code=>!IMAGE_STONE_EXCLUSIONS.has(String(code||'').toUpperCase()));
@@ -532,7 +530,8 @@ function productColorGroups(p){
   const groups=[];for(const code of imageStoneCodesForProduct(p)){const group=stoneGroupForCode(code);if(group&&!groups.includes(group))groups.push(group)}return groups;
 }
 function isMultiColorProduct(p){
-  const groups=productColorGroups(p);return groups.includes('MULTI')||groups.length>=MULTI_COLOR_GROUP_THRESHOLD;
+  const groups=productColorGroups(p),codes=imageStoneCodesForProduct(p);
+  return groups.includes('MULTI')||groups.length>=MULTI_COLOR_GROUP_THRESHOLD||(codes.length>=MULTI_STONE_CODE_THRESHOLD&&groups.length>=MULTI_MIN_COLOR_GROUPS);
 }
 function originalMetalToken(p){
   const desc1=String((p?.descriptions||[])[0]||'').toUpperCase().replace(/\s+/g,'');
@@ -1585,6 +1584,6 @@ function scrollCurrentPanelToTop(){const panel=activePanelId();if(panel==='invoi
 $('#backToTopBtn').onclick=scrollCurrentPanelToTop;$('#invoiceItems').addEventListener('scroll',updateBackToTopButton,{passive:true});window.addEventListener('scroll',updateBackToTopButton,{passive:true});window.addEventListener('resize',updateBackToTopButton,{passive:true});
 $('#stockSearchBtn').onclick=runStockSearch;$('#stockSearchInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runStockSearch()}};$('#stockSearchInput').oninput=e=>{e.target.value=e.target.value.toUpperCase();if(!norm(e.target.value)){state.stockSearch.query='*';state.stockSearch.types=[];state.stockSearch.stones=[];state.stockSearch.statuses=[];state.stockSearch.imageIssuesOnly=false;renderStockSearch()}};$('#stockFilterToggle').onclick=()=>{state.stockSearch.filtersOpen=!state.stockSearch.filtersOpen;renderStockSearch()};
 $('#exportJmsdataBtn').onclick=exportJmsdata;$('#exportImageOverridesBtn').onclick=exportJmsdata;$('#exportUpdatedPackageBtn').onclick=exportUpdatedPackage;$('#closeStockImageDialogBtn').onclick=()=>$('#stockImageDialog').close();$('#stockImageDialog').addEventListener('close',()=>{state.stockImageEditLot=null});$('#stockUploadImageBtn').onclick=()=>$('#stockUploadImageInput').click();$('#stockCameraImageBtn').onclick=()=>$('#stockCameraImageInput').click();$('#stockUploadImageInput').onchange=async e=>{const f=e.target.files?.[0];e.target.value='';if(f)await handleImageEditorFile(f,'upload')};$('#stockCameraImageInput').onchange=async e=>{const f=e.target.files?.[0];e.target.value='';if(f)await handleImageEditorFile(f,'camera')};window.addEventListener('beforeunload',e=>{if(!state.imageOverrideDirty&&!(state.packageImageDirtyFiles?.size||0))return;e.preventDefault();e.returnValue=''});$('#recallSearchBtn').onclick=renderRecallResults;$('#recallSearchInput').oninput=renderRecallResults;$('#recallSearchInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();renderRecallResults()}};$('#recallTypeFilter').onchange=renderRecallResults;$('#cancelRecallBtn').onclick=cancelRecall;
-$$('input[name="quoteKarat"]').forEach(r=>r.onchange=e=>setQuoteKarat(e.target.value));$('#toggleGoldQuoteBtn').onclick=toggleGoldQuoteDetails;$('#refreshGoldBtn').onclick=openGoldSilverLondonHistory;$('#currentLondonPmDate').onchange=e=>setCurrentLondonPmDate(e.target.value);let goldInputTimer=null;$('#currentLondonPmInput').oninput=e=>{clearTimeout(goldInputTimer);goldInputTimer=setTimeout(()=>setCurrentLondonPmValue(e.target.value),180)};
+$$('input[name="quoteKarat"]').forEach(r=>r.onchange=e=>setQuoteKarat(e.target.value));$('#toggleGoldQuoteBtn').onclick=toggleGoldQuoteDetails;$('#refreshGoldBtn').onclick=openGoldSilverLondonHistory;let goldInputTimer=null;$('#currentLondonPmInput').oninput=e=>{clearTimeout(goldInputTimer);goldInputTimer=setTimeout(()=>setCurrentLondonPmValue(e.target.value),180)};
 
 updateFxPanel();updateDocumentTypeUI();updateGoldQuoteUI();renderCustomerSummary();renderItems();renderRecallResults();updateImageOverrideStatus();renderStockSearch();schedulePreview();updateBackToTopButton();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});

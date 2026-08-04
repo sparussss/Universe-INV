@@ -1,5 +1,12 @@
-# Universe Invoice PWA v0.12.9
+# Universe Invoice PWA v0.12.10
 
+## v0.12.10 London PM 輸入及 MULTI 判定修正
+
+- Quotation 三個成色按鍵繼續同一行平排；兩個 14K 選項固定分成兩行顯示，避免手機自行斷字。
+- 移除最新 London PM 日期輸入框。日期只由資料包 `GoldSilver.xlsx` 最新有效紀錄讀取；金價輸入框保留作臨時手動覆蓋。
+- 更新金價時直接更新資料包內 `GoldSilver.xlsx`，PWA 不會寫回或修改該 Excel。
+- 擴闊 MULTI 判定：保留「3 個或以上顏色 Group」規則；另外，3 種或以上不同非鑽石石種、並橫跨至少 2 個顏色 Group，也視為 MULTI。
+- 例如 QAM + GT + YCT 會選用 `MULTI.JPG` 彩色圖；多種石頭但全部同一顏色 Group 不會受影響。
 
 ## v0.12.9 介面修正與 MULTI SA 自動選圖
 

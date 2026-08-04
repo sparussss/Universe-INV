@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.12.9</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.12.10</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -208,9 +208,9 @@
           <div><strong>Quotation 報價成色</strong><span>整張 Quotation 統一使用同一成色</span></div>
         </div>
         <div class="quote-karat-switch" role="group" aria-label="Quotation Karat">
-          <label><input type="radio" name="quoteKarat" value="18K" checked> 18K 原款</label>
-          <label><input type="radio" name="quoteKarat" value="14K"> 14K 參考報價</label>
-          <label><input type="radio" name="quoteKarat" value="14K_SAME_WEIGHT"> 14K 同金重報價</label>
+          <label><input type="radio" name="quoteKarat" value="18K" checked><span class="quote-karat-label single-line">18K 原款</span></label>
+          <label><input type="radio" name="quoteKarat" value="14K"><span class="quote-karat-label"><span>14K</span><span>參考報價</span></span></label>
+          <label><input type="radio" name="quoteKarat" value="14K_SAME_WEIGHT"><span class="quote-karat-label"><span>14K</span><span>同金重報價</span></span></label>
         </div>
         <div id="goldQuotePanel" class="gold-quote-panel hidden">
           <button type="button" id="toggleGoldQuoteBtn" class="gold-quote-toggle ghost" aria-expanded="false" aria-controls="goldQuoteDetails">
@@ -224,10 +224,9 @@
             </div>
             <div class="gold-pricing-grid">
               <label class="gold-current-input"><span>最新 London PM</span>
-                <small id="currentLondonPmMeta" class="gold-current-meta">GoldSilver.xlsx 未載入，可人手輸入日期及金價。</small>
+                <small id="currentLondonPmMeta" class="gold-current-meta">GoldSilver.xlsx 未載入，請先更新並匯入資料包。</small>
                 <div class="gold-current-fields">
-                  <span class="gold-current-field"><small>日期</small><input id="currentLondonPmDate" type="date" aria-label="最新 London PM 日期"></span>
-                  <span class="gold-current-field"><small>USD / oz</small><input id="currentLondonPmInput" type="number" min="0" step="0.01" inputmode="decimal" aria-label="最新 London PM 金價" placeholder="例如 4028.15"></span>
+                  <span class="gold-current-field"><small>USD / oz（可臨時手動覆蓋）</small><input id="currentLondonPmInput" type="number" min="0" step="0.01" inputmode="decimal" aria-label="最新 London PM 金價" placeholder="例如 4028.15"></span>
                 </div>
               </label>
               <div class="gold-metric-card"><span>公司報價金價</span><strong id="companyGoldBase">—</strong></div>
@@ -238,8 +237,8 @@
               <div class="historical-gold-head"><strong>完成日 London PM</strong><span>按 LDATE 自動使用同日或之前最近交易日</span></div>
               <div id="historicalGoldInputs" class="historical-gold-inputs"></div>
             </div>
-            <div id="goldQuoteStatus" class="fx-status">請匯入 GoldSilver.xlsx，或人手輸入最新 London PM 的日期及金價。</div>
-            <p class="gold-rule-note">最新 London PM 由 GoldSilver.xlsx 日期最新的一筆自動填入，價錢及日期仍可人手覆蓋。完成日若沒有同日 Gold PM，使用完成日前最近一個有 Gold PM 的交易日。完成日及最新公司金價：London PM × 1.01，再向上取至下一個 USD 10。18K／14K 每克金值均加 12% 生產消耗。Quotation 調整＝（最新成色金總值－完成日 18K 金總值）× 4 × Sales Rate。14K 參考報價：金重按 18K 金重 × 0.83，再每 0.05g 向上進位；14K 同金重報價：直接沿用原本 18K 金重。</p>
+            <div id="goldQuoteStatus" class="fx-status">請匯入包含有效 Gold PM 的 GoldSilver.xlsx。</div>
+            <p class="gold-rule-note">最新 London PM 的日期及預設價錢由 GoldSilver.xlsx 最新有效紀錄自動讀取；只保留金價作臨時人手覆蓋，日期不可在 PWA 修改。完成日若沒有同日 Gold PM，使用完成日前最近一個有 Gold PM 的交易日。完成日及最新公司金價：London PM × 1.01，再向上取至下一個 USD 10。18K／14K 每克金值均加 12% 生產消耗。Quotation 調整＝（最新成色金總值－完成日 18K 金總值）× 4 × Sales Rate。14K 參考報價：金重按 18K 金重 × 0.83，再每 0.05g 向上進位；14K 同金重報價：直接沿用原本 18K 金重。</p>
           </div>
         </div>
       </div>
