@@ -365,3 +365,30 @@ button{width:auto}
 
 /* v0.12.8 GoldSilver.xlsx + third quotation mode */
 @media(min-width:700px){.quote-karat-switch{grid-template-columns:repeat(3,1fr)}.quote-karat-switch label:nth-child(3){grid-column:auto}}
+
+
+/* v0.12.9 compact quotation controls + collapsible London PM + MULTI SA */
+.quote-karat-switch{grid-template-columns:repeat(3,minmax(0,1fr))}
+.quote-karat-switch label:nth-child(3){grid-column:auto}
+.quote-karat-switch label{min-width:0;white-space:normal;text-align:center;line-height:1.2}
+.gold-quote-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;text-align:left;background:#fff}
+.gold-quote-toggle-copy{display:flex;min-width:0;flex-direction:column;gap:3px}
+.gold-quote-toggle-copy strong{font-size:15px;color:#172033}
+.gold-quote-toggle-copy small{font-size:10px;line-height:1.35;color:#667085;white-space:normal}
+.gold-quote-toggle-action{flex:0 0 auto;color:#183f72;font-weight:700}
+.gold-quote-toggle.expanded{border-color:#98a2b3}
+.gold-quote-details{margin-top:10px}
+.gold-current-fields,.gold-current-field{min-width:0;max-width:100%}
+#currentLondonPmDate{display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box;text-align:left;font-size:16px}
+#currentLondonPmDate::-webkit-date-and-time-value{text-align:left;margin:0}
+@media(max-width:600px){
+  .quote-karat-switch{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .quote-karat-switch label{gap:4px;padding:9px 4px;font-size:11px}
+  .quote-karat-switch input{width:17px;height:17px;flex:0 0 17px}
+  .gold-current-field{overflow:hidden}
+}
+@media(max-width:390px){
+  .quote-karat-switch{gap:4px}
+  .quote-karat-switch label{padding:8px 3px;font-size:10px}
+  .quote-karat-switch input{width:16px;height:16px;flex-basis:16px}
+}
