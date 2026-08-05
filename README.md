@@ -1,4 +1,13 @@
-# Universe Invoice PWA v0.12.13
+# Universe Invoice PWA v0.12.14
+
+
+## v0.12.14 Excel BL 圖片闊度 4 公分
+
+- Excel 匯出遇到 BL 款式時，Picture 區會擴闊至足以容納 4 公分圖片。
+- BL 圖片目標闊度為 4.00 cm，高度按原圖比例使用同一縮放倍率自動計算，不拉高、不壓扁、不裁切。
+- 圖片繼續在固定四行 Picture 區域內水平及垂直置中；若個別 BL 圖片的高度會超出四行區域，會按高度等比例縮細。
+- 只有文件內含 BL 款式時才會啟用較闊 Picture 版面；沒有 BL 的 Excel 保持原有欄寬。
+- Invoice Template 路徑及無範本後備輸出均套用相同規則。
 
 
 ## v0.12.13 NL `(1)` 圖片優先及 u價顯示強化

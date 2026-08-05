@@ -956,17 +956,21 @@ function excelColPixels(ws,colNo){const width=Number(ws.getColumn(colNo).width)|
 function excelRowPixels(ws,rowNo){const points=Number(ws.getRow(rowNo).height)||15;return Math.max(8,points*96/72)}
 function imageAnchorCol(ws,startColNo,endColNo,offsetPx){let col=startColNo-1,remain=Math.max(0,offsetPx);for(let c=startColNo;c<=endColNo;c++){const px=excelColPixels(ws,c);if(remain<=px)return col+remain/px;remain-=px;col+=1}return endColNo}
 function imageAnchorRow(ws,startRow,endRow,offsetPx){let row=startRow-1,remain=Math.max(0,offsetPx);for(let r=startRow;r<=endRow;r++){const px=excelRowPixels(ws,r);if(remain<=px)return row+remain/px;remain-=px;row+=1}return endRow}
-function excelImageContainPlacement(ws,startColNo,endColNo,startRow,endRow,asset,padPx=1){
+const EXCEL_PX_PER_CM=96/2.54;
+const BL_EXCEL_IMAGE_WIDTH_CM=4;
+function excelImageContainPlacement(ws,startColNo,endColNo,startRow,endRow,asset,padPx=1,targetWidthPx=0){
   let boxW=0,boxH=0;
   for(let c=startColNo;c<=endColNo;c++)boxW+=excelColPixels(ws,c);
   for(let r=startRow;r<=endRow;r++)boxH+=excelRowPixels(ws,r);
   const sourceW=Math.max(1,Number(asset?.width)||1),sourceH=Math.max(1,Number(asset?.height)||1);
   const pad=Math.max(0,Number(padPx)||0);
   const maxW=Math.max(1,boxW-pad*2),maxH=Math.max(1,boxH-pad*2);
-  const scale=Math.min(maxW/sourceW,maxH/sourceH);
-  // Width and height must use exactly the same scale. Do not apply an
-  // independent minimum to either side, because that distorts very wide BL
-  // images and very tall pendant images.
+  let scale=Math.min(maxW/sourceW,maxH/sourceH);
+  // BL bracelet images are extremely wide and thin. Give them a requested
+  // width of 4 cm, while still limiting the result to the available image box
+  // and using one identical scale for width and height.
+  const requestedWidth=Math.max(0,Number(targetWidthPx)||0);
+  if(requestedWidth>0)scale=Math.min(requestedWidth/sourceW,maxW/sourceW,maxH/sourceH);
   const width=Math.max(1,sourceW*scale);
   const height=Math.max(1,sourceH*scale);
   const xOffset=Math.max(0,(boxW-width)/2),yOffset=Math.max(0,(boxH-height)/2);
@@ -975,6 +979,10 @@ function excelImageContainPlacement(ws,startColNo,endColNo,startRow,endRow,asset
     ext:{width,height},
     editAs:'oneCell'
   };
+}
+function excelImagePlacementForItem(ws,startColNo,endColNo,startRow,endRow,asset,item,padPx=1){
+  const targetWidth=articleType(item?.artNo)==='BL'?BL_EXCEL_IMAGE_WIDTH_CM*EXCEL_PX_PER_CM:0;
+  return excelImageContainPlacement(ws,startColNo,endColNo,startRow,endRow,asset,padPx,targetWidth);
 }
 function rowRangeHeightPoints(ws,start,end){let total=0;for(let r=start;r<=end;r++)total+=Number(ws.getRow(r).height)||15;return total}
 function copyTemplateRowStyle(ws,sourceRow,targetRow){
@@ -1066,9 +1074,13 @@ async function exportInvoiceFromTemplate(){
   const separatorSourceRow=firstItemRow+baseContentRows;
   const columnCount=Math.max(9,ws.columnCount||9);
 
-  // A:I widths matched to the user-approved iPhone Excel widths from INV260003.
-  // Keep true 100% scale and 1.0 cm side margins; do not globally shrink text/images.
-  const templateColumnWidths={A:9.2890625,B:13.49609375,C:23.94921875,D:4.7890625,E:4.7890625,F:9.43359375,G:6.53125,H:9.72265625,I:11.90234375};
+  // Keep the normal approved widths unless this document contains a BL item.
+  // BL exports widen the Picture area to at least 4 cm and rebalance the compact
+  // numeric columns, while the page remains fitted to one A4 page wide.
+  const hasWideBlImage=formalItems().some(item=>articleType(item.artNo)==='BL');
+  const templateColumnWidths=hasWideBlImage
+    ? {A:5,B:13.49609375,C:23.94921875,D:10.3,E:10.3,F:6.5,G:5,H:8.5,I:11.2}
+    : {A:9.2890625,B:13.49609375,C:23.94921875,D:4.7890625,E:4.7890625,F:9.43359375,G:6.53125,H:9.72265625,I:11.90234375};
   for(const [col,width] of Object.entries(templateColumnWidths))ws.getColumn(col).width=width;
 
   const captureCell=(cell)=>({
@@ -1217,7 +1229,7 @@ async function exportInvoiceFromTemplate(){
         const imageId=wb.addImage({base64:asset.base64,extension:'jpeg'});
         const imageStartColNo=excelColNumber(imageStartCol),imageEndColNo=excelColNumber(imageEndCol);
         const imageEndRow=start+3;
-        ws.addImage(imageId,excelImageContainPlacement(ws,imageStartColNo,imageEndColNo,start,imageEndRow,asset,1));
+        ws.addImage(imageId,excelImagePlacementForItem(ws,imageStartColNo,imageEndColNo,start,imageEndRow,asset,item,1));
       }catch{missingImages++}
     }else missingImages++;
 
@@ -1326,7 +1338,12 @@ async function exportInvoiceExcel(){
     wb.creator='Universe Invoice PWA';wb.created=new Date();
     const ws=wb.addWorksheet(documentLabels().title,{pageSetup:{paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.25,right:.25,top:.35,bottom:.35,header:.15,footer:.15}}});
     ws.views=[{showGridLines:false}];
-    ws.columns=[
+    const exportItems=formalItems();
+    const hasWideBlImage=exportItems.some(item=>articleType(item.artNo)==='BL');
+    ws.columns=hasWideBlImage?[
+      {key:'no',width:5},{key:'article',width:15},{key:'description',width:31.9},{key:'image',width:21.3},
+      {key:'qty',width:7.5},{key:'unit',width:7.5},{key:'unitPrice',width:14},{key:'amount',width:14}
+    ]:[
       {key:'no',width:5},{key:'article',width:17},{key:'description',width:34},{key:'image',width:15},
       {key:'qty',width:9},{key:'unit',width:8},{key:'unitPrice',width:14},{key:'amount',width:14}
     ];
@@ -1352,7 +1369,6 @@ async function exportInvoiceExcel(){
     ws.mergeCells(`A${headerRow+1}:G${headerRow+1}`);const fob=ws.getCell(headerRow+1,8);fob.value='F.O.B. Value';fob.font={name:'Arial',size:10,bold:true};fob.alignment={vertical:'middle',horizontal:'right'};applyThinBorder(fob);ws.getRow(headerRow+1).height=21;
     let row=headerRow+2;
     let missingImages=0;
-    const exportItems=formalItems();
     for(let i=0;i<exportItems.length;i++){
       const item=exportItems[i],start=row,end=row+4;
       for(let r=start;r<=end;r++)ws.getRow(r).height=10.5;
@@ -1371,7 +1387,7 @@ async function exportInvoiceExcel(){
         try{
           const asset=await imageFileToJpegAsset(selected.file,620,.82,!!selected.grayscale);
           const imageId=wb.addImage({base64:asset.base64,extension:'jpeg'});
-          ws.addImage(imageId,excelImageContainPlacement(ws,4,4,start,start+3,asset,1));
+          ws.addImage(imageId,excelImagePlacementForItem(ws,4,4,start,start+3,asset,item,1));
         }catch{missingImages++}
       }else missingImages++;
       row=end+1;
