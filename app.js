@@ -554,21 +554,22 @@ function matchedProductStoneIndexes(variant,codes){const out=[];codes.forEach((c
 function chooseAutomaticImageMatch(p){
   const imgs=state.imageFiles.get(p?.artNo)||[];
   if(!imgs.length)return{variant:'Default',grayscale:false,stoneMatched:false,colorMatched:false};
-  const codes=imageStoneCodesForProduct(p),metal=originalMetalToken(p),multiColor=isMultiColorProduct(p);
+  const codes=imageStoneCodesForProduct(p),metal=originalMetalToken(p),multiColor=isMultiColorProduct(p),preferNlDuplicate=articleType(p?.artNo)==='NL';
   const metalScore=img=>{const t=imageMetalToken(img.variant);return metal&&t===metal?2:!t?1:0};
+  const nlDuplicateScore=img=>preferNlDuplicate&&Number(img?.dup)===1?1:0;
   const regularImgs=imgs.filter(x=>x.variant!=='Default'&&!isMultiImageVariant(x.variant));
   const scoreRegular=(img,index,requireAll=false)=>{
     const matchedIndexes=matchedProductStoneIndexes(img.variant,codes),matchedCount=matchedIndexes.length;if(!matchedCount||requireAll&&matchedCount!==codes.length)return null;
     const tokenCount=imageStoneTokenCount(img.variant),allMatched=matchedCount===codes.length;
     let stoneScore=matchedCount*1000+(allMatched?5000:0)-Math.abs(tokenCount-matchedCount)*80;
     stoneScore+=Math.max(0,40-(matchedIndexes[0]||0)*5);
-    return{img,index,matchedCount,allMatched,stoneScore,metalScore:metalScore(img),tokenCount};
+    return{img,index,matchedCount,allMatched,stoneScore,metalScore:metalScore(img),nlDuplicateScore:nlDuplicateScore(img),tokenCount};
   };
-  const sortScored=(a,b)=>b.stoneScore-a.stoneScore||b.metalScore-a.metalScore||a.tokenCount-b.tokenCount||a.img.variant.length-b.img.variant.length||a.index-b.index;
+  const sortScored=(a,b)=>b.stoneScore-a.stoneScore||b.metalScore-a.metalScore||b.nlDuplicateScore-a.nlDuplicateScore||a.tokenCount-b.tokenCount||a.img.variant.length-b.img.variant.length||a.index-b.index;
   const exactCombos=regularImgs.map((img,index)=>scoreRegular(img,index)).filter(x=>x&&x.allMatched&&codes.length>1).sort(sortScored);
   if(exactCombos.length){const best=exactCombos[0];return{variant:best.img.variant,grayscale:false,stoneMatched:true,colorMatched:best.metalScore===2}}
   if(multiColor){
-    const multi=imgs.filter(x=>isMultiImageVariant(x.variant)).map((img,index)=>({img,index,metalScore:metalScore(img)})).sort((a,b)=>b.metalScore-a.metalScore||a.img.variant.length-b.img.variant.length||a.index-b.index)[0];
+    const multi=imgs.filter(x=>isMultiImageVariant(x.variant)).map((img,index)=>({img,index,metalScore:metalScore(img),nlDuplicateScore:nlDuplicateScore(img)})).sort((a,b)=>b.metalScore-a.metalScore||b.nlDuplicateScore-a.nlDuplicateScore||a.img.variant.length-b.img.variant.length||a.index-b.index)[0];
     if(multi)return{variant:multi.img.variant,grayscale:false,stoneMatched:true,colorMatched:multi.metalScore===2};
     // No MULTI image exists: use a real single-stone match before falling back to grayscale.
     // This deliberately does not use carat weight. Product stone order and exact aliases decide the result.
@@ -1582,8 +1583,8 @@ function renderStockSearch(){
   for(const x of shown){
     const card=document.createElement('div');card.className='stock-result';const display=imageDisplayForProduct(x),grayClass=display.grayscale?'grayscale-image':'',inDoc=state.items.some(i=>String(i.lotNo)===String(x.lotNo)),canAdd=x.status==='AVAILABLE'||state.documentType==='quotation'&&['CONSIGNED','SOLD_ON_HAND','SOLD_DELIVERED'].includes(x.status);
     const imageBadge=display.manual?'<span class="stock-image-badge manual">手動圖片</span>':imageNeedsAttention(x)?'<span class="stock-image-badge attention">圖片待處理</span>':'';
-    const rawPrice=Number(x.price),uPrice=Number.isFinite(rawPrice)?new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(rawPrice)+'u':'';
-    card.innerHTML=`<div class="stock-result-image-wrap"><div class="stock-result-thumb-box"><img class="${grayClass}" src="${esc(display.src)}" alt="${esc(x.artNo)}">${imageBadge}</div></div><div><h4>${esc(x.artNo)}</h4><div class="lot">LOTNO ${esc(x.lotNo)}${uPrice?` · ${esc(uPrice)}`:''}</div><div class="desc">${esc((x.descriptions||[]).join('\n'))}</div></div><div class="stock-result-actions"><span class="stock-status ${historyStatusClass(x.status)}">${esc(historyStatusLabel(x.status))}</span>${inDoc?'<span class="stock-current-doc">已在目前文件</span>':''}</div>`;
+    const rawPrice=Number(x.price),uPrice=Number.isFinite(rawPrice)?new Intl.NumberFormat('en-US',{useGrouping:false,maximumFractionDigits:2}).format(rawPrice)+'u':'';
+    card.innerHTML=`<div class="stock-result-image-wrap"><div class="stock-result-thumb-box"><img class="${grayClass}" src="${esc(display.src)}" alt="${esc(x.artNo)}">${imageBadge}</div></div><div><h4>${esc(x.artNo)}</h4><div class="lot">LOTNO ${esc(x.lotNo)}${uPrice?` · <span class="stock-u-price">${esc(uPrice)}</span>`:''}</div><div class="desc">${esc((x.descriptions||[]).join('\n'))}</div></div><div class="stock-result-actions"><span class="stock-status ${historyStatusClass(x.status)}">${esc(historyStatusLabel(x.status))}</span>${inDoc?'<span class="stock-current-doc">已在目前文件</span>':''}</div>`;
     const imageWrap=$('.stock-result-image-wrap',card),actions=$('.stock-result-actions',card);const edit=document.createElement('button');edit.type='button';edit.className='ghost stock-image-edit-btn';edit.textContent='編輯圖片';edit.onclick=()=>openStockImageEditor(x);imageWrap.appendChild(edit);
     if(canAdd&&!inDoc){const b=document.createElement('button');b.type='button';b.textContent=`加入目前 ${documentLabels().short}`;b.onclick=()=>{if(addProductToDocument(x,{fromSearch:true})){b.disabled=true;b.textContent='已加入';renderStockSearch()}};actions.appendChild(b)}
     if(x.status==='SOLD_ON_HAND'){const d=document.createElement('button');d.type='button';d.className='ghost';d.textContent='標記已交貨';d.onclick=()=>{if(confirm(`${x.artNo} / LOTNO ${x.lotNo}\n標記為 Sold - Delivered？`))markInventoryDelivered(x.lotNo)};actions.appendChild(d)}
