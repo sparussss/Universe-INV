@@ -1,4 +1,13 @@
-# Universe Invoice PWA v0.13.0
+# Universe Invoice PWA v0.13.1
+
+
+## v0.13.1 Stone List 最長前綴辨認／配套排序
+
+- DESC2–DESC6 的石種辨認統一以 `Stone List` 的 `BREAKDOWN` 作最長前綴配對：例如 `PTQOV → PTQ`、`PAMPR → PAM`、`GTQ... → GTQ`、`BOX... → BOX`，避免被較短代號 `GT`／`BO` 截錯。
+- `BREAKDOWN` 代號即使 QUOTATION 欄暫時留空，仍會被視為有效石種代號；QUOTATION 只作圖片／輸出別名。
+- 後備 Stone List 增補 RL／VAQ／TIO／MOP／BMOP／BO，與新版資料表的重要代號一致。
+- 配套／庫存搜尋在同一款號核心及同一顏色 Group 內，先按完整石種組合 Signature 排序，再按 RG／ER／PT 等款式排序；相同配色／石種組合會放在一起。
+- 例如 37397 的 `PTQ` 一組會先集中排列，`PAM + PTQ` 另一組再集中排列，不會再因 RG／ER／PT 次序而交錯。
 
 
 ## v0.13.0 展覽可靠性／Recall／草稿／核對
