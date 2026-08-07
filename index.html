@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.12.14</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.13.0</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -63,7 +63,7 @@
             <input id="stockInput" type="file" accept=".xls,.xlsx">
           </label>
           <button type="button" id="exportJmsdataBtn" class="ghost" disabled>匯出目前 jmsdata.xls</button>
-          <div id="jmsdataExportStatus" class="notice">Confirm Invoice／Consignment 後會輸出更新後的 jmsdata.xls。</div>
+          <div id="jmsdataExportStatus" class="notice">Confirm Invoice／Consignment／Quotation 後會輸出包含最新文件記錄的 jmsdata.xls；Quotation 不改庫存。</div>
           <details><summary>倉存欄位規則</summary><p>Barcode = LOTNO、圖片 = ARTNO、U價 = PRICE、Invoice Description = DESC1 至 DESC6、單位 = UNIT。I = Delivered、J = Available、K = Sold on hand、L = Consignment、M = Balance，並檢查 SUM(I:L) = M。</p></details>
         </div>
       </article>
@@ -173,15 +173,16 @@
     <article class="card recall-card">
       <div class="section-title-row">
         <div>
-          <h3>Recall Invoice / Consignment</h3>
+          <h3>Recall Invoice / Consignment / Quotation</h3>
           <p class="muted">按文件號碼、客戶或日期找回已 Confirm 文件，重新開啟原文件修改。</p>
         </div>
       </div>
       <div class="recall-search-row">
         <select id="recallTypeFilter" aria-label="Recall 文件類型">
-          <option value="all">Invoice + Consignment</option>
+          <option value="all">Invoice + Consignment + Quotation</option>
           <option value="invoice">Invoice</option>
           <option value="consignment">Consignment</option>
+          <option value="quotation">Quotation</option>
         </select>
         <input id="recallSearchInput" placeholder="輸入文件號碼、客戶或日期" autocomplete="off">
         <button type="button" id="recallSearchBtn">搜尋</button>
@@ -191,6 +192,7 @@
       <div id="recallResults" class="recall-results"></div>
     </article>
     <article class="card invoice-workspace">
+      <div class="workspace-tools"><button type="button" id="resetExhibitionSeqBtn" class="ghost">新展覽會・重設文件編號</button><div id="draftStatus" class="draft-status"></div></div>
       <h3 id="documentDataHeading">客人 Invoice 資料</h3>
       <div id="selectedCustomerSummary" class="selected-customer"></div>
       <div class="document-type-switch" role="group" aria-label="Document Type">
@@ -260,6 +262,7 @@
         <h3 id="documentItemsHeading">Invoice 貨品</h3>
         <div class="item-actions"><button id="clearInvoiceBtn" class="danger ghost">清空草稿</button></div>
       </div>
+      <div id="documentImageWarning" class="notice image-warning-summary">圖片：尚未加入貨品。</div>
       <div id="invoiceItems" class="invoice-items empty-state">尚未加入貨品。</div>
       <div class="totals">
         <div><span>Total Quantity</span><strong id="totalQty">0</strong></div>
@@ -328,6 +331,12 @@
   <div class="stock-image-dialog-footer"><button id="restoreAutoImageBtn" type="button" class="ghost">恢復自動選圖</button></div>
 </dialog>
 
+<dialog id="finalConfirmDialog" class="final-confirm-dialog">
+  <div class="dialog-head"><div><h3>Confirm 前最後核對</h3><p class="muted">請確認以下資料後再正式 Confirm。</p></div><button id="closeFinalConfirmBtn" type="button" class="ghost">返回修改</button></div>
+  <div id="finalConfirmSummary" class="final-confirm-summary"></div>
+  <div class="final-confirm-actions"><button id="cancelFinalConfirmBtn" type="button" class="ghost">返回修改</button><button id="finalConfirmBtn" type="button" class="primary">確定 Confirm</button></div>
+</dialog>
+
 <dialog id="scannerDialog">
   <div class="dialog-head"><h3>掃 Barcode</h3><button id="closeScannerBtn" class="ghost">關閉</button></div>
   <div id="reader"></div>
@@ -354,6 +363,7 @@
       <div class="item-desc compact-desc"></div>
       <div class="item-full-desc"></div>
       <div class="item-price-note"></div>
+      <div class="manual-price-flag hidden">人手修改 Unit Price</div>
       <div class="item-controls compact-controls">
         <div class="item-price-grid">
           <label>Quantity<input class="qty-input" type="number" min="1" step="1"></label>

@@ -1,4 +1,16 @@
-# Universe Invoice PWA v0.12.14
+# Universe Invoice PWA v0.13.0
+
+
+## v0.13.0 展覽可靠性／Recall／草稿／核對
+
+- Quotation Confirm 後寫入 `Quotation Header`／`Quotation Items`，可像 Invoice／Consignment 一樣 Recall、修訂或取消；Quotation Recall 不改 jmsdata I:J:K:L 庫存。
+- Invoice／Consignment／Quotation 未完成文件自動儲存草稿；重新整理或 PWA 被 iPhone 中斷後，重新匯入展覽資料包可選擇恢復。
+- Confirm 前新增最後核對：Document No.、客戶、Sales Rate、Currency、Quantity、Sub Total、Discount、Total、圖片待處理及人手改價數量。
+- Customer、Sales Rate、Document No. 等關鍵資料不完整時會先阻止 Confirm。
+- 文件貨品區新增圖片狀態摘要；有黑白 fallback／無圖時，Confirm 及 Excel 匯出前會提醒，但不強制阻止。
+- Unit Price 經人手修改後顯示「人手修改 Unit Price」標記，最後核對亦會列出數量。
+- 新增「新展覽會・重設文件編號」，可將當年 Invoice／Consignment／Quotation 下一號重設至 `INVYY0001`／`CONYY0001`／`QUOYY0001`；內部以展覽 Session 區分同年重複文件號，舊文件不改並仍可 Recall。
+- Service Worker 會在版本安裝時預先快取 SheetJS、html5-qrcode、ExcelJS、SortableJS、JSZip 等核心 library；成功安裝／更新一次後，展覽核心流程可在離線情況繼續使用。
 
 
 ## v0.12.14 Excel BL 圖片闊度 4 公分
