@@ -1,6 +1,6 @@
-const CACHE='universe-invoice-v0.14.7';
+const CACHE='universe-invoice-v0.14.8';
 const DEP_CACHE='universe-invoice-dependencies-v1';
-const LOCAL_ASSETS=['./','./index.html','./styles.css','./app.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png'];
+const LOCAL_ASSETS=['./','./index.html','./styles.css?v=0.14.8','./app-v0.14.8.js','./manifest.webmanifest?v=0.14.8','./icon.svg','./icon-192.png','./icon-512.png'];
 const EXTERNAL_ASSETS=[
   'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
   'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js',
@@ -13,8 +13,6 @@ self.addEventListener('install',e=>{
   e.waitUntil((async()=>{
     const local=await caches.open(CACHE);await local.addAll(LOCAL_ASSETS);
     const deps=await caches.open(DEP_CACHE);
-    // Cache every core library before activating this version. no-cors permits
-    // caching opaque CDN script responses for later offline script loading.
     await Promise.all(EXTERNAL_ASSETS.map(async url=>{
       const req=new Request(url,{mode:'no-cors',cache:'reload'}),res=await fetch(req);
       await deps.put(url,res.clone());
@@ -30,11 +28,21 @@ self.addEventListener('fetch',e=>{
   const url=new URL(e.request.url),isLocal=url.origin===self.location.origin,isDependency=EXTERNAL_ASSETS.includes(url.href);
   if(!isLocal&&!isDependency)return;
   e.respondWith((async()=>{
-    const cached=await caches.match(e.request,{ignoreSearch:isLocal})||await caches.match(url.href);
-    if(cached){
-      if(isLocal)fetch(e.request).then(async r=>{if(r?.ok){const c=await caches.open(CACHE);await c.put(e.request,r.clone())}}).catch(()=>{});
-      return cached;
+    if(isDependency){
+      const cached=await caches.match(url.href);
+      if(cached)return cached;
+      try{const response=await fetch(e.request);if(response){const c=await caches.open(DEP_CACHE);await c.put(url.href,response.clone())}return response}catch(err){throw err}
     }
-    try{const response=await fetch(e.request);if(response){const c=await caches.open(isDependency?DEP_CACHE:CACHE);await c.put(url.href,response.clone())}return response}catch(err){if(isLocal&&e.request.mode==='navigate')return caches.match('./index.html');throw err}
+    // Local PWA code is network-first so an updated index/app cannot be mixed with an old cached app.js.
+    try{
+      const response=await fetch(e.request,{cache:'no-store'});
+      if(response?.ok){const c=await caches.open(CACHE);await c.put(e.request,response.clone())}
+      return response;
+    }catch(err){
+      const cached=await caches.match(e.request)||await caches.match(url.pathname.endsWith('/')?'./index.html':e.request,{ignoreSearch:false});
+      if(cached)return cached;
+      if(e.request.mode==='navigate')return caches.match('./index.html');
+      throw err;
+    }
   })());
 });
