@@ -1,6 +1,6 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const APP_VERSION='0.14.12';
-const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xlsx',stockIntegrityIssues:[],stockDuplicateLots:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),diamondStoneCodes:new Set(),stoneMappingName:'',stoneDiagnostics:{duplicates:[],multiAlias:[],missingGroup:[],missingType:[],missingQuotation:[],prefixOverlaps:[]},articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',exhibitionName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',currentLondonPm:0,currentLondonPmDate:'',source:'',historicalPm:{},goldPrices:new Map(),goldDates:[],goldDataName:'',goldDataRows:0},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],quotationHeaders:[],quotationItems:[],transactions:[]},recall:null,deliveryReturns:new Set(),exhibitionSession:'',draft:{baseline:'',timer:null,prompted:false,restoring:false},stockSearch:{query:'*',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null,packageFiles:[],customPackageImages:new Map(),packageImageDirtyFiles:new Set(),dataMeta:{},importConflicts:[],health:{},imageIndexProgress:{done:0,total:0},diagnosticLot:'',recordsLoaded:false,recordsFileName:'jmsdata.xlsx / Universe Records',recordsFilePath:'',recordCounters:{invoice:1,consignment:1,quotation:1},recordsDirty:false};
+const APP_VERSION='0.14.13';
+const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xlsx',stockIntegrityIssues:[],stockDuplicateLots:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneEnglishNames:new Map(),diamondStoneCodes:new Set(),stoneMappingName:'',stoneDiagnostics:{duplicates:[],multiAlias:[],missingGroup:[],missingType:[],missingQuotation:[],prefixOverlaps:[]},articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',exhibitionName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',currentLondonPm:0,currentLondonPmDate:'',source:'',historicalPm:{},goldPrices:new Map(),goldDates:[],goldDataName:'',goldDataRows:0},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],quotationHeaders:[],quotationItems:[],transactions:[]},recall:null,deliveryReturns:new Set(),exhibitionSession:'',draft:{baseline:'',timer:null,prompted:false,restoring:false},stockSearch:{query:'*',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null,packageFiles:[],customPackageImages:new Map(),packageImageDirtyFiles:new Set(),dataMeta:{},importConflicts:[],health:{},imageIndexProgress:{done:0,total:0},diagnosticLot:'',recordsLoaded:false,recordsFileName:'jmsdata.xlsx / Universe Records',recordsFilePath:'',recordCounters:{invoice:1,consignment:1,quotation:1},recordsDirty:false};
 const EXHIBITION_SESSION_KEY='universeExhibitionSession_v1',EXHIBITION_NAME_KEY='universeExhibitionName_v1',IMAGE_OVERRIDE_LOCAL_KEY='universeImageOverrides_v1';try{state.exhibitionSession=localStorage.getItem(EXHIBITION_SESSION_KEY)||'';state.exhibitionName=localStorage.getItem(EXHIBITION_NAME_KEY)||''}catch{}
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
 function displayItems(){return formalItems().reverse()}
@@ -469,16 +469,16 @@ async function importStoneFile(f){
   const wb=await readWB(f);const sheetName=wb.SheetNames.find(n=>n.trim().toUpperCase()==='STONE LIST')||wb.SheetNames[0];const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:''});
   const headerIndex=rows.findIndex(r=>r.some(v=>String(v).trim().toUpperCase()==='BREAKDOWN')&&r.some(v=>String(v).trim().toUpperCase()==='QUOTATION'));
   if(headerIndex<0)throw new Error('找不到 Stone List 標題列');
-  const header=rows[headerIndex].map(v=>String(v).trim().toUpperCase()),typeCol=header.indexOf('石類'),bCol=header.indexOf('BREAKDOWN'),qCol=header.indexOf('QUOTATION'),gCol=header.indexOf('GROUP');
-  if(typeCol<0||bCol<0||qCol<0||gCol<0)throw new Error('Stone List 必須包含 石類 / BREAKDOWN / QUOTATION / GROUP 欄位');
-  const aliases=new Map(),variantAliases=new Map(),groups=new Map(),diamondCodes=new Set(),seen=new Map(),diag={duplicates:[],multiAlias:[],missingGroup:[],missingType:[],missingQuotation:[],prefixOverlaps:[]};
+  const header=rows[headerIndex].map(v=>String(v).trim().toUpperCase()),typeCol=header.indexOf('石類'),englishCol=header.indexOf('英文石名'),bCol=header.indexOf('BREAKDOWN'),qCol=header.indexOf('QUOTATION'),gCol=header.indexOf('GROUP');
+  if(typeCol<0||englishCol<0||bCol<0||qCol<0||gCol<0)throw new Error('Stone List 必須包含 石類 / 英文石名 / BREAKDOWN / QUOTATION / GROUP 欄位');
+  const aliases=new Map(),variantAliases=new Map(),groups=new Map(),englishNames=new Map(),diamondCodes=new Set(),seen=new Map(),diag={duplicates:[],multiAlias:[],missingGroup:[],missingType:[],missingEnglish:[],missingQuotation:[],prefixOverlaps:[]};
   for(let ri=headerIndex+1;ri<rows.length;ri++){
-    const r=rows[ri],stoneType=norm(r[typeCol]).replace(/\s+/g,''),breakdown=norm(r[bCol]),quotation=norm(r[qCol]),group=norm(r[gCol]);if(!breakdown)continue;
+    const r=rows[ri],stoneType=norm(r[typeCol]).replace(/\s+/g,''),englishName=norm(r[englishCol]),breakdown=norm(r[bCol]),quotation=norm(r[qCol]),group=norm(r[gCol]);if(!breakdown)continue;
     const codes=breakdown.split(/[,，]/).map(norm).filter(Boolean).map(x=>x.toUpperCase()),quotes=quotation.split(/[,，]/).map(norm).filter(Boolean).map(x=>x.toUpperCase()),isDiamond=stoneType.includes('鑽');
-    for(const code of codes){const prev=seen.get(code);if(prev){if(prev.stoneType!==stoneType||prev.group!==group)diag.duplicates.push({code,row:ri+1,firstRow:prev.row,firstType:prev.stoneType,type:stoneType,firstGroup:prev.group,group});else if(!diag.multiAlias.some(x=>x.code===code))diag.multiAlias.push({code,firstRow:prev.row,row:ri+1})}else seen.set(code,{row:ri+1,stoneType,group});if(!stoneType)diag.missingType.push({code,row:ri+1});if(!group)diag.missingGroup.push({code,row:ri+1});if(!quotation)diag.missingQuotation.push({code,row:ri+1});if(!aliases.has(code))aliases.set(code,code);if(quotes.length){const list=variantAliases.get(code)||[];for(const q of quotes)if(!list.includes(q))list.push(q);variantAliases.set(code,list);aliases.set(code,quotes[quotes.length-1])}if(group)groups.set(code,group);if(isDiamond)diamondCodes.add(code)}
+    for(const code of codes){const prev=seen.get(code);if(prev){if(prev.stoneType!==stoneType||prev.group!==group)diag.duplicates.push({code,row:ri+1,firstRow:prev.row,firstType:prev.stoneType,type:stoneType,firstGroup:prev.group,group});else if(!diag.multiAlias.some(x=>x.code===code))diag.multiAlias.push({code,firstRow:prev.row,row:ri+1})}else seen.set(code,{row:ri+1,stoneType,group});if(!stoneType)diag.missingType.push({code,row:ri+1});if(!englishName)diag.missingEnglish.push({code,row:ri+1});if(!group)diag.missingGroup.push({code,row:ri+1});if(!quotation)diag.missingQuotation.push({code,row:ri+1});if(englishName&&!englishNames.has(code))englishNames.set(code,englishName);if(!aliases.has(code))aliases.set(code,code);if(quotes.length){const list=variantAliases.get(code)||[];for(const q of quotes)if(!list.includes(q))list.push(q);variantAliases.set(code,list);aliases.set(code,quotes[quotes.length-1])}if(group)groups.set(code,group);if(isDiamond)diamondCodes.add(code)}
   }
   if(!aliases.size)throw new Error('Stone List 沒有有效 BREAKDOWN 資料');const codes=[...aliases.keys()].sort((a,b)=>a.length-b.length||a.localeCompare(b));for(let i=0;i<codes.length;i++)for(let j=i+1;j<codes.length;j++){const a=codes[i],b=codes[j];if(b.startsWith(a)&&a!==b)diag.prefixOverlaps.push({short:a,long:b})}
-  state.stoneAliases=aliases;state.stoneVariantAliases=variantAliases;state.stoneGroups=groups;state.diamondStoneCodes=diamondCodes;state.stoneMappingName=f.name;state.stoneDiagnostics=diag;state.dataMeta.stone={name:f.name||'',lastModified:Number(f.lastModified)||0,count:aliases.size,diamondCount:diamondCodes.size,...Object.fromEntries(Object.entries(diag).map(([k,v])=>[k,v.length]))};resetStockStoneDerivedCache();renderStockSearch();updateDataVersionPanel();runHealthCheck();return aliases.size;
+  state.stoneAliases=aliases;state.stoneVariantAliases=variantAliases;state.stoneGroups=groups;state.stoneEnglishNames=englishNames;state.diamondStoneCodes=diamondCodes;state.stoneMappingName=f.name;state.stoneDiagnostics=diag;state.dataMeta.stone={name:f.name||'',lastModified:Number(f.lastModified)||0,count:aliases.size,diamondCount:diamondCodes.size,...Object.fromEntries(Object.entries(diag).map(([k,v])=>[k,v.length]))};resetStockStoneDerivedCache();renderStockSearch();updateDataVersionPanel();runHealthCheck();return aliases.size;
 }
 async function importArticleFile(f){const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();for(const row of rows){const prefix=normCode(row[0]),description=norm(row[1]);if(!prefix||!description||prefix==='PREFIX')continue;map.set(prefix,description)}if(!map.size)throw new Error('找不到 Prefix / Article Description 對照');state.articleMap=map;state.articleMappingName=f.name;state.dataMeta.article={name:f.name||'',lastModified:Number(f.lastModified)||0,count:map.size};updateDataVersionPanel();return map.size}
 async function importTemplateFile(f){const buf=await f.arrayBuffer();if(typeof ExcelJS==='undefined')throw new Error('Excel 範本程式未載入');const test=new ExcelJS.Workbook();await test.xlsx.load(buf.slice(0));if(!test.worksheets.length)throw new Error('範本沒有工作表');state.invoiceTemplateBuffer=buf;state.invoiceTemplateName=f.name;state.dataMeta.template={name:f.name||'',lastModified:Number(f.lastModified)||0};updateDataVersionPanel();return true}
@@ -516,6 +516,8 @@ function articleDescriptionFor(item){
 function activeStoneAliases(){return state.stoneAliases}
 function activeStoneVariantAliases(){return state.stoneVariantAliases}
 function activeStoneGroups(){return state.stoneGroups}
+function activeStoneEnglishNames(){return state.stoneEnglishNames}
+function stoneEnglishNameForCode(code){return norm(activeStoneEnglishNames().get(String(code||'').toUpperCase())).toUpperCase()}
 function isDiamondStoneCode(code){return state.diamondStoneCodes.has(norm(code).toUpperCase())}
 function stoneImageAliasesForCode(code){const c=String(code||'').toUpperCase(),out=[];if(c)out.push(c);const list=activeStoneVariantAliases().get(c);if(Array.isArray(list))for(const value of list){const v=String(value||'').toUpperCase();if(v&&!out.includes(v))out.push(v)}const single=activeStoneAliases().get(c),v=String(single||'').toUpperCase();if(v&&!out.includes(v))out.push(v);return out}
 function stoneGroupForCode(code){return norm(activeStoneGroups().get(String(code||'').toUpperCase())).toUpperCase()}
@@ -542,6 +544,8 @@ function goldFreshnessInfo(){const latest=goldFileLatest();if(!latest)return{sta
 function updateGoldFreshnessUI(){const info=goldFreshnessInfo(),el=$('#goldFreshnessStatus');if(el){el.textContent=info.message;el.className='notice '+(info.status==='ok'?'ok':info.status==='missing'?'':'warn')}return info}
 function stonePartsFromDescriptionLine(line){const raw=String(line||'').toUpperCase(),firstDash=raw.indexOf('-');if(firstDash<0)return[];const tail=raw.slice(firstDash+1),nextDash=tail.indexOf('-'),stoneBlock=(nextDash>=0?tail.slice(0,nextDash):tail).replace(/\s+/g,'');if(!stoneBlock)return[];return stoneBlock.split(/[+\/，,]/).map(x=>x.trim()).filter(Boolean).map(part=>({part,code:longestStoneBreakdownPrefix(part)}))}
 function allStoneCodesForProduct(p){const out=[];for(const line of p?.descriptions||[]){for(const x of stonePartsFromDescriptionLine(line)){if(x.code&&!out.includes(x.code))out.push(x.code)}}return out}
+function documentStoneDescriptionEntries(items=formalItems()){const out=[],seen=new Set();for(const item of items||[]){for(const line of item?.descriptions||[]){for(const x of stonePartsFromDescriptionLine(line)){const code=norm(x.code).toUpperCase();if(!code||seen.has(code))continue;const name=stoneEnglishNameForCode(code);if(!name)continue;seen.add(code);out.push({code,name,text:`${code} = ${name}`})}}}return out}
+function documentStoneDescriptionPairs(items=formalItems()){const entries=documentStoneDescriptionEntries(items),pairs=[];for(let i=0;i<entries.length;i+=2)pairs.push([entries[i]||null,entries[i+1]||null]);return pairs}
 function unknownStoneDiagnostics(){const out=[];if(!state.stockAllRows.length||!state.stoneAliases.size)return out;for(const row of state.stockAllRows){const lot=norm(field(row,['LOTNO'])),art=normArt(field(row,['ARTNO']));for(let i=2;i<=6;i++){const line=norm(field(row,[`DESC${i}`]));if(!line)continue;for(const x of stonePartsFromDescriptionLine(line)){if(!x.code)out.push({lotNo:lot,artNo:art,field:`DESC${i}`,line,token:x.part})}}}return out}
 function imageCoverageDiagnostics(){if(!state.stockCatalog.size)return{missingProducts:0,missingArticles:[]};const missing=[];for(const p of state.stockCatalog.values())if(!(state.imageFiles.get(p.artNo)||[]).length)missing.push(p);return{missingProducts:missing.length,missingArticles:[...new Set(missing.map(x=>x.artNo))].sort()}}
 function healthSummaryRows(){
@@ -552,7 +556,7 @@ function healthSummaryRows(){
     else if(m.records.newTemplate)rows.push({level:'ok',text:'新展覽：目前 jmsdata.xlsx 尚未有「Universe Records」工作表，屬正常；Recall 0 筆，文件流水號由 0001 開始，第一次 Confirm 後會自動建立隱藏的 Sheet 2。'});
   }
   if(!m.stock)rows.push({level:'error',text:'尚未載入 jmsdata。'});else{rows.push({level:state.stockDuplicateLots.length?'error':'ok',text:`jmsdata：${m.stock.count} 件 · 重複 LOTNO ${state.stockDuplicateLots.length}`});rows.push({level:state.stockIntegrityIssues.length?'error':'ok',text:`庫存 I:J:K:L / Balance：${state.stockIntegrityIssues.length?'有 '+state.stockIntegrityIssues.length+' 列需要檢查':'正常'}`})}
-  if(!m.stone)rows.push({level:'error',text:'尚未載入 Stone List。'});else{rows.push({level:d.duplicates?.length?'warn':'ok',text:`Stone List BREAKDOWN 衝突：${d.duplicates?.length?d.duplicates.length+' 個同代號但石類／GROUP 不一致':'沒有衝突'}${d.multiAlias?.length?` · ${d.multiAlias.length} 個代號有多個 QUOTATION Alias（正常）`:''}`});rows.push({level:(d.missingGroup?.length||d.missingType?.length||d.missingQuotation?.length)?'warn':'ok',text:`Stone List 欄位：缺 GROUP ${d.missingGroup?.length||0} · 缺石類 ${d.missingType?.length||0} · 缺 QUOTATION Alias ${d.missingQuotation?.length||0}`});rows.push({level:'info',text:`Stone List 鑽石 BREAKDOWN：${state.diamondStoneCodes.size} 個 · ${[...state.diamondStoneCodes].join(', ')||'沒有'}`});rows.push({level:'info',text:`Stone List 前綴重疊 ${d.prefixOverlaps?.length||0} 組（採用最長前綴配對，屬資訊提示）`});rows.push({level:unknown.length?'warn':'ok',text:`DESC2–DESC6 石種辨認：${unknown.length?unknown.length+' 個 token 未能辨認':'正常'}`})}
+  if(!m.stone)rows.push({level:'error',text:'尚未載入 Stone List。'});else{rows.push({level:d.duplicates?.length?'warn':'ok',text:`Stone List BREAKDOWN 衝突：${d.duplicates?.length?d.duplicates.length+' 個同代號但石類／GROUP 不一致':'沒有衝突'}${d.multiAlias?.length?` · ${d.multiAlias.length} 個代號有多個 QUOTATION Alias（正常）`:''}`});rows.push({level:(d.missingGroup?.length||d.missingType?.length||d.missingEnglish?.length||d.missingQuotation?.length)?'warn':'ok',text:`Stone List 欄位：缺 GROUP ${d.missingGroup?.length||0} · 缺石類 ${d.missingType?.length||0} · 缺英文石名 ${d.missingEnglish?.length||0} · 缺 QUOTATION Alias ${d.missingQuotation?.length||0}`});rows.push({level:'info',text:`Stone List 鑽石 BREAKDOWN：${state.diamondStoneCodes.size} 個 · ${[...state.diamondStoneCodes].join(', ')||'沒有'}`});rows.push({level:'info',text:`Stone List 前綴重疊 ${d.prefixOverlaps?.length||0} 組（採用最長前綴配對，屬資訊提示）`});rows.push({level:unknown.length?'warn':'ok',text:`DESC2–DESC6 石種辨認：${unknown.length?unknown.length+' 個 token 未能辨認':'正常'}`})}
   if(m.customer)rows.push({level:m.customer.defaultRateCount?'warn':'ok',text:`Customer：${m.customer.count} 位 · ${m.customer.defaultRateCount||0} 位 Sales Rate 空白使用 0.34`});else rows.push({level:'warn',text:'Customer Excel 未載入。'});
   if(m.images)rows.push({level:images.missingProducts?'warn':'ok',text:`Pictures：${m.images.count} 張 · ${images.missingProducts?images.missingProducts+' 件貨品／'+images.missingArticles.length+' 個款號完全沒有圖片':'所有庫存款號都有圖片候選'}`});else rows.push({level:'warn',text:'Pictures 未載入。'});
   rows.push({level:gold.status==='ok'?'ok':gold.status==='missing'?'warn':'warn',text:gold.message});
@@ -565,7 +569,7 @@ function runHealthCheck(){
   const critical=summary.rows.filter(x=>x.level==='error').length,warnings=summary.rows.filter(x=>x.level==='warn').length;headline.textContent=critical?`資料包檢查：${critical} 項錯誤、${warnings} 項警告。請先處理錯誤。`:warnings?`資料包檢查：沒有阻擋錯誤，另有 ${warnings} 項警告可覆核。`:'資料包檢查：全部正常，可以開始展覽。';headline.className='notice '+(critical?'error':warnings?'warn':'ok');let html=summary.rows.map(x=>`<div class="health-row ${esc(x.level)}"><span>${x.level==='ok'?'✓':x.level==='error'?'✕':x.level==='warn'?'⚠':'○'}</span><div>${esc(x.text)}</div></div>`).join('');if(state.stockDuplicateLots.length)html+=`<details class="health-detail"><summary>重複 LOTNO 明細</summary>${state.stockDuplicateLots.slice(0,50).map(x=>`<div>${esc(x.lotNo)}</div>`).join('')}</details>`;if(state.stockIntegrityIssues.length)html+=`<details class="health-detail"><summary>I:J:K:L / Balance 異常 LOTNO</summary>${state.stockIntegrityIssues.slice(0,50).map(x=>`<div>${esc(x.lotNo)} · I ${x.vector.i} / J ${x.vector.j} / K ${x.vector.k} / L ${x.vector.l} / M ${x.vector.m}</div>`).join('')}</details>`;if(summary.unknown.length)html+=`<details class="health-detail"><summary>未辨認石種 token（${summary.unknown.length}）</summary>${summary.unknown.slice(0,80).map(x=>`<div>${esc(x.lotNo)} · ${esc(x.artNo)} · ${esc(x.field)} · <strong>${esc(x.token)}</strong> · ${esc(x.line)}</div>`).join('')}</details>`;if(summary.images.missingArticles.length)html+=`<details class="health-detail"><summary>完全沒有圖片的款號（${summary.images.missingArticles.length}）</summary>${summary.images.missingArticles.slice(0,80).map(x=>`<div>${esc(x)}</div>`).join('')}</details>`;el.innerHTML=html;
   updateGoldFreshnessUI();return summary;
 }
-function stoneConsistencyDetailsHTML(){const d=state.stoneDiagnostics||{},parts=[];if(!state.stoneAliases.size)return'Stone List 尚未載入。';if(d.duplicates?.length)parts.push(`<strong>BREAKDOWN 衝突（同代號但石類／GROUP 不一致）</strong><div>${d.duplicates.slice(0,30).map(x=>`${esc(x.code)}（Row ${x.firstRow} / ${x.row} · ${esc(x.firstType||'')} / ${esc(x.type||'')} · ${esc(x.firstGroup||'')} / ${esc(x.group||'')}）`).join('<br>')}</div>`);if(d.multiAlias?.length)parts.push(`<strong>多個 QUOTATION Alias（正常）</strong><div>${d.multiAlias.slice(0,60).map(x=>`${esc(x.code)}（例如 Row ${x.firstRow} / ${x.row}）`).join('<br>')}</div>`);if(d.missingGroup?.length)parts.push(`<strong>缺 GROUP</strong><div>${d.missingGroup.slice(0,30).map(x=>`${esc(x.code)} · Row ${x.row}`).join('<br>')}</div>`);if(d.missingType?.length)parts.push(`<strong>缺石類</strong><div>${d.missingType.slice(0,30).map(x=>`${esc(x.code)} · Row ${x.row}`).join('<br>')}</div>`);if(d.missingQuotation?.length)parts.push(`<strong>缺 QUOTATION Alias</strong><div>${d.missingQuotation.slice(0,30).map(x=>`${esc(x.code)} · Row ${x.row}`).join('<br>')}</div>`);if(d.prefixOverlaps?.length)parts.push(`<strong>前綴重疊（正常，最長前綴優先）</strong><div>${d.prefixOverlaps.slice(0,60).map(x=>`${esc(x.short)} / ${esc(x.long)}`).join('<br>')}</div>`);return parts.length?parts.join('<hr>'):'Stone List 一致性沒有發現問題。'}
+function stoneConsistencyDetailsHTML(){const d=state.stoneDiagnostics||{},parts=[];if(!state.stoneAliases.size)return'Stone List 尚未載入。';if(d.duplicates?.length)parts.push(`<strong>BREAKDOWN 衝突（同代號但石類／GROUP 不一致）</strong><div>${d.duplicates.slice(0,30).map(x=>`${esc(x.code)}（Row ${x.firstRow} / ${x.row} · ${esc(x.firstType||'')} / ${esc(x.type||'')} · ${esc(x.firstGroup||'')} / ${esc(x.group||'')}）`).join('<br>')}</div>`);if(d.multiAlias?.length)parts.push(`<strong>多個 QUOTATION Alias（正常）</strong><div>${d.multiAlias.slice(0,60).map(x=>`${esc(x.code)}（例如 Row ${x.firstRow} / ${x.row}）`).join('<br>')}</div>`);if(d.missingGroup?.length)parts.push(`<strong>缺 GROUP</strong><div>${d.missingGroup.slice(0,30).map(x=>`${esc(x.code)} · Row ${x.row}`).join('<br>')}</div>`);if(d.missingType?.length)parts.push(`<strong>缺石類</strong><div>${d.missingType.slice(0,30).map(x=>`${esc(x.code)} · Row ${x.row}`).join('<br>')}</div>`);if(d.missingEnglish?.length)parts.push(`<strong>缺英文石名</strong><div>${d.missingEnglish.slice(0,30).map(x=>`${esc(x.code)} · Row ${x.row}`).join('<br>')}</div>`);if(d.missingQuotation?.length)parts.push(`<strong>缺 QUOTATION Alias</strong><div>${d.missingQuotation.slice(0,30).map(x=>`${esc(x.code)} · Row ${x.row}`).join('<br>')}</div>`);if(d.prefixOverlaps?.length)parts.push(`<strong>前綴重疊（正常，最長前綴優先）</strong><div>${d.prefixOverlaps.slice(0,60).map(x=>`${esc(x.short)} / ${esc(x.long)}`).join('<br>')}</div>`);return parts.length?parts.join('<hr>'):'Stone List 一致性沒有發現問題。'}
 function showStoneConsistencyDetails(){const dialog=$('#stoneConsistencyDialog'),box=$('#stoneConsistencyContent');if(box)box.innerHTML=stoneConsistencyDetailsHTML();if(dialog?.showModal)dialog.showModal();else dialog?.setAttribute('open','')}
 function backupLocalStorageSnapshot(){const out={};try{for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key&&key.startsWith('universe'))out[key]=localStorage.getItem(key)}}catch{}return out}
 function backupFileStamp(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`}
@@ -1111,6 +1115,7 @@ function applyThinBorder(cell){cell.border={top:{style:'thin',color:{argb:'FFD1D
 
 function cloneStyle(v){try{return JSON.parse(JSON.stringify(v||{}))}catch{return v||{}}}
 function excelColNumber(letter){let n=0;for(const ch of String(letter).toUpperCase())n=n*26+(ch.charCodeAt(0)-64);return n}
+function excelColLetter(no){let n=Math.max(1,Number(no)||1),out='';while(n>0){n--;out=String.fromCharCode(65+(n%26))+out;n=Math.floor(n/26)}return out}
 function excelColPixels(ws,colNo){const width=Number(ws.getColumn(colNo).width)||8.43;return Math.max(12,Math.round(width*7+5))}
 function excelRowPixels(ws,rowNo){const points=Number(ws.getRow(rowNo).height)||15;return Math.max(8,points*96/72)}
 function imageAnchorCol(ws,startColNo,endColNo,offsetPx){let col=startColNo-1,remain=Math.max(0,offsetPx);for(let c=startColNo;c<=endColNo;c++){const px=excelColPixels(ws,c);if(remain<=px)return col+remain/px;remain-=px;col+=1}return endColNo}
@@ -1228,6 +1233,12 @@ async function exportInvoiceFromTemplate(){
   const footerQtyCell=getMap('Total Quantity','F25').split(':')[0];
   const footerBaseRow=Number((footerQtyCell.match(/\d+/)||['25'])[0]);
   const originalFooterEnd=ws.rowCount;
+  const stoneDescriptionPairs=documentStoneDescriptionPairs(formalItems());
+  const findOriginalFooterLabelRow=(text)=>{const needle=String(text||'').toLowerCase();for(let r=footerBaseRow;r<=originalFooterEnd;r++)for(let c=1;c<=Math.max(9,ws.columnCount||9);c++){if(norm(ws.getRow(r).getCell(c).value).toLowerCase().includes(needle))return r}return 0};
+  const originalRemarkRow=findOriginalFooterLabelRow('remark')||footerBaseRow+9;
+  const originalSignatureRow=findOriginalFooterLabelRow('vender signature')||findOriginalFooterLabelRow('accept by')||originalRemarkRow+3;
+  const builtInStoneRows=Math.max(0,originalSignatureRow-originalRemarkRow-1);
+  const extraRemarkRows=Math.max(0,stoneDescriptionPairs.length-builtInStoneRows);
   const originalContentRows=Math.max(1,footerBaseRow-firstItemRow-1);
   const baseContentRows=Math.min(4,originalContentRows);
   const separatorSourceRow=firstItemRow+baseContentRows;
@@ -1276,7 +1287,7 @@ async function exportInvoiceFromTemplate(){
   });
   const totalItemRows=itemPlans.reduce((s,x)=>s+x.totalRows,0);
   const footerStart=firstItemRow+totalItemRows;
-  const requiredEnd=footerStart+footerRows.length-1;
+  const requiredEnd=footerStart+footerRows.length+extraRemarkRows-1;
   const clearEnd=Math.max(originalFooterEnd,requiredEnd+2);
 
   for(let r=firstItemRow;r<=clearEnd;r++){
@@ -1339,8 +1350,8 @@ async function exportInvoiceFromTemplate(){
   //   new page and the previous page is allowed to use the full 54 Item rows.
   // - An Item (including its separator row) is never split across pages.
   const fullItemRowsPerPage=54;
-  const footerReservedRows=16;
-  const finalItemRowsWithFooter=fullItemRowsPerPage-footerReservedRows; // 38
+  const footerReservedRows=16+extraRemarkRows;
+  const finalItemRowsWithFooter=fullItemRowsPerPage-footerReservedRows;
   const fixedRowPlan=buildFixedRowPagePlan(itemPlans,fullItemRowsPerPage);
   const itemPages=fixedRowPlan.pages||[];
   const pageStartIndexes=new Set(itemPages.slice(1).map(p=>p.start));
@@ -1405,10 +1416,22 @@ async function exportInvoiceFromTemplate(){
     try{ws.getRow(Math.max(firstItemRow,footerStart-1)).addPageBreak()}catch{}
   }
 
-  for(let offset=0;offset<footerRows.length;offset++){
-    const targetRow=footerStart+offset,captured=footerRows[offset],row=ws.getRow(targetRow);
-    row.height=captured.height;
-    for(let c=1;c<=columnCount;c++)applyCaptured(row.getCell(c),captured.row[c-1],true);
+  {
+    const blankSourceIndex=Math.max(0,Math.min(footerRows.length-1,originalSignatureRow-footerBaseRow-1));
+    const blankCaptured=footerRows[blankSourceIndex];
+    let targetOffset=0;
+    for(let offset=0;offset<footerRows.length;offset++){
+      const sourceRowNo=footerBaseRow+offset;
+      if(sourceRowNo===originalSignatureRow&&extraRemarkRows>0){
+        for(let k=0;k<extraRemarkRows;k++){
+          const targetRow=footerStart+targetOffset++,row=ws.getRow(targetRow);row.height=blankCaptured?.height;
+          for(let c=1;c<=columnCount;c++)applyCaptured(row.getCell(c),blankCaptured.row[c-1],false);
+        }
+      }
+      const targetRow=footerStart+targetOffset++,captured=footerRows[offset],row=ws.getRow(targetRow);
+      row.height=captured.height;
+      for(let c=1;c<=columnCount;c++)applyCaptured(row.getCell(c),captured.row[c-1],true);
+    }
   }
 
   const t=totals();
@@ -1449,13 +1472,37 @@ async function exportInvoiceFromTemplate(){
     amountCell.alignment={...cloneStyle(amountCell.alignment),vertical:'middle',wrapText:false};
   }
   const remarkLabel=findLabelRow('remark');
-  if(remarkLabel)ws.getRow(remarkLabel.r).getCell(Math.min(columnCount,remarkLabel.c+1)).value=norm($('#remark').value);
 
 
   // Uniform alignment requested for the complete Invoice sheet.
   for(let r=1;r<=requiredEnd;r++)for(let c=1;c<=columnCount;c++){
     const cell=ws.getRow(r).getCell(c);
     cell.alignment={...cloneStyle(cell.alignment),vertical:'middle',wrapText:false};
+  }
+  if(remarkLabel){
+    const manualRemark=norm($('#remark').value),remarkRow=remarkLabel.r,contentStart=Math.min(columnCount,remarkLabel.c+1);
+    const leftStart=contentStart,leftEnd=Math.max(leftStart,Math.min(columnCount,5)),rightStart=Math.min(columnCount,leftEnd+1),rightEnd=columnCount;
+    const headerStart=excelColLetter(contentStart),headerEnd=excelColLetter(columnCount);
+    try{ws.unMergeCells(`${headerStart}${remarkRow}:${headerEnd}${remarkRow}`)}catch{}
+    if(contentStart<=columnCount)try{ws.mergeCells(`${headerStart}${remarkRow}:${headerEnd}${remarkRow}`)}catch{}
+    const headerCell=ws.getCell(`${headerStart}${remarkRow}`);
+    headerCell.value=stoneDescriptionPairs.length?(manualRemark?`${manualRemark}\nSTONE DESCRIPTION:`:'STONE DESCRIPTION:'):manualRemark;
+    headerCell.font={...cloneStyle(headerCell.font),name:'Arial',size:10,bold:false};
+    headerCell.alignment={...cloneStyle(headerCell.alignment),horizontal:'left',vertical:'middle',wrapText:true};
+    if(stoneDescriptionPairs.length){
+      const headerLines=Math.max(1,String(headerCell.value||'').split(/\r?\n/).length);
+      ws.getRow(remarkRow).height=Math.max(Number(ws.getRow(remarkRow).height)||15,headerLines*13.5);
+      for(let i=0;i<stoneDescriptionPairs.length;i++){
+        const rowNo=remarkRow+1+i,[left,right]=stoneDescriptionPairs[i];
+        const l1=excelColLetter(leftStart),l2=excelColLetter(leftEnd),r1=excelColLetter(rightStart),r2=excelColLetter(rightEnd);
+        try{ws.unMergeCells(`${l1}${rowNo}:${l2}${rowNo}`)}catch{}
+        try{ws.mergeCells(`${l1}${rowNo}:${l2}${rowNo}`)}catch{}
+        if(rightStart<=rightEnd){try{ws.unMergeCells(`${r1}${rowNo}:${r2}${rowNo}`)}catch{}try{ws.mergeCells(`${r1}${rowNo}:${r2}${rowNo}`)}catch{}}
+        const lc=ws.getCell(`${l1}${rowNo}`);lc.value=left?.text||'';lc.font={...cloneStyle(lc.font),name:'Arial',size:10};lc.alignment={horizontal:'left',vertical:'middle',wrapText:false};
+        if(rightStart<=rightEnd){const rc=ws.getCell(`${r1}${rowNo}`);rc.value=right?.text||'';rc.font={...cloneStyle(rc.font),name:'Arial',size:10};rc.alignment={horizontal:'left',vertical:'middle',wrapText:false}}
+        ws.getRow(rowNo).height=Math.max(Number(ws.getRow(rowNo).height)||15,15);
+      }
+    }
   }
   ws.pageSetup=ws.pageSetup||{};
   ws.pageSetup.paperSize=9;
@@ -1562,7 +1609,10 @@ async function exportInvoiceExcel(){
     row++;
     ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value=`Total : (${currencyCode()})`;ws.getCell(`A${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).value=t.total;ws.getCell(`G${row}`).numFmt=currencyExcelFormat();ws.getCell(`G${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).alignment={horizontal:'right'};
     row+=2;
-    ws.mergeCells(`A${row}:H${row+2}`);const remarkCell=ws.getCell(`A${row}`);remarkCell.value=`Remark :\n${norm($('#remark').value)}`;remarkCell.alignment={vertical:'top',wrapText:true};remarkCell.font={name:'Arial',size:10};row+=2;
+    const fallbackStonePairs=documentStoneDescriptionPairs(exportItems),manualRemark=norm($('#remark').value);
+    ws.mergeCells(`A${row}:B${row}`);const remarkLabelCell=ws.getCell(`A${row}`);remarkLabelCell.value='Remark :';remarkLabelCell.font={name:'Arial',size:10,bold:true};remarkLabelCell.alignment={vertical:'middle'};
+    ws.mergeCells(`C${row}:H${row}`);const remarkCell=ws.getCell(`C${row}`);remarkCell.value=fallbackStonePairs.length?(manualRemark?`${manualRemark}\nSTONE DESCRIPTION:`:'STONE DESCRIPTION:'):manualRemark;remarkCell.alignment={vertical:'middle',wrapText:true};remarkCell.font={name:'Arial',size:10};if(String(remarkCell.value||'').includes('\n'))ws.getRow(row).height=27;
+    if(fallbackStonePairs.length){for(const [left,right] of fallbackStonePairs){row++;ws.mergeCells(`A${row}:D${row}`);ws.mergeCells(`E${row}:H${row}`);const lc=ws.getCell(`A${row}`),rc=ws.getCell(`E${row}`);lc.value=left?.text||'';rc.value=right?.text||'';lc.font=rc.font={name:'Arial',size:10};lc.alignment=rc.alignment={horizontal:'left',vertical:'middle'};ws.getRow(row).height=15}}
     row+=2;merge(`A${row}:D${row}`,'Vender Signature : ______________________',10);merge(`E${row}:H${row}`,'Accept By : ______________________',10,false,'right');
     ws.headerFooter.oddFooter='&RPage &P of &N';
     ws.pageSetup.printArea=`A1:H${row}`;

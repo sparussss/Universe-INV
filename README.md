@@ -1,11 +1,11 @@
-# Universe Invoice PWA v0.14.12
+# Universe Invoice PWA v0.14.13
 
-## v0.14.12 移除「匯出更新後資料包」
+## v0.14.13 Stone Description
 
-- 完全移除「匯出更新後資料包」按鍵及 `exportUpdatedPackage()` 程式。
-- 移除只為此功能使用的 JSZip 依賴及 Service Worker 離線快取項目。
-- 「款式搜尋」頁不再提供整個展覽 Folder 的 ZIP 輸出。
-- Confirm Invoice／Consignment／Quotation 仍會輸出最新 `jmsdata.xlsx`；正式文件記錄繼續保存在 Sheet 2「Universe Records」。
-- 保留「資料匯入」頁的「匯出目前 jmsdata.xlsx」作手動備份／補輸出。
-- 手動選圖記錄會寫入最新 `jmsdata.xlsx`；新上傳／拍攝圖片檔本身不會嵌入 Excel，因此相關提示改為只說明目前 PWA 暫存狀態，不再提示匯出資料包。
-- 保留 v0.14.11 的「款式搜尋」名稱、新展覽 Records 隔離及 cache-busting / network-first 更新機制。
+- Excel Invoice / Consignment / Quotation 會根據目前文件貨品 DESC1–DESC6 自動辨認 Stone List BREAKDOWN。
+- 英文石名完全由 Stone List「英文石名」欄讀取，不在 PWA 寫死。
+- Remark 自動加入 `STONE DESCRIPTION:`，每行最多兩個石種，左右以 Excel 真正兩個儲存格區塊排列，不靠空格對齊。
+- 同一石種代號只列一次，按文件貨品首次出現次序排列。
+- 超過 Template 原有 Remark 空間時會自動增加 Remark 行，再將 Signature / Accept By 往下移。
+- PWA 仍只輸出 Excel，不新增 PDF 輸出。
+- 其他 v0.14.12 功能維持不變。
