@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xls',stockIntegrityIssues:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',currentLondonPm:0,currentLondonPmDate:'',source:'',historicalPm:{},goldPrices:new Map(),goldDates:[],goldDataName:'',goldDataRows:0},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],quotationHeaders:[],quotationItems:[],transactions:[]},recall:null,exhibitionSession:'',draft:{baseline:'',timer:null,prompted:false,restoring:false},stockSearch:{query:'*',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null,packageFiles:[],customPackageImages:new Map(),packageImageDirtyFiles:new Set()};
+const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xls',stockIntegrityIssues:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),diamondStoneCodes:new Set(),stoneMappingName:'',articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',currentLondonPm:0,currentLondonPmDate:'',source:'',historicalPm:{},goldPrices:new Map(),goldDates:[],goldDataName:'',goldDataRows:0},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],quotationHeaders:[],quotationItems:[],transactions:[]},recall:null,exhibitionSession:'',draft:{baseline:'',timer:null,prompted:false,restoring:false},stockSearch:{query:'*',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null,packageFiles:[],customPackageImages:new Map(),packageImageDirtyFiles:new Set()};
 const EXHIBITION_SESSION_KEY='universeExhibitionSession_v1';try{state.exhibitionSession=localStorage.getItem(EXHIBITION_SESSION_KEY)||''}catch{}
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
 function displayItems(){return formalItems().reverse()}
@@ -421,20 +421,27 @@ async function importCustomerFile(f){
   if(!map.size)throw new Error('找不到有效客戶資料');state.customers=map;return map.size;
 }
 async function importStoneFile(f){
-  const wb=await readWB(f);const sheetName=wb.SheetNames.find(n=>n.trim().toUpperCase()==='STONE LIST')||wb.SheetNames[0];const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:''});const headerIndex=rows.findIndex(r=>r.some(v=>String(v).trim().toUpperCase()==='BREAKDOWN')&&r.some(v=>String(v).trim().toUpperCase()==='QUOTATION'));if(headerIndex<0)throw new Error('找不到 BREAKDOWN / QUOTATION 欄位');const header=rows[headerIndex].map(v=>String(v).trim().toUpperCase());const bCol=header.indexOf('BREAKDOWN'),qCol=header.indexOf('QUOTATION'),gCol=header.indexOf('GROUP');const aliases=new Map(),variantAliases=new Map(),groups=new Map();
+  const wb=await readWB(f);const sheetName=wb.SheetNames.find(n=>n.trim().toUpperCase()==='STONE LIST')||wb.SheetNames[0];const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:''});
+  const headerIndex=rows.findIndex(r=>r.some(v=>String(v).trim().toUpperCase()==='BREAKDOWN')&&r.some(v=>String(v).trim().toUpperCase()==='QUOTATION'));
+  if(headerIndex<0)throw new Error('找不到 Stone List 標題列');
+  const header=rows[headerIndex].map(v=>String(v).trim().toUpperCase()),typeCol=header.indexOf('石類'),bCol=header.indexOf('BREAKDOWN'),qCol=header.indexOf('QUOTATION'),gCol=header.indexOf('GROUP');
+  if(typeCol<0||bCol<0||qCol<0||gCol<0)throw new Error('Stone List 必須包含 石類 / BREAKDOWN / QUOTATION / GROUP 欄位');
+  const aliases=new Map(),variantAliases=new Map(),groups=new Map(),diamondCodes=new Set();
   for(const r of rows.slice(headerIndex+1)){
-    const breakdown=norm(r[bCol]),quotation=norm(r[qCol]),group=gCol>=0?norm(r[gCol]):'';if(!breakdown)continue;
+    const stoneType=norm(r[typeCol]).replace(/\s+/g,''),breakdown=norm(r[bCol]),quotation=norm(r[qCol]),group=norm(r[gCol]);if(!breakdown)continue;
     const codes=breakdown.split(/[,，]/).map(norm).filter(Boolean).map(x=>x.toUpperCase());
     const quotes=quotation.split(/[,，]/).map(norm).filter(Boolean).map(x=>x.toUpperCase());
+    const isDiamond=stoneType.includes('鑽');
     for(const code of codes){
-      // Every BREAKDOWN code is a valid recognition token. QUOTATION is only an
-      // image/output alias; a blank QUOTATION must not make the stone unreadable.
+      // Stone List is the single source of truth for recognition aliases,
+      // diamond classification and colour groups.
       if(!aliases.has(code))aliases.set(code,code);
       if(quotes.length){const list=variantAliases.get(code)||[];for(const q of quotes)if(!list.includes(q))list.push(q);variantAliases.set(code,list);aliases.set(code,quotes[quotes.length-1])}
       if(group)groups.set(code,group);
+      if(isDiamond)diamondCodes.add(code);
     }
   }
-  if(!aliases.size)throw new Error('對照表沒有有效資料');state.stoneAliases=aliases;state.stoneVariantAliases=variantAliases;state.stoneGroups=groups;state.stoneMappingName=f.name;renderStockSearch();return aliases.size;
+  if(!aliases.size)throw new Error('Stone List 沒有有效 BREAKDOWN 資料');state.stoneAliases=aliases;state.stoneVariantAliases=variantAliases;state.stoneGroups=groups;state.diamondStoneCodes=diamondCodes;state.stoneMappingName=f.name;renderStockSearch();return aliases.size;
 }
 async function importArticleFile(f){const wb=await readWB(f),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});const map=new Map();for(const row of rows){const prefix=normCode(row[0]),description=norm(row[1]);if(!prefix||!description||prefix==='PREFIX')continue;map.set(prefix,description)}if(!map.size)throw new Error('找不到 Prefix / Article Description 對照');state.articleMap=map;state.articleMappingName=f.name;return map.size}
 async function importTemplateFile(f){const buf=await f.arrayBuffer();if(typeof ExcelJS==='undefined')throw new Error('Excel 範本程式未載入');const test=new ExcelJS.Workbook();await test.xlsx.load(buf.slice(0));if(!test.worksheets.length)throw new Error('範本沒有工作表');state.invoiceTemplateBuffer=buf;state.invoiceTemplateName=f.name;return true}
@@ -442,17 +449,6 @@ function imageDuplicatePreference(p){const nl=articleType(p?.art)==='NL';if(nl)r
 function importImageFiles(files){const map=new Map();for(const f of files){if(!String(f.type).startsWith('image/')&&!/\.(jpe?g|png|webp)$/i.test(f.name))continue;const p=parseImage(f);if(!p)continue;const key=p.art+'|'+p.variant.toUpperCase(),existing=map.get(key);if(!existing||imageDuplicatePreference(p)<imageDuplicatePreference(existing))map.set(key,p)}state.imageFiles=new Map();state.imageFilesByName=new Map();for(const p of map.values()){const image={variant:p.variant,url:URL.createObjectURL(p.file),fileName:p.file.name,file:p.file,dup:p.dup||0};const arr=state.imageFiles.get(p.art)||[];arr.push(image);state.imageFiles.set(p.art,arr);state.imageFilesByName.set(String(p.file.name||'').toUpperCase(),image)}for(const arr of state.imageFiles.values())arr.sort((a,b)=>a.variant==='Default'?-1:b.variant==='Default'?1:a.variant.localeCompare(b.variant));for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);updateImageOverrideStatus();return {images:[...files].filter(f=>String(f.type).startsWith('image/')||/\.(jpe?g|png|webp)$/i.test(f.name)).length,matched:state.imageFiles.size}}
 $('#stockInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;if(!confirmDiscardPendingImageOverrides()){e.target.value='';return}try{const count=await importStockFile(f),issues=state.stockIntegrityIssues.length;status('#stockStatus',`已匯入 ${f.name}：${count} 件貨品；Available ${state.products.size} 件；文件記錄 ${state.documentStore.invoiceHeaders.length+state.documentStore.consignmentHeaders.length+state.documentStore.quotationHeaders.length} 筆；圖片選擇 ${state.imageOverrides.size} 項${issues?`；${issues} 列 I:M 需要檢查`:''}。`,issues?'warn':'ok');setImportCollapsed('stock',true);updateTotals();syncDraftAfterDataImport()}catch(err){status('#stockStatus','匯入失敗：'+err.message,'error');setImportCollapsed('stock',false)}};
 $('#customerInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importCustomerFile(f);status('#customerStatus',`已匯入 ${f.name}：${count} 位客戶。`,'ok');setImportCollapsed('customer',true);updateTotals()}catch(err){status('#customerStatus','匯入失敗：'+err.message,'error');setImportCollapsed('customer',false)}};
-const FALLBACK_STONE_VARIANTS=new Map([
-  ['QAM',['AM']],['LBT',['LBT','L.BT']],['BTO',['BT']],['SKY',['SKY','SKY BT']],['YCT',['CT']],['GPS',['G.AM','GAM']],['GPD',['PD']],['RQZ',['RQZ']],['MG',['MG']],['PTQ',['PTR']],['RL',['PTR']],['AQ',['AQ']],['VAQ',['AQ']],['AMCT',['AMCT']],['PAM',['P.AM','PAM']],['MCT',['MCT']],['RGT',['RGT']],['TZ',['TZ']],['IO',['IO']],['TIO',['IO']],['GT',['GT']],['GTQ',['GTR']],['ALEX',['ALEX']],['KU',['KU']],['LQZ',['LQZ']],['SQZ',['SQZ']],
-  ['BSA',['BSA']],['PSA',['PSA']],['GGT',['GGT']],['OSA',['OSA']],['YSA',['YSA']],['SSU',['SSU']],['RRU',['RRU']],['GEM',['GEM']],['GSA',['GSA']],['WSA',['WSA']],['ZSA',['ZSA']],['ZSP',['ZSP']],['XXX',['MULTI']],['DIA',['DIA']],
-  ['MOP',['MOP']],['BMOP',['BMOP']],['WCH',['AG']],['AMZ',['AMZ']],['BCH',['BCH']],['BO',['BO']],['BOX',['BO']],['GMA',['GMA']],['LAB',['LAB']],['LAP',['LAP']],['MOON',['MOON']],['OPAL',['OPAL']],['WPL',['WPL']],['RCH',['RCH']],['TE',['TE']],['TQ',['TQ']]
-]);
-const FALLBACK_STONE_ALIASES=new Map([...FALLBACK_STONE_VARIANTS].map(([code,variants])=>[code,variants[variants.length-1]]));
-const FALLBACK_STONE_GROUPS=new Map([
-  ['QAM','Purple/Pink/Rose'],['LBT','Blue'],['BTO','Blue'],['SKY','Blue'],['YCT','Yellow/Orange'],['GPS','Green'],['GPD','Green'],['RQZ','Purple/Pink/Rose'],['MG','Purple/Pink/Rose'],['PTQ','Purple/Pink/Rose'],['RL','Purple/Pink/Rose'],['AQ','Blue'],['VAQ','Blue'],['AMCT','Yellow/Orange'],['PAM','Purple/Pink/Rose'],['MCT','Yellow/Orange'],['RGT','Purple/Pink/Rose'],['TZ','Blue'],['IO','Blue'],['TIO','Blue'],['GT','Purple/Pink/Rose'],['GTQ','Green'],['ALEX','Green'],['KU','Purple/Pink/Rose'],['LQZ','Yellow/Orange'],['SQZ','Yellow/Orange'],
-  ['BSA','Blue'],['PSA','Purple/Pink/Rose'],['GGT','Green'],['OSA','Yellow/Orange'],['YSA','Yellow/Orange'],['SSU','Blue'],['RRU','Purple/Pink/Rose'],['GEM','Green'],['GSA','Green'],['WSA','White'],['ZSA','Black'],['ZSP','Black'],['XXX','Multi'],['DIA','White'],
-  ['MOP','White'],['BMOP','Black'],['WCH','White'],['AMZ','Blue'],['BCH','Blue'],['BO','Black'],['BOX','Black'],['GMA','Green'],['LAB','Black'],['LAP','Blue'],['MOON','White'],['OPAL','White'],['WPL','White'],['RCH','Purple/Pink/Rose'],['TE','Yellow/Orange'],['TQ','Blue']
-]);
 const FALLBACK_ARTICLE_MAP=new Map([
   ['RG','RING /w SEMI-PRECIOUS'],
   ['ER','EARRING /w SEMI-PRECIOUS'],
@@ -468,9 +464,10 @@ function articleDescriptionFor(item){
   return state.articleMap.size?(state.articleMap.get(prefix)||''):'';
 }
 
-function activeStoneAliases(){return state.stoneAliases.size?state.stoneAliases:FALLBACK_STONE_ALIASES}
-function activeStoneVariantAliases(){return state.stoneVariantAliases.size?state.stoneVariantAliases:FALLBACK_STONE_VARIANTS}
-function activeStoneGroups(){return state.stoneGroups.size?state.stoneGroups:FALLBACK_STONE_GROUPS}
+function activeStoneAliases(){return state.stoneAliases}
+function activeStoneVariantAliases(){return state.stoneVariantAliases}
+function activeStoneGroups(){return state.stoneGroups}
+function isDiamondStoneCode(code){return state.diamondStoneCodes.has(norm(code).toUpperCase())}
 function stoneImageAliasesForCode(code){const c=String(code||'').toUpperCase(),out=[];if(c)out.push(c);const list=activeStoneVariantAliases().get(c);if(Array.isArray(list))for(const value of list){const v=String(value||'').toUpperCase();if(v&&!out.includes(v))out.push(v)}const single=activeStoneAliases().get(c),v=String(single||'').toUpperCase();if(v&&!out.includes(v))out.push(v);return out}
 function stoneGroupForCode(code){return norm(activeStoneGroups().get(String(code||'').toUpperCase())).toUpperCase()}
 $('#stoneMappingInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const count=await importStoneFile(f);status('#stoneMappingStatus',`已匯入 ${f.name}：${count} 個石種代碼對照。`,'ok');setImportCollapsed('stone',true);for(const item of state.items)if(!item.customImage)applyAutoImageMatch(item);renderItems()}catch(err){status('#stoneMappingStatus','匯入失敗：'+(err.message||err),'error');setImportCollapsed('stone',false)}};
@@ -553,9 +550,8 @@ function variantContainsStone(variant,wanted){
   });
 }
 const MULTI_COLOR_GROUP_THRESHOLD=3,MULTI_STONE_CODE_THRESHOLD=3,MULTI_MIN_COLOR_GROUPS=2;
-const IMAGE_STONE_EXCLUSIONS=new Set(['CDM','DIA']);
 function imageStoneCodesForProduct(p){
-  return stoneCodesForProduct(p).filter(code=>!IMAGE_STONE_EXCLUSIONS.has(String(code||'').toUpperCase()));
+  return stoneCodesForProduct(p).filter(code=>!isDiamondStoneCode(code));
 }
 function normalDesiredStoneVariants(p){
   const out=[];for(const code of imageStoneCodesForProduct(p)){for(const variant of stoneImageAliasesForCode(code)){const v=String(variant||'').toUpperCase();if(v&&!out.includes(v))out.push(v)}}return out;
@@ -1598,7 +1594,7 @@ function stoneCodesFromDescriptionLine(line){
     // Stone List BREAKDOWN uses the leading code; the remainder is shape/cutting.
     // Longest-prefix matching is essential for pairs such as BO/BOX and GT/GTQ.
     const code=longestStoneBreakdownPrefix(part);
-    if(code&&code!=='CDM'&&!out.includes(code))out.push(code);
+    if(code&&!isDiamondStoneCode(code)&&!out.includes(code))out.push(code);
   }
   return out;
 }
@@ -1606,7 +1602,7 @@ function stoneCodesForProduct(p){const out=[];for(const line of (p.descriptions|
 const STOCK_TYPE_ORDER=['RG','ER','PT','BR','NL','BL','BG'];
 function stockTypeRank(type){const t=norm(type).toUpperCase(),i=STOCK_TYPE_ORDER.indexOf(t);return i>=0?i:STOCK_TYPE_ORDER.length}
 function compareStockTypes(a,b){const ra=stockTypeRank(a),rb=stockTypeRank(b);return ra-rb||String(a).localeCompare(String(b))}
-function stoneOrderList(){const out=[];for(const code of activeStoneAliases().keys()){const c=norm(code).toUpperCase();if(c&&c!=='CDM'&&!out.includes(c))out.push(c)}return out}
+function stoneOrderList(){const out=[];for(const code of activeStoneAliases().keys()){const c=norm(code).toUpperCase();if(c&&!isDiamondStoneCode(c)&&!out.includes(c))out.push(c)}return out}
 function stoneOrderRank(code){const c=norm(code).toUpperCase(),list=stoneOrderList(),i=list.indexOf(c);return i>=0?i:list.length+100}
 function colorGroupOrderList(){const out=[];for(const code of stoneOrderList()){const group=stoneGroupForCode(code);if(group&&!out.includes(group))out.push(group)}return out}
 function colorGroupRank(group){const g=norm(group).toUpperCase(),list=colorGroupOrderList(),i=list.indexOf(g);return i>=0?i:list.length+100}

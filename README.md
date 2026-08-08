@@ -1,5 +1,13 @@
-# Universe Invoice PWA v0.13.1
+# Universe Invoice PWA v0.13.2
 
+
+
+## v0.13.2 Stone List 單一石種資料來源
+
+- 鑽石代號不再寫死於 PWA；由 Stone List 的「石類」欄判斷，石類含「鑽」的 BREAKDOWN 代號會自動視為鑽石。
+- 移除 PWA 內置的石種後備對照表；BREAKDOWN / QUOTATION 對照完全跟 Stone List。
+- 移除 PWA 內置的 Stone Group 後備表；GROUP 完全跟 Stone List。
+- 之後新增石種、修改 QUOTATION Alias、修改 GROUP 或鑽石代號，只需更新資料包內的 Stone List，毋須再修改 PWA。
 
 ## v0.13.1 Stone List 最長前綴辨認／配套排序
 
