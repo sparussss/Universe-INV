@@ -1,6 +1,6 @@
-const CACHE='universe-invoice-v0.14.8';
+const CACHE='universe-invoice-v0.14.9';
 const DEP_CACHE='universe-invoice-dependencies-v1';
-const LOCAL_ASSETS=['./','./index.html','./styles.css?v=0.14.8','./app-v0.14.8.js','./manifest.webmanifest?v=0.14.8','./icon.svg','./icon-192.png','./icon-512.png'];
+const LOCAL_ASSETS=['./','./index.html','./styles.css?v=0.14.9','./app.js?v=0.14.9','./manifest.webmanifest?v=0.14.9','./icon.svg','./icon-192.png','./icon-512.png'];
 const EXTERNAL_ASSETS=[
   'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
   'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js',
@@ -33,7 +33,7 @@ self.addEventListener('fetch',e=>{
       if(cached)return cached;
       try{const response=await fetch(e.request);if(response){const c=await caches.open(DEP_CACHE);await c.put(url.href,response.clone())}return response}catch(err){throw err}
     }
-    // Local PWA code is network-first so an updated index/app cannot be mixed with an old cached app.js.
+    // Local PWA code is network-first so an updated index/app cannot be mixed with an old cached application code.
     try{
       const response=await fetch(e.request,{cache:'no-store'});
       if(response?.ok){const c=await caches.open(CACHE);await c.put(e.request,response.clone())}

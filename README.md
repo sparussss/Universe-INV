@@ -1,10 +1,9 @@
-# Universe Invoice PWA v0.14.8
+# Universe Invoice PWA v0.14.9
 
-## v0.14.8 Records 健康檢查與更新快取修正
+## v0.14.9 快取檔案整理
 
-- 正式文件記錄唯一來源仍是 `jmsdata.xlsx` 的隱藏工作表 `Universe Records`。
-- 新展覽的 `jmsdata.xlsx` 可以只有原本庫存工作表；沒有 `Universe Records` 屬正常情況，不再當成資料包錯誤。
-- 沒有 `Universe Records` 時會顯示「新展覽」正常提示：Recall 0、Invoice／Consignment／Quotation 流水號由 0001 開始；第一次 Confirm 後自動建立隱藏的第二個工作表。
-- 資料包完整性／健康檢查不再要求任何獨立 Records JSON 檔案。
-- 加強 PWA 更新快取：本版使用版本化 app script 檔名，Service Worker 對本機 PWA 程式改為 network-first、離線時才 fallback cache，降低 iPhone 出現新版頁首配舊版 JavaScript 的機會。
-- 其餘 v0.14.7 新展覽 Records 強制隔離、草稿 Session 隔離及 Recall Exhibition ID 篩選維持不變。
+- 移除 v0.14.8 重複的 `app-v0.14.8.js`；PWA 只保留單一主程式 `app.js`。
+- `index.html` 以 `app.js?v=0.14.9` 載入主程式，保留版本化 cache-busting 效果。
+- Service Worker 使用 `universe-invoice-v0.14.9` 新 cache，並繼續對本機 PWA 程式採用 network-first；離線時才 fallback 到 cache。
+- Service Worker 註冊改用 `updateViaCache: none` 並主動檢查更新，降低 iPhone 沿用舊程式的機會。
+- 其餘 v0.14.8 的 Universe Records / 新展覽隔離邏輯及所有功能維持不變。
