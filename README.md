@@ -1,25 +1,40 @@
-# Universe Invoice PWA v0.14.15
+# Universe Invoice PWA v0.14.16
 
-## v0.14.15 Template style inheritance
+## RO1220 customer-specific Invoice footer
 
-- Stone Description keeps the approved C:D / E:H layout and final blank row, but no longer hard-codes Arial 8 pt in the Template export path.
-- `STONE DESCRIPTION:` and all stone-description cells now copy the Invoice Master Template Remark content cell's full style (font, size, bold, alignment, wrap, fill, border, number format, etc.).
-- LOTNO / ARTNO item cells no longer force `bold = false`; their appearance is inherited entirely from the Invoice Master Template just like the other item fields.
-- The no-Template fallback workbook keeps its own built-in styling because there is no Template style to inherit.
+Only when the current document is an **Invoice** and Customer Code is **RO1220**, Excel output from the current imported Invoice Master Template adds the following blocks after `Total Amount`:
 
+1. `Payment Term :`
+   - PAID BY BANK TT 20%
+   - TERMS 90 / 120 / 150 / 180 DAYS, each 20%
+   - due dates follow invoice date + 3 / 4 / 5 / 6 calendar months
+   - the first four installments are rounded to whole currency units; the final installment balances exactly to the Invoice Total
+2. `Remark :`
+   - TOTAL GOLD WEIGHT
+   - TOTAL STONES WEIGHT (CARATS), shown as grams and carats
+   - TOTAL GROSS WEIGHT
+3. Natural-stone declaration
+4. `STONE DESCRIPTION :`
+   - uses the currently imported Stone List only
+   - only stone codes actually used in the Invoice
+   - code order A–Z
+   - two-column index layout: C:D on the left, E:H on the right
+   - column-major order (read down the left column, then down the right)
+   - one blank row after the final Stone Description line
 
-## v0.14.14 Stone Description footer refinement
-- Excel Stone Description left column is fixed to `C:D`; right column is fixed to `E:H`.
-- Stone Description header and stone-name text were set to 8 pt in v0.14.14; v0.14.15 replaces that hard-coded font styling with Template Remark style inheritance.
-- Always keep one blank row after the final Stone Description row before the signature line.
+All inserted RO1220 footer content inherits the current Invoice Master Template Remark style; no font name/size/bold is hard-coded in the Template export path.
 
+For RO1220 Invoice export, both the current Stone List and Invoice Master Template are required. Other customers keep the normal Invoice footer and do not receive automatic Stone Description / RO1220 footer blocks.
 
-## v0.14.13 Stone Description
+## Weight calculation
 
-- Excel Invoice / Consignment / Quotation 會根據目前文件貨品 DESC1–DESC6 自動辨認 Stone List BREAKDOWN。
-- 英文石名完全由 Stone List「英文石名」欄讀取，不在 PWA 寫死。
-- Remark 自動加入 `STONE DESCRIPTION:`，每行最多兩個石種，左右以 Excel 真正兩個儲存格區塊排列，不靠空格對齊。
-- 同一石種代號只列一次，按文件貨品首次出現次序排列。
-- 超過 Template 原有 Remark 空間時會自動增加 Remark 行，再將 Signature / Accept By 往下移。
-- PWA 仍只輸出 Excel，不新增 PDF 輸出。
-- 其他 v0.14.12 功能維持不變。
+- Gold weight: leading gram value from DESC1 × Quantity.
+- Stone carats: every `...ct` value in DESC2–DESC6 × Quantity.
+- Stone grams: total carats × 0.2.
+- Gross grams: gold grams + stone grams.
+
+## Existing v0.14.15 behaviour retained
+
+- LOTNO / ARTNO item styles inherit the Invoice Master Template without a forced bold override.
+- Universe Records remain embedded in `jmsdata.xlsx` Sheet 2.
+- New-exhibition record isolation and cache-busting / network-first update behaviour remain unchanged.
