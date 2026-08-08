@@ -1,6 +1,15 @@
-# Universe Invoice PWA v0.14.2
+# Universe Invoice PWA v0.14.3
 
+## v0.14.3 Universe Records 單一正式文件紀錄來源
 
+- 新增 `Universe Records.json`，作為每次展覽會唯一正式的 Invoice／Consignment／Quotation 歷史、Recall、Revision、Cancelled、Exhibition ID／Name 及文件流水號來源。
+- 每個新展覽資料包都應放入一份全新的空白 `Universe Records.json` Template；Template 的 `exhibitionId`／`exhibitionName` 可留空，首次匯入時 PWA 會產生新的 Exhibition ID，並以資料包 Folder 名稱作 Exhibition Name。
+- 匯入新資料包時，PWA 會先清空上一個資料包在記憶體中的正式文件記錄，再完全以新資料包的 `Universe Records.json` 載入；因此新展覽不會再顯示上一個展覽的 Recall 記錄。
+- `jmsdata.xlsx` 不再保存 Invoice Header／Items、Consignment Header／Items、Quotation Header／Items 或 Transaction History 工作表；舊版 jmsdata 如仍有這些工作表，重新輸出時會移除，避免雙重正式紀錄。
+- Confirm 後會分別輸出最新 `jmsdata.xlsx` 及 `Universe Records.json`；請把兩個檔案取代回同一個展覽資料包。Quotation 只更新 Records，不改 I:J:K:L 庫存。
+- 「匯出更新後資料包」會同時把最新 `jmsdata.xlsx` 及 `Universe Records.json` 放回 ZIP 內。
+- PWA 本機不再保存 Confirm 文件歷史作第二套正式資料庫；本機只保留未完成草稿、Image Override 暫存及必要設定。
+- 「新展覽會・重設文件編號」現在亦會建立一套全新的空白文件記錄與新 Exhibition ID，下一號回到 `INVYY0001 / CONYY0001 / QUOYY0001`。
 
 
 ## v0.14.2 配套搜尋切換／大量清單效能
@@ -31,8 +40,8 @@
 - 新增「展覽資料包健康檢查」：重複 LOTNO、I:J:K:L／Balance、Stone List 一致性、DESC2–DESC6 未辨認石種、Customer 預設 Sales Rate、圖片缺漏、GoldSilver 新鮮度、Template 狀態等。只提示，不自動改來源資料。
 - Stone List 自身一致性檢查會區分「同 BREAKDOWN 但石類／GROUP 矛盾」與「同 BREAKDOWN 的多個 QUOTATION Alias（正常）」；亦檢查缺 GROUP／石類／QUOTATION Alias，以及正常的前綴重疊資訊；前綴仍採最長配對。
 - GoldSilver.xlsx 新增「可能過期」提示；以工作日計算，週末不會被當作交易日。
-- 新增整個 PWA 本機資料備份／還原（JSON）：歷史文件、Recall、草稿、Image Overrides、文件流水號、Exhibition Session／Name 及設定。原始 Excel／Pictures 仍需另外保存。
-- 「更新資料包」與「清空所有 PWA 本機資料」完全分開；更新 jmsdata 會合併本機文件歷史及 Image Overrides，不因新版資料包缺少本機記錄而直接刪除。遇到同 Revision 衝突會先提示。
+- v0.14.0 曾把 Confirm 歷史納入 PWA 本機備份；自 v0.14.3 起正式文件歷史改由 `Universe Records.json` 單一保存，本機備份只保留草稿、Image Override 暫存及設定。
+- 「更新資料包」與「清空所有 PWA 本機資料」完全分開。自 v0.14.3 起 Confirm 文件歷史不再與本機合併，而是完全跟隨資料包的 `Universe Records.json`；Image Overrides 仍保留既有安全合併機制。
 - 新增 LOTNO 診斷報告，可查看 Stone List 解析、鑽石／色石、GROUP、MULTI、金色、圖片候選、最終選圖、Image Override 及 Quotation 計算資料，亦可匯出文字報告。
 - 大量圖片效能改善：圖片索引分批建立並顯示進度；不再在匯入時為全部圖片建立 Object URL；配套搜尋及文件縮圖改用 Lazy Load，只在接近畫面時載入；關閉圖片編輯器後釋放非選用候選圖的 Object URL。
 
