@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.13.2</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.14.0</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -42,12 +42,41 @@
   <section id="setup" class="tab-panel active">
     <article class="card package-card">
       <div class="section-title-row"><div><h3>匯入展覽資料包</h3><p class="muted">選擇包含 jmsdata、客戶表、Stone List、GoldSilver.xlsx、Template、Pictures 的展覽 Folder。</p></div></div>
-      <label class="file-picker package-picker">選擇展覽資料包 Folder
+      <label class="file-picker package-picker">更新／匯入展覽資料包 Folder
         <input id="exhibitionPackageInput" type="file" multiple webkitdirectory directory>
       </label>
-      <div id="packageStatus" class="notice">尚未選擇展覽資料包。</div>
+      <div id="packageStatus" class="notice">尚未選擇展覽資料包。更新資料包只會更新來源資料，會保留本機歷史文件、Recall、草稿、Image Overrides、文件流水號及 Exhibition Session／Name。</div>
       <div id="packageSummary" class="package-summary"></div>
-      <details class="advanced-imports"><summary>個別匯入／更換單一資料</summary>
+    </article>
+
+    <article class="card data-overview-card">
+      <div class="section-title-row"><div><h3>目前正在使用的資料</h3><p id="currentExhibitionStatus" class="muted">目前展覽：尚未命名</p></div></div>
+      <div id="dataVersionPanel" class="data-version-panel"></div>
+      <div id="goldFreshnessStatus" class="notice">GoldSilver.xlsx 未載入。</div>
+    </article>
+
+    <article class="card health-card">
+      <div class="section-title-row"><div><h3>展覽資料包健康檢查</h3><p class="muted">只檢查及提示，不會自動修改 jmsdata、Stone List 或其他來源檔。</p></div><button type="button" id="runHealthCheckBtn" class="ghost">重新檢查</button></div>
+      <div id="healthCheckStatus" class="notice">匯入資料後會自動檢查。</div>
+      <div id="healthCheckResults" class="health-results"></div>
+      <div class="health-actions">
+        <button type="button" id="showStoneConsistencyBtn" class="ghost">查看 Stone List 一致性</button>
+        <div class="diagnostic-quick"><input id="diagnosticLotInput" inputmode="text" placeholder="LOTNO 診斷"><button type="button" id="diagnosticLotBtn" class="ghost">診斷報告</button></div>
+      </div>
+    </article>
+
+    <article class="card pwa-data-card">
+      <div class="section-title-row"><div><h3>PWA 資料備份／還原</h3><p class="muted">備份本機歷史、Recall、草稿、Image Overrides、流水號及 Exhibition 資料。原始 Excel／Pictures 仍需另外保存。</p></div></div>
+      <div class="pwa-data-actions">
+        <button type="button" id="exportPwaBackupBtn" class="ghost">匯出 PWA 備份</button>
+        <button type="button" id="importPwaBackupBtn" class="ghost">還原 PWA 備份</button>
+        <input id="pwaBackupInput" type="file" accept="application/json,.json" hidden>
+      </div>
+      <div id="backupStatus" class="notice">「更新資料包」與「清空所有 PWA 本機資料」是完全分開的操作。</div>
+      <details class="danger-zone"><summary>高風險操作</summary><div class="danger-zone-body"><p>真正清空會刪除本機保存的歷史文件、草稿、Image Overrides、流水號及 Exhibition Session／Name，但不會刪除「檔案」App 內的原始資料包。</p><button type="button" id="clearAllPwaDataBtn" class="danger">清空所有 PWA 本機資料</button></div></details>
+    </article>
+
+    <details class="advanced-imports"><summary>個別匯入／更換單一資料</summary>
     <div class="two-col">
       <article class="card import-card" data-import-card="stock">
         <div class="import-card-head">
@@ -56,8 +85,8 @@
         </div>
         <div id="stockStatus" class="notice import-summary">尚未選擇倉存表。</div>
         <div class="import-card-body">
-          <label>展覽名稱
-            <input id="exhibitionName" value="Jewellery Show">
+          <label>內部 Exhibition Name（不會印在文件）
+            <input id="exhibitionName" value="" placeholder="例如 JCK Las Vegas 2026">
           </label>
           <label class="file-picker">選擇倉存表 (.xls / .xlsx)
             <input id="stockInput" type="file" accept=".xls,.xlsx">
@@ -89,6 +118,7 @@
         <button type="button" class="import-toggle ghost" aria-expanded="true">收合</button>
       </div>
       <div id="imageStatus" class="notice import-summary">尚未選擇圖片 Folder。</div>
+      <div id="imageIndexProgress" class="notice image-index-progress hidden"></div>
       <div class="import-card-body">
         <label class="file-picker">選擇圖片 Folder
           <input id="imageFolderInput" type="file" accept="image/*" multiple webkitdirectory directory>
@@ -102,7 +132,7 @@
           <h3>4. 匯入 Stone List &amp; Shape &amp; Cutting</h3>
           <button type="button" class="import-toggle ghost" aria-expanded="true">收合</button>
         </div>
-        <div id="stoneMappingStatus" class="notice import-summary">尚未選擇 Stone List 對照表；暫時使用內置基本對照。</div>
+        <div id="stoneMappingStatus" class="notice import-summary">尚未選擇 Stone List；石種／鑽石／GROUP 必須由 Stone List 提供。</div>
         <div class="import-card-body">
           <label class="file-picker">選擇對照表 (.xlsx)
             <input id="stoneMappingInput" type="file" accept=".xlsx,.xls">
@@ -184,7 +214,7 @@
           <option value="consignment">Consignment</option>
           <option value="quotation">Quotation</option>
         </select>
-        <input id="recallSearchInput" placeholder="輸入文件號碼、客戶或日期" autocomplete="off">
+        <input id="recallSearchInput" placeholder="輸入文件號碼、客戶、日期或 Exhibition Name" autocomplete="off">
         <button type="button" id="recallSearchBtn">搜尋</button>
       </div>
       <div id="recallActive" class="recall-active hidden"></div>
@@ -192,7 +222,7 @@
       <div id="recallResults" class="recall-results"></div>
     </article>
     <article class="card invoice-workspace">
-      <div class="workspace-tools"><button type="button" id="resetExhibitionSeqBtn" class="ghost">新展覽會・重設文件編號</button><div id="draftStatus" class="draft-status"></div></div>
+      <div class="workspace-tools"><div><button type="button" id="resetExhibitionSeqBtn" class="ghost">新展覽會・重設文件編號</button><span id="workspaceExhibitionName" class="workspace-exhibition-name"></span></div><div id="draftStatus" class="draft-status"></div></div>
       <h3 id="documentDataHeading">客人 Invoice 資料</h3>
       <div id="selectedCustomerSummary" class="selected-customer"></div>
       <div class="document-type-switch" role="group" aria-label="Document Type">
@@ -335,6 +365,17 @@
   <div class="dialog-head"><div><h3>Confirm 前最後核對</h3><p class="muted">請確認以下資料後再正式 Confirm。</p></div><button id="closeFinalConfirmBtn" type="button" class="ghost">返回修改</button></div>
   <div id="finalConfirmSummary" class="final-confirm-summary"></div>
   <div class="final-confirm-actions"><button id="cancelFinalConfirmBtn" type="button" class="ghost">返回修改</button><button id="finalConfirmBtn" type="button" class="primary">確定 Confirm</button></div>
+</dialog>
+
+<dialog id="stoneConsistencyDialog" class="diagnostic-dialog">
+  <div class="dialog-head"><div><h3>Stone List 自身一致性檢查</h3><p class="muted">只顯示問題及前綴重疊資訊，不會修改 Stone List。</p></div><button id="closeStoneConsistencyBtn" type="button" class="ghost">關閉</button></div>
+  <div id="stoneConsistencyContent" class="diagnostic-content"></div>
+</dialog>
+
+<dialog id="diagnosticDialog" class="diagnostic-dialog">
+  <div class="dialog-head"><div><h3>LOTNO 診斷報告</h3><p class="muted">顯示 PWA 目前實際判斷結果及來源，不修改資料。</p></div><button id="closeDiagnosticBtn" type="button" class="ghost">關閉</button></div>
+  <pre id="diagnosticContent" class="diagnostic-content"></pre>
+  <div class="diagnostic-actions"><button id="exportDiagnosticBtn" type="button" class="ghost">匯出診斷資料</button></div>
 </dialog>
 
 <dialog id="scannerDialog">

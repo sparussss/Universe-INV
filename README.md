@@ -1,5 +1,19 @@
-# Universe Invoice PWA v0.13.2
+# Universe Invoice PWA v0.14.0
 
+
+
+## v0.14.0 展覽資料管理／健康檢查／備份／診斷／圖片效能
+
+- 新增內部 Exhibition Name：開始新展覽並重設文件編號時輸入名稱；只供 PWA 管理及 Recall 分組，不印在 Invoice／Consignment／Quotation。
+- Recall 依 Exhibition Name 分組；同一年不同展覽即使文件號同樣由 YY0001 開始亦可清楚區分。
+- 資料匯入頁新增「目前正在使用的資料」，顯示 jmsdata、Stone List、GoldSilver、Customer、Pictures、Template 等實際載入版本／摘要。
+- 新增「展覽資料包健康檢查」：重複 LOTNO、I:J:K:L／Balance、Stone List 一致性、DESC2–DESC6 未辨認石種、Customer 預設 Sales Rate、圖片缺漏、GoldSilver 新鮮度、Template 狀態等。只提示，不自動改來源資料。
+- Stone List 自身一致性檢查會區分「同 BREAKDOWN 但石類／GROUP 矛盾」與「同 BREAKDOWN 的多個 QUOTATION Alias（正常）」；亦檢查缺 GROUP／石類／QUOTATION Alias，以及正常的前綴重疊資訊；前綴仍採最長配對。
+- GoldSilver.xlsx 新增「可能過期」提示；以工作日計算，週末不會被當作交易日。
+- 新增整個 PWA 本機資料備份／還原（JSON）：歷史文件、Recall、草稿、Image Overrides、文件流水號、Exhibition Session／Name 及設定。原始 Excel／Pictures 仍需另外保存。
+- 「更新資料包」與「清空所有 PWA 本機資料」完全分開；更新 jmsdata 會合併本機文件歷史及 Image Overrides，不因新版資料包缺少本機記錄而直接刪除。遇到同 Revision 衝突會先提示。
+- 新增 LOTNO 診斷報告，可查看 Stone List 解析、鑽石／色石、GROUP、MULTI、金色、圖片候選、最終選圖、Image Override 及 Quotation 計算資料，亦可匯出文字報告。
+- 大量圖片效能改善：圖片索引分批建立並顯示進度；不再在匯入時為全部圖片建立 Object URL；配套搜尋及文件縮圖改用 Lazy Load，只在接近畫面時載入；關閉圖片編輯器後釋放非選用候選圖的 Object URL。
 
 
 ## v0.13.2 Stone List 單一石種資料來源
