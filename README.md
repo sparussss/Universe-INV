@@ -1,6 +1,23 @@
-# Universe Invoice PWA v0.14.3
+# Universe Invoice PWA v0.14.5
 
-## v0.14.3 Universe Records 單一正式文件紀錄來源
+## v0.14.5 Records 內嵌 jmsdata.xlsx
+
+- 正式 Invoice／Consignment／Quotation 歷史、Recall、Revision、Cancelled、Exhibition ID／Name 及文件流水號不再使用獨立 `Universe Records.json`；全部內嵌在 `jmsdata.xlsx` 的第二個工作表 `Universe Records`。
+- `Universe Records` 工作表使用分段 JSON 儲存並設為 Hidden，避免 Excel 單一儲存格字數限制及日常誤改；PWA 仍可完整讀寫。
+- 新展覽的 `jmsdata.xlsx` 如果沒有 `Universe Records` 工作表，PWA 會自動視為全新展覽並建立空白 Records；第一次 Confirm 後輸出的 `jmsdata.xlsx` 會自動加入第二個工作表。
+- 為方便由 v0.14.3／v0.14.4 過渡，如果舊資料包仍有 `Universe Records.json` 而 jmsdata 尚未內嵌 Records，v0.14.5 會在匯入時一次性遷移；之後輸出的更新資料包不再包含獨立 JSON。
+- Confirm 只需輸出一份 `jmsdata.xlsx`：庫存與正式文件記錄同步保存，避免 iPhone 對同一次操作連續兩個下載的限制。
+- 已移除「配套搜尋」頁面的「匯出更新後 jmsdata」按鍵；資料匯入頁仍保留「匯出目前 jmsdata.xlsx」作手動備份／補輸出。
+
+
+
+## v0.14.4 移除「新展覽會・重設文件編號」
+
+- 移除建立文件頁的「新展覽會・重設文件編號」按鍵及相關程式入口。
+- 新展覽的文件記錄與流水號改由新資料包內的全新 `Universe Records.json` 自然開始；匯入全新 Template 即代表新展覽，不再需要另外手動重設。
+- 其餘 v0.14.3 功能維持不變。
+
+## v0.14.3 Universe Records 單一正式文件紀錄來源（歷史架構，v0.14.5 已內嵌 jmsdata.xlsx）
 
 - 新增 `Universe Records.json`，作為每次展覽會唯一正式的 Invoice／Consignment／Quotation 歷史、Recall、Revision、Cancelled、Exhibition ID／Name 及文件流水號來源。
 - 每個新展覽資料包都應放入一份全新的空白 `Universe Records.json` Template；Template 的 `exhibitionId`／`exhibitionName` 可留空，首次匯入時 PWA 會產生新的 Exhibition ID，並以資料包 Folder 名稱作 Exhibition Name。
@@ -9,7 +26,6 @@
 - Confirm 後會分別輸出最新 `jmsdata.xlsx` 及 `Universe Records.json`；請把兩個檔案取代回同一個展覽資料包。Quotation 只更新 Records，不改 I:J:K:L 庫存。
 - 「匯出更新後資料包」會同時把最新 `jmsdata.xlsx` 及 `Universe Records.json` 放回 ZIP 內。
 - PWA 本機不再保存 Confirm 文件歷史作第二套正式資料庫；本機只保留未完成草稿、Image Override 暫存及必要設定。
-- 「新展覽會・重設文件編號」現在亦會建立一套全新的空白文件記錄與新 Exhibition ID，下一號回到 `INVYY0001 / CONYY0001 / QUOYY0001`。
 
 
 ## v0.14.2 配套搜尋切換／大量清單效能
@@ -34,7 +50,7 @@
 
 ## v0.14.0 展覽資料管理／健康檢查／備份／診斷／圖片效能
 
-- 新增內部 Exhibition Name：開始新展覽並重設文件編號時輸入名稱；只供 PWA 管理及 Recall 分組，不印在 Invoice／Consignment／Quotation。
+- 新增內部 Exhibition Name：由資料包的 Universe Records.json 提供；只供 PWA 管理及 Recall 分組，不印在 Invoice／Consignment／Quotation。
 - Recall 依 Exhibition Name 分組；同一年不同展覽即使文件號同樣由 YY0001 開始亦可清楚區分。
 - 資料匯入頁新增「目前正在使用的資料」，顯示 jmsdata、Stone List、GoldSilver、Customer、Pictures、Template 等實際載入版本／摘要。
 - 新增「展覽資料包健康檢查」：重複 LOTNO、I:J:K:L／Balance、Stone List 一致性、DESC2–DESC6 未辨認石種、Customer 預設 Sales Rate、圖片缺漏、GoldSilver 新鮮度、Template 狀態等。只提示，不自動改來源資料。
@@ -70,7 +86,6 @@
 - Customer、Sales Rate、Document No. 等關鍵資料不完整時會先阻止 Confirm。
 - 文件貨品區新增圖片狀態摘要；有黑白 fallback／無圖時，Confirm 及 Excel 匯出前會提醒，但不強制阻止。
 - Unit Price 經人手修改後顯示「人手修改 Unit Price」標記，最後核對亦會列出數量。
-- 新增「新展覽會・重設文件編號」，可將當年 Invoice／Consignment／Quotation 下一號重設至 `INVYY0001`／`CONYY0001`／`QUOYY0001`；內部以展覽 Session 區分同年重複文件號，舊文件不改並仍可 Recall。
 - Service Worker 會在版本安裝時預先快取 SheetJS、html5-qrcode、ExcelJS、SortableJS、JSZip 等核心 library；成功安裝／更新一次後，展覽核心流程可在離線情況繼續使用。
 
 

@@ -16,7 +16,7 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.14.3</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.14.5</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -41,11 +41,11 @@
 
   <section id="setup" class="tab-panel">
     <article class="card package-card">
-      <div class="section-title-row"><div><h3>匯入展覽資料包</h3><p class="muted">選擇包含 jmsdata.xlsx、Universe Records.json、客戶表、Stone List、GoldSilver.xlsx、Template、Pictures 的展覽 Folder。</p></div></div>
+      <div class="section-title-row"><div><h3>匯入展覽資料包</h3><p class="muted">選擇包含 jmsdata.xlsx、客戶表、Stone List、GoldSilver.xlsx、Template、Pictures 的展覽 Folder。正式文件記錄保存在 jmsdata.xlsx 的第二個「Universe Records」工作表。</p></div></div>
       <label class="file-picker package-picker">更新／匯入展覽資料包 Folder
         <input id="exhibitionPackageInput" type="file" multiple webkitdirectory directory>
       </label>
-      <div id="packageStatus" class="notice">尚未選擇展覽資料包。正式 Invoice／Consignment／Quotation 歷史與流水號以資料包內的 Universe Records.json 為唯一來源；本機只保留草稿及必要暫存。</div>
+      <div id="packageStatus" class="notice">尚未選擇展覽資料包。正式 Invoice／Consignment／Quotation 歷史與流水號保存在 jmsdata.xlsx 的第二個「Universe Records」工作表；本機只保留草稿及必要暫存。</div>
       <div id="packageSummary" class="package-summary"></div>
     </article>
 
@@ -66,14 +66,14 @@
     </article>
 
     <article class="card pwa-data-card">
-      <div class="section-title-row"><div><h3>PWA 資料備份／還原</h3><p class="muted">備份本機草稿、Image Overrides 暫存及設定。正式 Confirm 文件歷史請保存資料包內的 Universe Records.json。</p></div></div>
+      <div class="section-title-row"><div><h3>PWA 資料備份／還原</h3><p class="muted">備份本機草稿、Image Overrides 暫存及設定。正式 Confirm 文件歷史請保存最新 jmsdata.xlsx（Sheet 2：Universe Records）。</p></div></div>
       <div class="pwa-data-actions">
         <button type="button" id="exportPwaBackupBtn" class="ghost">匯出 PWA 備份</button>
         <button type="button" id="importPwaBackupBtn" class="ghost">還原 PWA 備份</button>
         <input id="pwaBackupInput" type="file" accept="application/json,.json" hidden>
       </div>
       <div id="backupStatus" class="notice">「更新資料包」與「清空所有 PWA 本機資料」是完全分開的操作。</div>
-      <details class="danger-zone"><summary>高風險操作</summary><div class="danger-zone-body"><p>真正清空只會刪除 PWA 本機草稿、Image Overrides 暫存及設定；不會刪除「檔案」App 內的 jmsdata.xlsx 或 Universe Records.json。</p><button type="button" id="clearAllPwaDataBtn" class="danger">清空所有 PWA 本機資料</button></div></details>
+      <details class="danger-zone"><summary>高風險操作</summary><div class="danger-zone-body"><p>真正清空只會刪除 PWA 本機草稿、Image Overrides 暫存及設定；不會刪除「檔案」App 內的 jmsdata.xlsx。</p><button type="button" id="clearAllPwaDataBtn" class="danger">清空所有 PWA 本機資料</button></div></details>
     </article>
 
     <details class="advanced-imports"><summary>個別匯入／更換單一資料</summary>
@@ -91,8 +91,8 @@
           <label class="file-picker">選擇倉存表 (jmsdata.xlsx)
             <input id="stockInput" type="file" accept=".xlsx">
           </label>
-          <div class="pwa-data-actions"><button type="button" id="exportJmsdataBtn" class="ghost" disabled>匯出目前 jmsdata.xlsx</button><button type="button" id="exportUniverseRecordsBtn" class="ghost" disabled>匯出 Universe Records.json</button></div>
-          <div id="jmsdataExportStatus" class="notice">Confirm 後會分別輸出 jmsdata.xlsx 與 Universe Records.json；jmsdata 只保存庫存／Image Overrides，文件歷史只保存於 Universe Records.json。Quotation 不改庫存。</div>
+          <div class="pwa-data-actions"><button type="button" id="exportJmsdataBtn" class="ghost" disabled>匯出目前 jmsdata.xlsx</button></div>
+          <div id="jmsdataExportStatus" class="notice">Confirm 後只輸出一份最新 jmsdata.xlsx：Sheet 1 保存庫存，Sheet 2「Universe Records」保存正式文件歷史／Recall／Revision／流水號；Quotation 只更新 Records，不改庫存。</div>
           <details><summary>倉存欄位規則</summary><p>Barcode = LOTNO、圖片 = ARTNO、U價 = PRICE、Invoice Description = DESC1 至 DESC6、單位 = UNIT。I = Delivered、J = Available、K = Sold on hand、L = Consignment、M = Balance，並檢查 SUM(I:L) = M。</p></details>
         </div>
       </article>
@@ -225,7 +225,7 @@
       <div id="recallResults" class="recall-results"></div>
     </article>
     <article class="card invoice-workspace">
-      <div class="workspace-tools"><div><button type="button" id="resetExhibitionSeqBtn" class="ghost">新展覽會・重設文件編號</button><span id="workspaceExhibitionName" class="workspace-exhibition-name"></span></div><div id="draftStatus" class="draft-status"></div></div>
+      <div class="workspace-tools"><div><span id="workspaceExhibitionName" class="workspace-exhibition-name"></span></div><div id="draftStatus" class="draft-status"></div></div>
       <h3 id="documentDataHeading">客人 Invoice 資料</h3>
       <div id="selectedCustomerSummary" class="selected-customer"></div>
       <div class="document-type-switch" role="group" aria-label="Document Type">
@@ -330,7 +330,6 @@
       <div class="image-override-tools">
         <div id="imageOverrideStatus" class="notice">尚未有 LOTNO 手動選圖記錄。</div>
         <div class="image-override-buttons">
-          <button id="exportImageOverridesBtn" type="button" class="ghost" disabled>匯出更新後 jmsdata</button>
           <button id="exportUpdatedPackageBtn" type="button" class="ghost" disabled>匯出更新後資料包</button>
         </div>
       </div>

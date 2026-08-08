@@ -400,7 +400,6 @@ button{width:auto}
 
 /* v0.13.0 exhibition reliability: draft, final check, image/manual-price warnings */
 .workspace-tools{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;flex-wrap:wrap}
-.workspace-tools #resetExhibitionSeqBtn{font-size:12px;padding:8px 10px}
 .draft-status{min-height:18px;font-size:11px;color:#667085;text-align:right}
 .draft-status.ok{color:#067647}.draft-status.warn{color:#b54708}
 .image-warning-summary{margin:0 0 10px;font-weight:650}
