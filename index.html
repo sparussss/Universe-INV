@@ -7,16 +7,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Universe Invoice">
-  <link rel="manifest" href="manifest.webmanifest?v=0.14.9">
+  <link rel="manifest" href="manifest.webmanifest?v=0.14.12">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.14.9">
+  <link rel="stylesheet" href="styles.css?v=0.14.12">
   <title>Universe Invoice</title>
 </head>
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow" id="appVersionEyebrow">Jewellery Exhibition PWA · v0.14.9</div>
+    <div class="eyebrow" id="appVersionEyebrow">Jewellery Exhibition PWA · v0.14.12</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -35,7 +35,7 @@
   <nav class="tabs main-tabs">
     <button class="tab active" data-tab="customer">選擇客戶</button>
     <button class="tab" data-tab="invoice">建立文件</button>
-    <button class="tab" data-tab="stockSearch">配套搜尋</button>
+    <button class="tab" data-tab="stockSearch">款式搜尋</button>
     <button class="tab" data-tab="preview">文件預覽</button>
   </nav>
 
@@ -72,7 +72,7 @@
         <button type="button" id="importPwaBackupBtn" class="ghost">還原 PWA 備份</button>
         <input id="pwaBackupInput" type="file" accept="application/json,.json" hidden>
       </div>
-      <div id="backupStatus" class="notice">「更新資料包」與「清空所有 PWA 本機資料」是完全分開的操作。</div>
+      <div id="backupStatus" class="notice">「匯入／更換展覽資料包」與「清空所有 PWA 本機資料」是完全分開的操作。</div>
       <details class="danger-zone"><summary>高風險操作</summary><div class="danger-zone-body"><p>真正清空只會刪除 PWA 本機草稿、Image Overrides 暫存及設定；不會刪除「檔案」App 內的 jmsdata.xlsx。</p><button type="button" id="clearAllPwaDataBtn" class="danger">清空所有 PWA 本機資料</button></div></details>
     </article>
 
@@ -225,7 +225,7 @@
       <div id="recallResults" class="recall-results"></div>
     </article>
     <article class="card invoice-workspace">
-      <div class="workspace-tools"><div><span id="workspaceExhibitionName" class="workspace-exhibition-name"></span></div><div id="draftStatus" class="draft-status"></div></div>
+      <div class="workspace-tools hidden"><div id="draftStatus" class="draft-status"></div></div>
       <h3 id="documentDataHeading">客人 Invoice 資料</h3>
       <div id="selectedCustomerSummary" class="selected-customer"></div>
       <div class="document-type-switch" role="group" aria-label="Document Type">
@@ -311,7 +311,7 @@
   <section id="stockSearch" class="tab-panel">
     <article class="card">
       <div class="section-title-row stock-search-title">
-        <div><h3>配套／庫存搜尋</h3></div>
+        <div><h3>款式／庫存搜尋</h3></div>
       </div>
       <div class="stock-search-row">
         <input id="stockSearchInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="輸入款號">
@@ -329,9 +329,6 @@
       <div id="stockSearchSummary" class="stock-search-summary hidden"></div>
       <div class="image-override-tools">
         <div id="imageOverrideStatus" class="notice">尚未有 LOTNO 手動選圖記錄。</div>
-        <div class="image-override-buttons">
-          <button id="exportUpdatedPackageBtn" type="button" class="ghost" disabled>匯出更新後資料包</button>
-        </div>
       </div>
       <div id="stockSearchResults" class="stock-search-results"></div>
     </article>
@@ -426,7 +423,6 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="app.js?v=0.14.9"></script>
+<script src="app.js?v=0.14.12"></script>
 </body>
 </html>

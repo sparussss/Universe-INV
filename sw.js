@@ -1,12 +1,11 @@
-const CACHE='universe-invoice-v0.14.9';
-const DEP_CACHE='universe-invoice-dependencies-v1';
-const LOCAL_ASSETS=['./','./index.html','./styles.css?v=0.14.9','./app.js?v=0.14.9','./manifest.webmanifest?v=0.14.9','./icon.svg','./icon-192.png','./icon-512.png'];
+const CACHE='universe-invoice-v0.14.12';
+const DEP_CACHE='universe-invoice-dependencies-v2';
+const LOCAL_ASSETS=['./','./index.html','./styles.css?v=0.14.12','./app.js?v=0.14.12','./manifest.webmanifest?v=0.14.12','./icon.svg','./icon-192.png','./icon-512.png'];
 const EXTERNAL_ASSETS=[
   'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
   'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js',
   'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js',
-  'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js',
-  'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'
+  'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js'
 ];
 self.addEventListener('install',e=>{
   self.skipWaiting();

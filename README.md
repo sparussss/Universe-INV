@@ -1,9 +1,11 @@
-# Universe Invoice PWA v0.14.9
+# Universe Invoice PWA v0.14.12
 
-## v0.14.9 快取檔案整理
+## v0.14.12 移除「匯出更新後資料包」
 
-- 移除 v0.14.8 重複的 `app-v0.14.8.js`；PWA 只保留單一主程式 `app.js`。
-- `index.html` 以 `app.js?v=0.14.9` 載入主程式，保留版本化 cache-busting 效果。
-- Service Worker 使用 `universe-invoice-v0.14.9` 新 cache，並繼續對本機 PWA 程式採用 network-first；離線時才 fallback 到 cache。
-- Service Worker 註冊改用 `updateViaCache: none` 並主動檢查更新，降低 iPhone 沿用舊程式的機會。
-- 其餘 v0.14.8 的 Universe Records / 新展覽隔離邏輯及所有功能維持不變。
+- 完全移除「匯出更新後資料包」按鍵及 `exportUpdatedPackage()` 程式。
+- 移除只為此功能使用的 JSZip 依賴及 Service Worker 離線快取項目。
+- 「款式搜尋」頁不再提供整個展覽 Folder 的 ZIP 輸出。
+- Confirm Invoice／Consignment／Quotation 仍會輸出最新 `jmsdata.xlsx`；正式文件記錄繼續保存在 Sheet 2「Universe Records」。
+- 保留「資料匯入」頁的「匯出目前 jmsdata.xlsx」作手動備份／補輸出。
+- 手動選圖記錄會寫入最新 `jmsdata.xlsx`；新上傳／拍攝圖片檔本身不會嵌入 Excel，因此相關提示改為只說明目前 PWA 暫存狀態，不再提示匯出資料包。
+- 保留 v0.14.11 的「款式搜尋」名稱、新展覽 Records 隔離及 cache-busting / network-first 更新機制。
