@@ -1,11 +1,21 @@
-# Universe Invoice PWA v0.14.5
+# Universe Invoice PWA v0.14.7
 
-## v0.14.5 Records 內嵌 jmsdata.xlsx
+
+## v0.14.7 新展覽 Records 強制隔離
+
+- 匯入任何 `jmsdata.xlsx` 前，先清空 PWA 記憶體內上一個展覽的正式 document store、Recall、文件流水號及 Exhibition Session，再只以新匯入的 `jmsdata.xlsx` 決定正式記錄。
+- 如果 `jmsdata.xlsx` 沒有 `Universe Records` 工作表，會強制視為全新展覽：Recall = 0、Invoice／Consignment／Quotation 流水號由 0001 開始，並建立全新的 Exhibition ID。
+- 全新展覽會同時清除上一個展覽的未完成草稿及目前工作文件，避免草稿把舊 Exhibition Session 帶回新展覽。
+- 草稿只可以在其 `exhibitionSession` 與目前 `jmsdata.xlsx` 的 Exhibition ID 完全相同時恢復；不同展覽的草稿會直接忽略及清除。
+- Recall 顯示再加一層保護，只顯示目前 Exhibition ID 的文件，即使工作表內意外存在其他 Session 亦不會顯示。
+- 獨立 `Universe Records.json` 仍完全不讀取、不匯入；正式文件記錄唯一來源是 `jmsdata.xlsx` 的 `Universe Records` 工作表。
+
+## v0.14.6 Records 完全內嵌 jmsdata.xlsx
 
 - 正式 Invoice／Consignment／Quotation 歷史、Recall、Revision、Cancelled、Exhibition ID／Name 及文件流水號不再使用獨立 `Universe Records.json`；全部內嵌在 `jmsdata.xlsx` 的第二個工作表 `Universe Records`。
 - `Universe Records` 工作表使用分段 JSON 儲存並設為 Hidden，避免 Excel 單一儲存格字數限制及日常誤改；PWA 仍可完整讀寫。
 - 新展覽的 `jmsdata.xlsx` 如果沒有 `Universe Records` 工作表，PWA 會自動視為全新展覽並建立空白 Records；第一次 Confirm 後輸出的 `jmsdata.xlsx` 會自動加入第二個工作表。
-- 為方便由 v0.14.3／v0.14.4 過渡，如果舊資料包仍有 `Universe Records.json` 而 jmsdata 尚未內嵌 Records，v0.14.5 會在匯入時一次性遷移；之後輸出的更新資料包不再包含獨立 JSON。
+- 不再支援或匯入獨立 `Universe Records.json`。正式文件記錄只讀取 `jmsdata.xlsx` 的 `Universe Records` 工作表；更新後資料包會排除舊 JSON。
 - Confirm 只需輸出一份 `jmsdata.xlsx`：庫存與正式文件記錄同步保存，避免 iPhone 對同一次操作連續兩個下載的限制。
 - 已移除「配套搜尋」頁面的「匯出更新後 jmsdata」按鍵；資料匯入頁仍保留「匯出目前 jmsdata.xlsx」作手動備份／補輸出。
 
@@ -14,19 +24,8 @@
 ## v0.14.4 移除「新展覽會・重設文件編號」
 
 - 移除建立文件頁的「新展覽會・重設文件編號」按鍵及相關程式入口。
-- 新展覽的文件記錄與流水號改由新資料包內的全新 `Universe Records.json` 自然開始；匯入全新 Template 即代表新展覽，不再需要另外手動重設。
+- 新展覽的文件記錄與流水號由新匯入的 `jmsdata.xlsx` 自然開始；沒有 `Universe Records` 工作表即視為全新展覽，不再需要另外手動重設。
 - 其餘 v0.14.3 功能維持不變。
-
-## v0.14.3 Universe Records 單一正式文件紀錄來源（歷史架構，v0.14.5 已內嵌 jmsdata.xlsx）
-
-- 新增 `Universe Records.json`，作為每次展覽會唯一正式的 Invoice／Consignment／Quotation 歷史、Recall、Revision、Cancelled、Exhibition ID／Name 及文件流水號來源。
-- 每個新展覽資料包都應放入一份全新的空白 `Universe Records.json` Template；Template 的 `exhibitionId`／`exhibitionName` 可留空，首次匯入時 PWA 會產生新的 Exhibition ID，並以資料包 Folder 名稱作 Exhibition Name。
-- 匯入新資料包時，PWA 會先清空上一個資料包在記憶體中的正式文件記錄，再完全以新資料包的 `Universe Records.json` 載入；因此新展覽不會再顯示上一個展覽的 Recall 記錄。
-- `jmsdata.xlsx` 不再保存 Invoice Header／Items、Consignment Header／Items、Quotation Header／Items 或 Transaction History 工作表；舊版 jmsdata 如仍有這些工作表，重新輸出時會移除，避免雙重正式紀錄。
-- Confirm 後會分別輸出最新 `jmsdata.xlsx` 及 `Universe Records.json`；請把兩個檔案取代回同一個展覽資料包。Quotation 只更新 Records，不改 I:J:K:L 庫存。
-- 「匯出更新後資料包」會同時把最新 `jmsdata.xlsx` 及 `Universe Records.json` 放回 ZIP 內。
-- PWA 本機不再保存 Confirm 文件歷史作第二套正式資料庫；本機只保留未完成草稿、Image Override 暫存及必要設定。
-
 
 ## v0.14.2 配套搜尋切換／大量清單效能
 
@@ -50,14 +49,14 @@
 
 ## v0.14.0 展覽資料管理／健康檢查／備份／診斷／圖片效能
 
-- 新增內部 Exhibition Name：由資料包的 Universe Records.json 提供；只供 PWA 管理及 Recall 分組，不印在 Invoice／Consignment／Quotation。
+- 新增內部 Exhibition Name：由 jmsdata.xlsx 的 Universe Records 工作表提供；只供 PWA 管理及 Recall 分組，不印在 Invoice／Consignment／Quotation。
 - Recall 依 Exhibition Name 分組；同一年不同展覽即使文件號同樣由 YY0001 開始亦可清楚區分。
 - 資料匯入頁新增「目前正在使用的資料」，顯示 jmsdata、Stone List、GoldSilver、Customer、Pictures、Template 等實際載入版本／摘要。
 - 新增「展覽資料包健康檢查」：重複 LOTNO、I:J:K:L／Balance、Stone List 一致性、DESC2–DESC6 未辨認石種、Customer 預設 Sales Rate、圖片缺漏、GoldSilver 新鮮度、Template 狀態等。只提示，不自動改來源資料。
 - Stone List 自身一致性檢查會區分「同 BREAKDOWN 但石類／GROUP 矛盾」與「同 BREAKDOWN 的多個 QUOTATION Alias（正常）」；亦檢查缺 GROUP／石類／QUOTATION Alias，以及正常的前綴重疊資訊；前綴仍採最長配對。
 - GoldSilver.xlsx 新增「可能過期」提示；以工作日計算，週末不會被當作交易日。
-- v0.14.0 曾把 Confirm 歷史納入 PWA 本機備份；自 v0.14.3 起正式文件歷史改由 `Universe Records.json` 單一保存，本機備份只保留草稿、Image Override 暫存及設定。
-- 「更新資料包」與「清空所有 PWA 本機資料」完全分開。自 v0.14.3 起 Confirm 文件歷史不再與本機合併，而是完全跟隨資料包的 `Universe Records.json`；Image Overrides 仍保留既有安全合併機制。
+- v0.14.0 曾把 Confirm 歷史納入 PWA 本機備份；正式文件歷史由 `jmsdata.xlsx` 的 `Universe Records` 工作表單一保存，本機備份只保留草稿、Image Override 暫存及設定。
+- 「更新資料包」與「清空所有 PWA 本機資料」完全分開。Confirm 文件歷史不與本機合併，而是完全跟隨資料包的 `jmsdata.xlsx` / `Universe Records`；Image Overrides 仍保留既有安全合併機制。
 - 新增 LOTNO 診斷報告，可查看 Stone List 解析、鑽石／色石、GROUP、MULTI、金色、圖片候選、最終選圖、Image Override 及 Quotation 計算資料，亦可匯出文字報告。
 - 大量圖片效能改善：圖片索引分批建立並顯示進度；不再在匯入時為全部圖片建立 Object URL；配套搜尋及文件縮圖改用 Lazy Load，只在接近畫面時載入；關閉圖片編輯器後釋放非選用候選圖的 Object URL。
 
