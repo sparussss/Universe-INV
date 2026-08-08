@@ -1,4 +1,4 @@
-const CACHE='universe-invoice-v0.14.0';
+const CACHE='universe-invoice-v0.14.1';
 const DEP_CACHE='universe-invoice-dependencies-v1';
 const LOCAL_ASSETS=['./','./index.html','./styles.css','./app.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png'];
 const EXTERNAL_ASSETS=[

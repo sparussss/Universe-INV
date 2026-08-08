@@ -16,14 +16,14 @@
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow">Jewellery Exhibition PWA · v0.14.0</div>
+    <div class="eyebrow">Jewellery Exhibition PWA · v0.14.1</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
 
 <main>
   <section class="card hero">
-    <div><h2>展覽文件工作台</h2></div>
+    <div class="hero-title-row"><h2>展覽文件工作台</h2><button type="button" id="dataImportBtn" class="ghost workspace-import-btn">資料匯入</button></div>
     <div class="status-grid">
       <div><span>產品</span><strong id="productCount">0</strong></div>
       <div><span>客戶</span><strong id="customerCount">0</strong></div>
@@ -32,14 +32,14 @@
     </div>
   </section>
 
-  <nav class="tabs">
-    <button class="tab active" data-tab="setup">資料匯入</button>
+  <nav class="tabs main-tabs">
+    <button class="tab active" data-tab="customer">選擇客戶</button>
     <button class="tab" data-tab="invoice">建立文件</button>
     <button class="tab" data-tab="stockSearch">配套搜尋</button>
     <button class="tab" data-tab="preview">文件預覽</button>
   </nav>
 
-  <section id="setup" class="tab-panel active">
+  <section id="setup" class="tab-panel">
     <article class="card package-card">
       <div class="section-title-row"><div><h3>匯入展覽資料包</h3><p class="muted">選擇包含 jmsdata、客戶表、Stone List、GoldSilver.xlsx、Template、Pictures 的展覽 Folder。</p></div></div>
       <label class="file-picker package-picker">更新／匯入展覽資料包 Folder
@@ -88,11 +88,11 @@
           <label>內部 Exhibition Name（不會印在文件）
             <input id="exhibitionName" value="" placeholder="例如 JCK Las Vegas 2026">
           </label>
-          <label class="file-picker">選擇倉存表 (.xls / .xlsx)
-            <input id="stockInput" type="file" accept=".xls,.xlsx">
+          <label class="file-picker">選擇倉存表 (jmsdata.xlsx)
+            <input id="stockInput" type="file" accept=".xlsx">
           </label>
-          <button type="button" id="exportJmsdataBtn" class="ghost" disabled>匯出目前 jmsdata.xls</button>
-          <div id="jmsdataExportStatus" class="notice">Confirm Invoice／Consignment／Quotation 後會輸出包含最新文件記錄的 jmsdata.xls；Quotation 不改庫存。</div>
+          <button type="button" id="exportJmsdataBtn" class="ghost" disabled>匯出目前 jmsdata.xlsx</button>
+          <div id="jmsdataExportStatus" class="notice">Confirm Invoice／Consignment／Quotation 後會輸出包含最新文件記錄的 jmsdata.xlsx；Quotation 不改庫存。</div>
           <details><summary>倉存欄位規則</summary><p>Barcode = LOTNO、圖片 = ARTNO、U價 = PRICE、Invoice Description = DESC1 至 DESC6、單位 = UNIT。I = Delivered、J = Available、K = Sold on hand、L = Consignment、M = Balance，並檢查 SUM(I:L) = M。</p></details>
         </div>
       </article>
@@ -168,6 +168,9 @@
     </div>
 
       </details>
+  </section>
+
+  <section id="customer" class="tab-panel active">
     <article class="card">
       <h3>選擇客戶</h3>
       <div class="search-row">
@@ -301,7 +304,7 @@
         <div class="grand"><span>Total</span><strong id="grandTotal">$0.00</strong></div>
       </div>
       <div class="bottom-remark"><label>Remark<textarea id="remark" rows="3" placeholder="可分行輸入"></textarea></label></div>
-      <div class="confirm-row"><button id="confirmInvoiceBtn" class="primary">Confirm Invoice 並更新 jmsdata</button></div>
+      <div class="confirm-row"><button id="markAllDeliveredBtn" type="button" class="ghost delivery-bulk-btn">全部標記已交貨</button><button id="confirmInvoiceBtn" class="primary">Confirm Invoice 並更新 jmsdata.xlsx</button></div>
     </article>
   </section>
 
@@ -415,6 +418,7 @@
     <div class="item-side-actions">
       <button type="button" class="drag-handle" aria-label="排序">≡</button>
       <button type="button" class="item-edit-toggle ghost">編輯</button>
+      <button type="button" class="item-delivery-toggle ghost">未交貨</button>
     </div>
   </div>
 </template>

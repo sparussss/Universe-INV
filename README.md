@@ -1,5 +1,15 @@
-# Universe Invoice PWA v0.14.0
+# Universe Invoice PWA v0.14.1
 
+
+
+## v0.14.1 客戶優先導覽／Invoice 交貨狀態／jmsdata.xlsx
+
+- 「資料匯入」移到「展覽文件工作台」標題右側；主導覽改為「選擇客戶／建立文件／配套搜尋／文件預覽」，預設停在「選擇客戶」。
+- 配套搜尋只顯示 Available／Consigned／Sold - On Hand／Sold - Delivered 等庫存狀態，不再提供「標記已交貨／取消已交貨」操作。
+- Invoice 每款貨品在「編輯」下方加入「未交貨／已交貨 ✓」按鍵；底部加入「全部標記已交貨」。這些選擇只在 Confirm Invoice 時正式寫入 jmsdata。
+- Recall Invoice 會按目前 jmsdata 自動帶入每款實際交貨狀態；Delivered 貨品要刪除／取消文件時，必須先在該 Invoice 明確改成「未交貨」，不再要求到配套搜尋處理。
+- Confirm 前最後核對新增 Invoice 已交貨／未交貨款數。
+- 庫存主檔正式統一為 `jmsdata.xlsx`；PWA 庫存匯入只接受 `.xlsx`，Confirm／手動匯出／更新資料包亦統一輸出 `jmsdata.xlsx`。
 
 
 ## v0.14.0 展覽資料管理／健康檢查／備份／診斷／圖片效能
