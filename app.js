@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const APP_VERSION='0.14.13';
+const APP_VERSION='0.14.15';
 const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xlsx',stockIntegrityIssues:[],stockDuplicateLots:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneEnglishNames:new Map(),diamondStoneCodes:new Set(),stoneMappingName:'',stoneDiagnostics:{duplicates:[],multiAlias:[],missingGroup:[],missingType:[],missingQuotation:[],prefixOverlaps:[]},articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',exhibitionName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',currentLondonPm:0,currentLondonPmDate:'',source:'',historicalPm:{},goldPrices:new Map(),goldDates:[],goldDataName:'',goldDataRows:0},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],quotationHeaders:[],quotationItems:[],transactions:[]},recall:null,deliveryReturns:new Set(),exhibitionSession:'',draft:{baseline:'',timer:null,prompted:false,restoring:false},stockSearch:{query:'*',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null,packageFiles:[],customPackageImages:new Map(),packageImageDirtyFiles:new Set(),dataMeta:{},importConflicts:[],health:{},imageIndexProgress:{done:0,total:0},diagnosticLot:'',recordsLoaded:false,recordsFileName:'jmsdata.xlsx / Universe Records',recordsFilePath:'',recordCounters:{invoice:1,consignment:1,quotation:1},recordsDirty:false};
 const EXHIBITION_SESSION_KEY='universeExhibitionSession_v1',EXHIBITION_NAME_KEY='universeExhibitionName_v1',IMAGE_OVERRIDE_LOCAL_KEY='universeImageOverrides_v1';try{state.exhibitionSession=localStorage.getItem(EXHIBITION_SESSION_KEY)||'';state.exhibitionName=localStorage.getItem(EXHIBITION_NAME_KEY)||''}catch{}
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
@@ -1237,8 +1237,9 @@ async function exportInvoiceFromTemplate(){
   const findOriginalFooterLabelRow=(text)=>{const needle=String(text||'').toLowerCase();for(let r=footerBaseRow;r<=originalFooterEnd;r++)for(let c=1;c<=Math.max(9,ws.columnCount||9);c++){if(norm(ws.getRow(r).getCell(c).value).toLowerCase().includes(needle))return r}return 0};
   const originalRemarkRow=findOriginalFooterLabelRow('remark')||footerBaseRow+9;
   const originalSignatureRow=findOriginalFooterLabelRow('vender signature')||findOriginalFooterLabelRow('accept by')||originalRemarkRow+3;
-  const builtInStoneRows=Math.max(0,originalSignatureRow-originalRemarkRow-1);
-  const extraRemarkRows=Math.max(0,stoneDescriptionPairs.length-builtInStoneRows);
+  // Reserve one completely blank row after the final Stone Description line before signatures.
+  const builtInStoneRows=Math.max(0,originalSignatureRow-originalRemarkRow-2);
+  const extraRemarkRows=stoneDescriptionPairs.length?Math.max(0,stoneDescriptionPairs.length-builtInStoneRows):0;
   const originalContentRows=Math.max(1,footerBaseRow-firstItemRow-1);
   const baseContentRows=Math.min(4,originalContentRows);
   const separatorSourceRow=firstItemRow+baseContentRows;
@@ -1371,8 +1372,6 @@ async function exportInvoiceFromTemplate(){
     ws.getCell(`${noCol}${start}`).alignment={...cloneStyle(ws.getCell(`${noCol}${start}`).alignment),horizontal:'center',vertical:'middle'};
     ws.getCell(`${lotCol}${start}`).value=`Lot.No. : ${item.lotNo}`;
     ws.getCell(`${artCol}${start+1}`).value=item.artNo;
-    ws.getCell(`${lotCol}${start}`).font={...cloneStyle(ws.getCell(`${lotCol}${start}`).font),bold:false};
-    ws.getCell(`${artCol}${start+1}`).font={...cloneStyle(ws.getCell(`${artCol}${start+1}`).font),bold:false};
 
     for(let r=0;r<contentRows;r++){
       const cell=ws.getCell(`${descCol}${start+r}`);
@@ -1472,6 +1471,12 @@ async function exportInvoiceFromTemplate(){
     amountCell.alignment={...cloneStyle(amountCell.alignment),vertical:'middle',wrapText:false};
   }
   const remarkLabel=findLabelRow('remark');
+  // Stone Description visual style is owned by the Invoice Master Template.
+  // Reuse the original Remark content cell (C on the template footer) instead
+  // of hard-coding font name, size, bold, alignment or wrapping in the PWA.
+  const remarkTemplateOffset=Math.max(0,originalRemarkRow-footerBaseRow);
+  const remarkTemplateCaptured=footerRows[remarkTemplateOffset]?.row?.[Math.min(2,columnCount-1)]||null;
+  const remarkTemplateHeight=Number(footerRows[remarkTemplateOffset]?.height)||Number(ws.getRow(footerStart+remarkTemplateOffset).height)||15;
 
 
   // Uniform alignment requested for the complete Invoice sheet.
@@ -1480,27 +1485,28 @@ async function exportInvoiceFromTemplate(){
     cell.alignment={...cloneStyle(cell.alignment),vertical:'middle',wrapText:false};
   }
   if(remarkLabel){
-    const manualRemark=norm($('#remark').value),remarkRow=remarkLabel.r,contentStart=Math.min(columnCount,remarkLabel.c+1);
-    const leftStart=contentStart,leftEnd=Math.max(leftStart,Math.min(columnCount,5)),rightStart=Math.min(columnCount,leftEnd+1),rightEnd=columnCount;
-    const headerStart=excelColLetter(contentStart),headerEnd=excelColLetter(columnCount);
+    const manualRemark=norm($('#remark').value),remarkRow=remarkLabel.r;
+    // Stone Description uses the fixed approved footer geometry:
+    // left = C:D, right = E:H. Column I remains untouched.
+    const leftStart=3,leftEnd=Math.min(columnCount,4),rightStart=Math.min(columnCount,5),rightEnd=Math.min(columnCount,8);
+    const headerStart='C',headerEnd=excelColLetter(Math.min(columnCount,8));
     try{ws.unMergeCells(`${headerStart}${remarkRow}:${headerEnd}${remarkRow}`)}catch{}
-    if(contentStart<=columnCount)try{ws.mergeCells(`${headerStart}${remarkRow}:${headerEnd}${remarkRow}`)}catch{}
+    if(3<=Math.min(columnCount,8))try{ws.mergeCells(`${headerStart}${remarkRow}:${headerEnd}${remarkRow}`)}catch{}
     const headerCell=ws.getCell(`${headerStart}${remarkRow}`);
+    if(remarkTemplateCaptured)applyCaptured(headerCell,remarkTemplateCaptured,false);
     headerCell.value=stoneDescriptionPairs.length?(manualRemark?`${manualRemark}\nSTONE DESCRIPTION:`:'STONE DESCRIPTION:'):manualRemark;
-    headerCell.font={...cloneStyle(headerCell.font),name:'Arial',size:10,bold:false};
-    headerCell.alignment={...cloneStyle(headerCell.alignment),horizontal:'left',vertical:'middle',wrapText:true};
     if(stoneDescriptionPairs.length){
       const headerLines=Math.max(1,String(headerCell.value||'').split(/\r?\n/).length);
-      ws.getRow(remarkRow).height=Math.max(Number(ws.getRow(remarkRow).height)||15,headerLines*13.5);
+      ws.getRow(remarkRow).height=Math.max(Number(ws.getRow(remarkRow).height)||remarkTemplateHeight,remarkTemplateHeight*headerLines);
       for(let i=0;i<stoneDescriptionPairs.length;i++){
         const rowNo=remarkRow+1+i,[left,right]=stoneDescriptionPairs[i];
         const l1=excelColLetter(leftStart),l2=excelColLetter(leftEnd),r1=excelColLetter(rightStart),r2=excelColLetter(rightEnd);
         try{ws.unMergeCells(`${l1}${rowNo}:${l2}${rowNo}`)}catch{}
         try{ws.mergeCells(`${l1}${rowNo}:${l2}${rowNo}`)}catch{}
         if(rightStart<=rightEnd){try{ws.unMergeCells(`${r1}${rowNo}:${r2}${rowNo}`)}catch{}try{ws.mergeCells(`${r1}${rowNo}:${r2}${rowNo}`)}catch{}}
-        const lc=ws.getCell(`${l1}${rowNo}`);lc.value=left?.text||'';lc.font={...cloneStyle(lc.font),name:'Arial',size:10};lc.alignment={horizontal:'left',vertical:'middle',wrapText:false};
-        if(rightStart<=rightEnd){const rc=ws.getCell(`${r1}${rowNo}`);rc.value=right?.text||'';rc.font={...cloneStyle(rc.font),name:'Arial',size:10};rc.alignment={horizontal:'left',vertical:'middle',wrapText:false}}
-        ws.getRow(rowNo).height=Math.max(Number(ws.getRow(rowNo).height)||15,15);
+        const lc=ws.getCell(`${l1}${rowNo}`);if(remarkTemplateCaptured)applyCaptured(lc,remarkTemplateCaptured,false);lc.value=left?.text||'';
+        if(rightStart<=rightEnd){const rc=ws.getCell(`${r1}${rowNo}`);if(remarkTemplateCaptured)applyCaptured(rc,remarkTemplateCaptured,false);rc.value=right?.text||''}
+        ws.getRow(rowNo).height=Math.max(Number(ws.getRow(rowNo).height)||remarkTemplateHeight,remarkTemplateHeight);
       }
     }
   }
@@ -1610,10 +1616,10 @@ async function exportInvoiceExcel(){
     ws.mergeCells(`A${row}:F${row}`);ws.getCell(`A${row}`).value=`Total : (${currencyCode()})`;ws.getCell(`A${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).value=t.total;ws.getCell(`G${row}`).numFmt=currencyExcelFormat();ws.getCell(`G${row}`).font={bold:true,size:12};ws.getCell(`G${row}`).alignment={horizontal:'right'};
     row+=2;
     const fallbackStonePairs=documentStoneDescriptionPairs(exportItems),manualRemark=norm($('#remark').value);
-    ws.mergeCells(`A${row}:B${row}`);const remarkLabelCell=ws.getCell(`A${row}`);remarkLabelCell.value='Remark :';remarkLabelCell.font={name:'Arial',size:10,bold:true};remarkLabelCell.alignment={vertical:'middle'};
-    ws.mergeCells(`C${row}:H${row}`);const remarkCell=ws.getCell(`C${row}`);remarkCell.value=fallbackStonePairs.length?(manualRemark?`${manualRemark}\nSTONE DESCRIPTION:`:'STONE DESCRIPTION:'):manualRemark;remarkCell.alignment={vertical:'middle',wrapText:true};remarkCell.font={name:'Arial',size:10};if(String(remarkCell.value||'').includes('\n'))ws.getRow(row).height=27;
-    if(fallbackStonePairs.length){for(const [left,right] of fallbackStonePairs){row++;ws.mergeCells(`A${row}:D${row}`);ws.mergeCells(`E${row}:H${row}`);const lc=ws.getCell(`A${row}`),rc=ws.getCell(`E${row}`);lc.value=left?.text||'';rc.value=right?.text||'';lc.font=rc.font={name:'Arial',size:10};lc.alignment=rc.alignment={horizontal:'left',vertical:'middle'};ws.getRow(row).height=15}}
-    row+=2;merge(`A${row}:D${row}`,'Vender Signature : ______________________',10);merge(`E${row}:H${row}`,'Accept By : ______________________',10,false,'right');
+    ws.mergeCells(`A${row}:B${row}`);const remarkLabelCell=ws.getCell(`A${row}`);remarkLabelCell.value='Remark :';remarkLabelCell.font={name:'Arial',size:8,bold:true};remarkLabelCell.alignment={vertical:'middle'};
+    ws.mergeCells(`C${row}:H${row}`);const remarkCell=ws.getCell(`C${row}`);remarkCell.value=fallbackStonePairs.length?(manualRemark?`${manualRemark}\nSTONE DESCRIPTION:`:'STONE DESCRIPTION:'):manualRemark;remarkCell.alignment={vertical:'middle',wrapText:true};remarkCell.font={name:'Arial',size:8};if(String(remarkCell.value||'').includes('\n'))ws.getRow(row).height=22;
+    if(fallbackStonePairs.length){for(const [left,right] of fallbackStonePairs){row++;ws.mergeCells(`C${row}:D${row}`);ws.mergeCells(`E${row}:H${row}`);const lc=ws.getCell(`C${row}`),rc=ws.getCell(`E${row}`);lc.value=left?.text||'';rc.value=right?.text||'';lc.font=rc.font={name:'Arial',size:8};lc.alignment=rc.alignment={horizontal:'left',vertical:'middle'};ws.getRow(row).height=15}row++;}
+    row+=1;merge(`A${row}:D${row}`,'Vender Signature : ______________________',10);merge(`E${row}:H${row}`,'Accept By : ______________________',10,false,'right');
     ws.headerFooter.oddFooter='&RPage &P of &N';
     ws.pageSetup.printArea=`A1:H${row}`;
     ws.autoFilter={from:{row:headerRow,column:1},to:{row:headerRow,column:8}};
