@@ -518,3 +518,11 @@ button{width:auto}
 .preview-continuous * {
   font-size:10px !important;
 }
+
+/* v0.14.27: prevent iOS Safari / standalone PWA text autosizing from
+   visually enlarging long Payment Term lines. Keep the preview's declared
+   10px typography at 100% instead of allowing automatic text inflation. */
+.preview-continuous {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
