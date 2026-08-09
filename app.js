@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const APP_VERSION='0.14.17';
+const APP_VERSION='0.14.18';
 const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xlsx',stockIntegrityIssues:[],stockDuplicateLots:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneEnglishNames:new Map(),diamondStoneCodes:new Set(),stoneMappingName:'',stoneDiagnostics:{duplicates:[],multiAlias:[],missingGroup:[],missingType:[],missingQuotation:[],prefixOverlaps:[]},articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',exhibitionName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',currentLondonPm:0,currentLondonPmDate:'',source:'',historicalPm:{},goldPrices:new Map(),goldDates:[],goldDataName:'',goldDataRows:0},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],quotationHeaders:[],quotationItems:[],transactions:[]},recall:null,deliveryReturns:new Set(),exhibitionSession:'',draft:{baseline:'',timer:null,prompted:false,restoring:false},stockSearch:{query:'*',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null,packageFiles:[],customPackageImages:new Map(),packageImageDirtyFiles:new Set(),dataMeta:{},importConflicts:[],health:{},imageIndexProgress:{done:0,total:0},diagnosticLot:'',recordsLoaded:false,recordsFileName:'jmsdata.xlsx / Universe Records',recordsFilePath:'',recordCounters:{invoice:1,consignment:1,quotation:1},recordsDirty:false};
 const EXHIBITION_SESSION_KEY='universeExhibitionSession_v1',EXHIBITION_NAME_KEY='universeExhibitionName_v1',IMAGE_OVERRIDE_LOCAL_KEY='universeImageOverrides_v1';try{state.exhibitionSession=localStorage.getItem(EXHIBITION_SESSION_KEY)||'';state.exhibitionName=localStorage.getItem(EXHIBITION_NAME_KEY)||''}catch{}
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
@@ -1243,13 +1243,14 @@ async function exportInvoiceFromTemplate(){
   const originalRemarkRow=findOriginalFooterLabelRow('remark')||footerBaseRow+9;
   const originalSignatureRow=findOriginalFooterLabelRow('vender signature')||findOriginalFooterLabelRow('accept by')||originalRemarkRow+3;
   // RO1220 has a customer-specific footer after Total Amount:
-  // Payment Term label shares the first payment row; Remarks shares the first weight row;
-  // Stone Decsription shares the first stone row, followed by one blank row before signatures.
-  // The template already contains one blank row before Remarks and two rows between Remarks and Signature.
-  const extraPaymentRows=specialRO1220?4:0;
+  // RO1220 groups are separated by one blank row. Group headings use their own row,
+  // and each group's body begins on the following row from Column B.
+  // Extra rows before Remarks provide: Total Amount body + blank + Payment Term heading
+  // + five payment lines + blank.
+  const extraPaymentRows=specialRO1220?8:0;
   const specialStoneRows=specialRO1220?Math.max(1,stoneDescriptionPairs.length):0;
   const specialManualRemarkRows=specialRO1220&&norm($('#remark')?.value)?1:0;
-  const specialRowsAfterRemark=specialRO1220?7+specialStoneRows+specialManualRemarkRows:0;
+  const specialRowsAfterRemark=specialRO1220?9+specialStoneRows+specialManualRemarkRows:0;
   const builtInRowsAfterRemark=Math.max(0,originalSignatureRow-originalRemarkRow-1);
   const extraRemarkRows=specialRO1220?Math.max(0,specialRowsAfterRemark-builtInRowsAfterRemark):0;
   const originalContentRows=Math.max(1,footerBaseRow-firstItemRow-1);
@@ -1483,7 +1484,7 @@ async function exportInvoiceFromTemplate(){
     return null;
   };
   const amountLabel=findLabelRow('total amount');
-  if(amountLabel){
+  if(amountLabel&&!specialRO1220){
     const amountCell=ws.getRow(amountLabel.r).getCell(Math.min(columnCount,amountLabel.c+1));
     amountCell.value=`${currencyWords($('#currency').value)} ${numberToWords(t.total)}`;
     amountCell.alignment={...cloneStyle(amountCell.alignment),vertical:'middle',wrapText:false};
@@ -1513,43 +1514,55 @@ async function exportInvoiceFromTemplate(){
   if(remarkLabel){
     const manualRemark=norm($('#remark').value),remarkRow=remarkLabel.r;
     if(specialRO1220){
-      // Payment Term uses five rows total: label + first installment on the first row,
-      // then the remaining 90 / 120 / 150 / 180 day installments below.
-      const paymentLabelRow=remarkRow-5,paymentLines=ro1220PaymentTermLines(t.total,norm($('#invoiceDate').value));
-      const paymentLabelCell=ws.getCell(`B${paymentLabelRow}`);if(remarkLabelTemplateCaptured)applyCaptured(paymentLabelCell,remarkLabelTemplateCaptured,false);paymentLabelCell.value='Payment Term :';
-      for(let i=0;i<paymentLines.length;i++)mergeStyledText(paymentLabelRow+i,3,9,paymentLines[i]);
+      // Total Amount body begins below its heading in Column B; one blank row follows.
+      if(amountLabel){
+        const oldAmountCell=ws.getRow(amountLabel.r).getCell(Math.min(columnCount,amountLabel.c+1));
+        oldAmountCell.value='';
+        mergeStyledText(amountLabel.r+1,2,9,`${currencyWords($('#currency').value)} ${numberToWords(t.total)}`);
+        mergeStyledText(amountLabel.r+2,2,9,'');
+      }
 
-      // RO1220 Remarks starts with the first weight line on the same row.
-      const labelCell=ws.getCell(`B${remarkRow}`);if(remarkLabelTemplateCaptured)applyCaptured(labelCell,remarkLabelTemplateCaptured,false);labelCell.value='Remarks :';
-      const setWeightRow=(rowNo,label,value,unit)=>{
-        mergeStyledText(rowNo,3,5,label);
-        const valueCell=mergeStyledText(rowNo,6,6,'');
+      // Payment Term heading is on its own row. Five payment lines begin below it in Column B,
+      // followed by one full blank row before Remarks.
+      const paymentLabelRow=remarkRow-7,paymentLines=ro1220PaymentTermLines(t.total,norm($('#invoiceDate').value));
+      const paymentLabelCell=ws.getCell(`B${paymentLabelRow}`);if(remarkLabelTemplateCaptured)applyCaptured(paymentLabelCell,remarkLabelTemplateCaptured,false);paymentLabelCell.value='Payment Term : ';
+      for(let i=0;i<paymentLines.length;i++)mergeStyledText(paymentLabelRow+1+i,2,9,paymentLines[i]);
+      mergeStyledText(paymentLabelRow+6,2,9,'');
+
+      // Remarks heading is on its own row. Weight labels start in Column B and values in Column D.
+      const labelCell=ws.getCell(`B${remarkRow}`);if(remarkLabelTemplateCaptured)applyCaptured(labelCell,remarkLabelTemplateCaptured,false);labelCell.value='Remarks : ';
+      const setWeightRow=(rowNo,label,value,unit,isGross=false)=>{
+        mergeStyledText(rowNo,2,3,label);
+        const valueCell=ws.getCell(`D${rowNo}`);if(remarkTemplateCaptured)applyCaptured(valueCell,remarkTemplateCaptured,false);
         valueCell.value=Number(value)||0;valueCell.numFmt='0.00';
-        mergeStyledText(rowNo,7,9,unit);
+        if(isGross)valueCell.border={...cloneStyle(valueCell.border),top:{style:'thin'},bottom:{style:'double'}};
+        mergeStyledText(rowNo,5,9,unit);
       };
       const weight=ro1220WeightSummary(formalItems());
-      setWeightRow(remarkRow,'TOTAL GOLD WEIGHT :',weight.goldGrams,'g');
-      setWeightRow(remarkRow+1,'TOTAL STONES WEIGHT (CARATS) :',weight.stoneGrams,`g (${weight.stoneCarats.toFixed(2)} CARATS)`);
-      setWeightRow(remarkRow+2,'TOTAL GROSS WEIGHT :',weight.grossGrams,'g');
+      setWeightRow(remarkRow+1,'TOTAL GOLD WEIGHT :',weight.goldGrams,'g');
+      setWeightRow(remarkRow+2,'TOTAL STONES WEIGHT (CARATS) :',weight.stoneGrams,`g (${weight.stoneCarats.toFixed(2)} CARATS)`);
+      setWeightRow(remarkRow+3,'TOTAL GROSS WEIGHT :',weight.grossGrams,'g',true);
 
-      // If a manual Remark was entered in the PWA, keep it as its own body row after the weights.
-      let detailRow=remarkRow+3;
-      if(manualRemark){mergeStyledText(detailRow,3,9,manualRemark);detailRow++}
-      mergeStyledText(detailRow,3,9,'');
-      mergeStyledText(detailRow+1,3,9,'WE, UNIVERSE GEMS & JEWELLERY COMPANY, HEREBY CONFIRM THAT ALL DIAMONDS AND');
-      mergeStyledText(detailRow+2,3,9,'SEMI-PRECIOUS STONES ARE NATURAL.');
-      mergeStyledText(detailRow+3,3,9,'');
+      let detailRow=remarkRow+4;
+      if(manualRemark){mergeStyledText(detailRow,2,9,manualRemark);detailRow++}
+      // One blank row separates Remarks from the declaration.
+      mergeStyledText(detailRow,2,9,'');
+      mergeStyledText(detailRow+1,2,9,'WE, UNIVERSE GEMS & JEWELLERY COMPANY, HEREBY CONFIRM THAT ALL DIAMONDS AND');
+      mergeStyledText(detailRow+2,2,9,'SEMI-PRECIOUS STONES ARE NATURAL.');
+      // One blank row separates the declaration from Stone Decsription.
+      mergeStyledText(detailRow+3,2,9,'');
 
-      // Stone Decsription label shares the first A-Z stone row. Left = C:D, right = E:H.
+      // Stone Decsription heading is on its own row. Body begins below it:
+      // left entries start at Column B; right entries start at Column D.
       const stoneLabelRow=detailRow+4,stoneRows=Math.max(1,stoneDescriptionPairs.length);
-      const stoneLabelCell=ws.getCell(`B${stoneLabelRow}`);if(remarkLabelTemplateCaptured)applyCaptured(stoneLabelCell,remarkLabelTemplateCaptured,false);stoneLabelCell.value='Stone Decsription :';
+      const stoneLabelCell=ws.getCell(`B${stoneLabelRow}`);if(remarkLabelTemplateCaptured)applyCaptured(stoneLabelCell,remarkLabelTemplateCaptured,false);stoneLabelCell.value='Stone Decsription : ';
       for(let i=0;i<stoneRows;i++){
-        const rowNo=stoneLabelRow+i,[left,right]=stoneDescriptionPairs[i]||[];
-        mergeStyledText(rowNo,3,4,left?.text||'');
-        mergeStyledText(rowNo,5,8,right?.text||'');
+        const rowNo=stoneLabelRow+1+i,[left,right]=stoneDescriptionPairs[i]||[];
+        mergeStyledText(rowNo,2,3,left?.text||'');
+        mergeStyledText(rowNo,4,8,right?.text||'');
       }
       // Always leave one full blank row after the final Stone Description line.
-      mergeStyledText(stoneLabelRow+stoneRows,3,9,'');
+      mergeStyledText(stoneLabelRow+1+stoneRows,2,9,'');
     }else{
       // All other customers keep the current Template Remark only; no automatic Stone Description.
       try{ws.unMergeCells(`C${remarkRow}:H${remarkRow}`)}catch{}
