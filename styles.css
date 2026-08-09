@@ -444,3 +444,34 @@ button{width:auto}
 .excel-option-subs input:disabled+*{opacity:.55}
 .excel-option-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid #e5e9f0}
 @media(max-width:520px){.excel-option-subs{grid-template-columns:1fr}}
+
+/* v0.14.23 — Invoice add-on options live in Preview and update the on-screen invoice immediately. */
+.preview-addon-options{flex-basis:100%;width:100%;border-top:1px solid #e5e9f0;padding-top:12px;margin-top:4px}
+.preview-addon-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:10px}
+.preview-addon-head strong{font-size:15px}.preview-addon-head span{font-size:12px;color:#667085;text-align:right}
+.preview-option-list{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:0}
+.preview-option-list>.excel-option-main{min-height:48px;padding:8px 10px}
+.preview-option-list>.excel-option-group{grid-column:span 2}
+.preview-option-list .excel-option-subs{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:8px}
+.preview-option-list .excel-option-subs label{padding:7px 8px;font-size:12px}
+.preview-addon-hint{min-height:0;margin-top:7px;font-size:12px;color:#667085}
+.preview-addon-hint:empty{display:none}.preview-addon-hint.warn{color:#b54708}
+.preview-addon-footer{margin-top:8px;border-top:1px solid #cfd5df;padding-top:6px}
+.preview-total-amount{display:grid;grid-template-columns:105px 1fr;gap:10px;align-items:center;min-height:14px;margin-bottom:8px}
+.preview-total-amount strong{font-weight:400}
+.preview-addon-block{margin-top:8px;padding-top:6px;border-top:1px solid #edf0f4;line-height:1.18}
+.preview-addon-title{font-weight:600;margin-bottom:3px}
+.preview-addon-line{min-height:13px}
+.preview-weight-grid{display:grid;grid-template-columns:minmax(220px,1fr) 62px minmax(120px,.8fr);align-items:center;column-gap:8px;row-gap:0}
+.preview-weight-grid>div{min-height:13px;display:flex;align-items:center}
+.preview-weight-value{justify-content:center;text-align:center;font-variant-numeric:tabular-nums}
+.preview-weight-value.gross{border-top:1px solid #111;border-bottom:3px double #111}
+.preview-weight-unit{white-space:nowrap}
+.preview-manual-remark{margin-top:2px}
+.preview-stone-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:28px;row-gap:0}
+.preview-stone-grid>div{min-height:13px}
+.preview-standard-remark{min-height:28px}
+@media(max-width:800px){
+  .preview-option-list{grid-template-columns:1fr 1fr}.preview-option-list>.excel-option-group{grid-column:span 2}
+  .preview-addon-head{display:block}.preview-addon-head span{display:block;text-align:left;margin-top:3px}
+}
