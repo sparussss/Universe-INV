@@ -1,4 +1,4 @@
-# Universe Invoice PWA v0.14.21
+# Universe Invoice PWA v0.14.22
 
 ## Excel export add-on chooser
 
@@ -30,3 +30,9 @@ Diamond / Semi-Precious classification and Stone Description use the **currently
 If any add-on is selected, the current Invoice Master Template is required. Stone Description and Diamond / Semi-Precious weight options also require the current Stone List.
 
 All other v0.14.20 functionality remains unchanged.
+
+
+## v0.14.22
+- Invoice Excel 附加資料 Remark 新增 Gross Weight 選項；Gross Weight = Gold Weight + All Stone grams，數值格上單線、下雙線。
+- 所有附加資料區行高（包括空白行）統一為 10.5 pt。
+- 重量標題更新：TOTAL SEMI-PRECIOUS STONES WEIGHT、TOTAL DIAMOND WEIGHT、TOTAL STONES WEIGHT。

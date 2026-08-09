@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const APP_VERSION='0.14.21';
+const APP_VERSION='0.14.22';
 const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xlsx',stockIntegrityIssues:[],stockDuplicateLots:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneEnglishNames:new Map(),diamondStoneCodes:new Set(),stoneMappingName:'',stoneDiagnostics:{duplicates:[],multiAlias:[],missingGroup:[],missingType:[],missingQuotation:[],prefixOverlaps:[]},articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',exhibitionName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',currentLondonPm:0,currentLondonPmDate:'',source:'',historicalPm:{},goldPrices:new Map(),goldDates:[],goldDataName:'',goldDataRows:0},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],quotationHeaders:[],quotationItems:[],transactions:[]},recall:null,deliveryReturns:new Set(),exhibitionSession:'',draft:{baseline:'',timer:null,prompted:false,restoring:false},stockSearch:{query:'*',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null,packageFiles:[],customPackageImages:new Map(),packageImageDirtyFiles:new Set(),dataMeta:{},importConflicts:[],health:{},imageIndexProgress:{done:0,total:0},diagnosticLot:'',recordsLoaded:false,recordsFileName:'jmsdata.xlsx / Universe Records',recordsFilePath:'',recordCounters:{invoice:1,consignment:1,quotation:1},recordsDirty:false};
 const EXHIBITION_SESSION_KEY='universeExhibitionSession_v1',EXHIBITION_NAME_KEY='universeExhibitionName_v1',IMAGE_OVERRIDE_LOCAL_KEY='universeImageOverrides_v1';try{state.exhibitionSession=localStorage.getItem(EXHIBITION_SESSION_KEY)||'';state.exhibitionName=localStorage.getItem(EXHIBITION_NAME_KEY)||''}catch{}
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
@@ -549,10 +549,10 @@ function documentStoneDescriptionPairs(items=formalItems()){const entries=docume
 function invoiceWeightSummary(items=formalItems()){let goldGrams=0,allStoneCarats=0,diamondCarats=0,semiPreciousCarats=0;for(const item of items||[]){const qty=Math.max(0,Number(item?.qty)||0),desc=item?.descriptions||[],goldMatch=norm(desc[0]).match(/^(\d+(?:\.\d+)?)/);if(goldMatch)goldGrams+=Number(goldMatch[1])*qty;for(const line of desc.slice(1)){let lineCarats=0;for(const m of String(line||'').matchAll(/(\d+(?:\.\d+)?)\s*ct\b/ig))lineCarats+=Number(m[1]);if(!lineCarats)continue;lineCarats*=qty;allStoneCarats+=lineCarats;const codes=stonePartsFromDescriptionLine(line).map(x=>norm(x.code).toUpperCase()).filter(Boolean);if(codes.length&&codes.every(isDiamondStoneCode))diamondCarats+=lineCarats;else semiPreciousCarats+=lineCarats}}return{goldGrams,allStoneCarats,allStoneGrams:allStoneCarats*.2,diamondCarats,diamondGrams:diamondCarats*.2,semiPreciousCarats,semiPreciousGrams:semiPreciousCarats*.2}}
 function addCalendarMonthsIso(value,months){const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return'';const y=Number(m[1]),month=Number(m[2])-1,day=Number(m[3]),index=month+Number(months||0),ty=y+Math.floor(index/12),tm=((index%12)+12)%12,last=new Date(ty,tm+1,0).getDate(),td=Math.min(day,last);return `${ty}-${String(tm+1).padStart(2,'0')}-${String(td).padStart(2,'0')}`}
 function invoicePaymentTermLines(total=totals().total,invoiceDate=norm($('#invoiceDate')?.value)||today()){const amount=Number(total)||0,installment=Math.ceil(amount*.2),amounts=[installment,installment,installment,installment,Math.round((amount-installment*4)*100)/100],months=[3,4,5,6],days=[90,120,150,180],lines=[`PAID BY BANK TT 20% - ${fmt(amounts[0])}`];for(let i=0;i<4;i++)lines.push(`TERMS ${days[i]} DAYS 20% (${addCalendarMonthsIso(invoiceDate,months[i])}) - ${fmt(amounts[i+1])} WIRE BANK TRANSFER`);return lines}
-function normalizeExcelAddonOptions(v={}){return{paymentTerm:!!v.paymentTerm,remark:!!v.remark,goldWeight:!!v.goldWeight,semiPrecious:!!v.semiPrecious,diamond:!!v.diamond,allStone:!!v.allStone,declaration:!!v.declaration,stoneDescription:!!v.stoneDescription}}
+function normalizeExcelAddonOptions(v={}){return{paymentTerm:!!v.paymentTerm,remark:!!v.remark,goldWeight:!!v.goldWeight,semiPrecious:!!v.semiPrecious,diamond:!!v.diamond,allStone:!!v.allStone,grossWeight:!!v.grossWeight,declaration:!!v.declaration,stoneDescription:!!v.stoneDescription}}
 function excelAddonRequested(v={}){const o=normalizeExcelAddonOptions(v);return o.paymentTerm||o.remark||o.declaration||o.stoneDescription}
 function excelAddonNeedsStoneList(v={}){const o=normalizeExcelAddonOptions(v);return o.stoneDescription||(o.remark&&(o.semiPrecious||o.diamond))}
-function requestExcelAddonOptions(){return new Promise(resolve=>{const dlg=$('#excelOptionsDialog');if(!dlg)return resolve(normalizeExcelAddonOptions());const ids=['excelOptPayment','excelOptRemark','excelOptGold','excelOptSemi','excelOptDiamond','excelOptAllStone','excelOptDeclaration','excelOptStoneDescription'];for(const id of ids){const el=$('#'+id);if(el)el.checked=false}const remark=$('#excelOptRemark'),subs=[$('#excelOptGold'),$('#excelOptSemi'),$('#excelOptDiamond'),$('#excelOptAllStone')].filter(Boolean);const sync=()=>subs.forEach(x=>x.disabled=!remark?.checked);if(remark)remark.onchange=sync;sync();let done=false;const finish=value=>{if(done)return;done=true;try{dlg.close()}catch{}resolve(value)};$('#closeExcelOptionsBtn').onclick=()=>finish(null);$('#cancelExcelOptionsBtn').onclick=()=>finish(null);$('#confirmExcelOptionsBtn').onclick=()=>{const o=normalizeExcelAddonOptions({paymentTerm:$('#excelOptPayment')?.checked,remark:remark?.checked,goldWeight:$('#excelOptGold')?.checked,semiPrecious:$('#excelOptSemi')?.checked,diamond:$('#excelOptDiamond')?.checked,allStone:$('#excelOptAllStone')?.checked,declaration:$('#excelOptDeclaration')?.checked,stoneDescription:$('#excelOptStoneDescription')?.checked});if(o.remark&&!o.goldWeight&&!o.semiPrecious&&!o.diamond&&!o.allStone)return alert('Remark 已選取，請至少選擇一項重量：Gold Weight、Semi-Precious、Diamond 或 All Stone。');finish(o)};dlg.oncancel=e=>{e.preventDefault();finish(null)};dlg.showModal()})}
+function requestExcelAddonOptions(){return new Promise(resolve=>{const dlg=$('#excelOptionsDialog');if(!dlg)return resolve(normalizeExcelAddonOptions());const ids=['excelOptPayment','excelOptRemark','excelOptGold','excelOptSemi','excelOptDiamond','excelOptAllStone','excelOptGross','excelOptDeclaration','excelOptStoneDescription'];for(const id of ids){const el=$('#'+id);if(el)el.checked=false}const remark=$('#excelOptRemark'),subs=[$('#excelOptGold'),$('#excelOptSemi'),$('#excelOptDiamond'),$('#excelOptAllStone'),$('#excelOptGross')].filter(Boolean);const sync=()=>subs.forEach(x=>x.disabled=!remark?.checked);if(remark)remark.onchange=sync;sync();let done=false;const finish=value=>{if(done)return;done=true;try{dlg.close()}catch{}resolve(value)};$('#closeExcelOptionsBtn').onclick=()=>finish(null);$('#cancelExcelOptionsBtn').onclick=()=>finish(null);$('#confirmExcelOptionsBtn').onclick=()=>{const o=normalizeExcelAddonOptions({paymentTerm:$('#excelOptPayment')?.checked,remark:remark?.checked,goldWeight:$('#excelOptGold')?.checked,semiPrecious:$('#excelOptSemi')?.checked,diamond:$('#excelOptDiamond')?.checked,allStone:$('#excelOptAllStone')?.checked,grossWeight:$('#excelOptGross')?.checked,declaration:$('#excelOptDeclaration')?.checked,stoneDescription:$('#excelOptStoneDescription')?.checked});if(o.remark&&!o.goldWeight&&!o.semiPrecious&&!o.diamond&&!o.allStone&&!o.grossWeight)return alert('Remark 已選取，請至少選擇一項重量：Gold Weight、Semi-Precious、Diamond、All Stone 或 Gross Weight。');finish(o)};dlg.oncancel=e=>{e.preventDefault();finish(null)};dlg.showModal()})}
 function unknownStoneDiagnostics(){const out=[];if(!state.stockAllRows.length||!state.stoneAliases.size)return out;for(const row of state.stockAllRows){const lot=norm(field(row,['LOTNO'])),art=normArt(field(row,['ARTNO']));for(let i=2;i<=6;i++){const line=norm(field(row,[`DESC${i}`]));if(!line)continue;for(const x of stonePartsFromDescriptionLine(line)){if(!x.code)out.push({lotNo:lot,artNo:art,field:`DESC${i}`,line,token:x.part})}}}return out}
 function imageCoverageDiagnostics(){if(!state.stockCatalog.size)return{missingProducts:0,missingArticles:[]};const missing=[];for(const p of state.stockCatalog.values())if(!(state.imageFiles.get(p.artNo)||[]).length)missing.push(p);return{missingProducts:missing.length,missingArticles:[...new Set(missing.map(x=>x.artNo))].sort()}}
 function healthSummaryRows(){
@@ -1246,7 +1246,7 @@ async function exportInvoiceFromTemplate(exportOptions={}){
   const addDeclaration=state.documentType==='invoice'&&addons.declaration;
   const addStoneDescription=state.documentType==='invoice'&&addons.stoneDescription;
   const stoneDescriptionPairs=addStoneDescription?documentStoneDescriptionPairs(formalItems()):[];
-  const selectedWeightCount=addWeights?[addons.goldWeight,addons.semiPrecious,addons.diamond,addons.allStone].filter(Boolean).length:0;
+  const selectedWeightCount=addWeights?[addons.goldWeight,addons.semiPrecious,addons.diamond,addons.allStone,addons.grossWeight].filter(Boolean).length:0;
   const findOriginalFooterLabelRow=(text)=>{const needle=String(text||'').toLowerCase();for(let r=footerBaseRow;r<=originalFooterEnd;r++)for(let c=1;c<=Math.max(9,ws.columnCount||9);c++){if(norm(ws.getRow(r).getCell(c).value).toLowerCase().includes(needle))return r}return 0};
   const originalRemarkRow=findOriginalFooterLabelRow('remark')||footerBaseRow+9;
   const originalSignatureRow=findOriginalFooterLabelRow('vender signature')||findOriginalFooterLabelRow('accept by')||originalRemarkRow+3;
@@ -1504,6 +1504,7 @@ async function exportInvoiceFromTemplate(exportOptions={}){
   const remarkLabelTemplateCaptured=footerRows[remarkTemplateOffset]?.row?.[Math.min(1,columnCount-1)]||null;
   const remarkTemplateCaptured=footerRows[remarkTemplateOffset]?.row?.[Math.min(2,columnCount-1)]||null;
   const remarkTemplateHeight=Number(footerRows[remarkTemplateOffset]?.height)||Number(ws.getRow(footerStart+remarkTemplateOffset).height)||15;
+  const addonRowHeight=10.5;
 
   // Keep the existing approved sheet alignment behaviour, then re-apply Template styles
   // to any optional Invoice footer cells below.
@@ -1516,7 +1517,7 @@ async function exportInvoiceFromTemplate(exportOptions={}){
     try{ws.unMergeCells(`${a}${rowNo}:${b}${rowNo}`)}catch{}
     if(startCol<=Math.min(columnCount,endCol))try{ws.mergeCells(`${a}${rowNo}:${b}${rowNo}`)}catch{}
     const cell=ws.getCell(`${a}${rowNo}`);if(styleRef)applyCaptured(cell,styleRef,false);cell.value=value||'';
-    ws.getRow(rowNo).height=Math.max(Number(ws.getRow(rowNo).height)||remarkTemplateHeight,remarkTemplateHeight);
+    ws.getRow(rowNo).height=addonRowHeight;
     return cell;
   };
   if(remarkLabel){
@@ -1524,14 +1525,14 @@ async function exportInvoiceFromTemplate(exportOptions={}){
 
     if(addPayment){
       const paymentLabelRow=remarkRow-7,paymentLines=invoicePaymentTermLines(t.total,norm($('#invoiceDate').value));
-      const paymentLabelCell=ws.getCell(`B${paymentLabelRow}`);if(remarkLabelTemplateCaptured)applyCaptured(paymentLabelCell,remarkLabelTemplateCaptured,false);paymentLabelCell.value='Payment Term :';
+      const paymentLabelCell=ws.getCell(`B${paymentLabelRow}`);if(remarkLabelTemplateCaptured)applyCaptured(paymentLabelCell,remarkLabelTemplateCaptured,false);paymentLabelCell.value='Payment Term :';ws.getRow(paymentLabelRow).height=addonRowHeight;
       for(let i=0;i<paymentLines.length;i++)mergeStyledText(paymentLabelRow+1+i,2,9,paymentLines[i]);
       mergeStyledText(paymentLabelRow+6,2,9,'');
     }
 
     let cursor=remarkRow+1;
     if(addWeights){
-      const labelCell=ws.getCell(`B${remarkRow}`);if(remarkLabelTemplateCaptured)applyCaptured(labelCell,remarkLabelTemplateCaptured,false);labelCell.value='Remarks :';
+      const labelCell=ws.getCell(`B${remarkRow}`);if(remarkLabelTemplateCaptured)applyCaptured(labelCell,remarkLabelTemplateCaptured,false);labelCell.value='Remarks :';ws.getRow(remarkRow).height=addonRowHeight;
       const weight=invoiceWeightSummary(formalItems());
       const setWeightRow=(rowNo,label,value,unit)=>{
         mergeStyledText(rowNo,2,3,label);
@@ -1541,9 +1542,10 @@ async function exportInvoiceFromTemplate(exportOptions={}){
         mergeStyledText(rowNo,5,9,unit);
       };
       if(addons.goldWeight){setWeightRow(cursor++,'TOTAL GOLD WEIGHT :',weight.goldGrams,'g')}
-      if(addons.semiPrecious){setWeightRow(cursor++,'TOTAL SEMI-PRECIOUS STONES WEIGHT (CARATS) :',weight.semiPreciousGrams,`g (${weight.semiPreciousCarats.toFixed(2)} CARATS)`)}
-      if(addons.diamond){setWeightRow(cursor++,'TOTAL DIAMOND WEIGHT (CARATS) :',weight.diamondGrams,`g (${weight.diamondCarats.toFixed(2)} CARATS)`)}
-      if(addons.allStone){setWeightRow(cursor++,'TOTAL STONES WEIGHT (CARATS) :',weight.allStoneGrams,`g (${weight.allStoneCarats.toFixed(2)} CARATS)`)}
+      if(addons.semiPrecious){setWeightRow(cursor++,'TOTAL SEMI-PRECIOUS STONES WEIGHT :',weight.semiPreciousGrams,`g (${weight.semiPreciousCarats.toFixed(2)} CARATS)`)}
+      if(addons.diamond){setWeightRow(cursor++,'TOTAL DIAMOND WEIGHT :',weight.diamondGrams,`g (${weight.diamondCarats.toFixed(2)} CARATS)`)}
+      if(addons.allStone){setWeightRow(cursor++,'TOTAL STONES WEIGHT :',weight.allStoneGrams,`g (${weight.allStoneCarats.toFixed(2)} CARATS)`)}
+      if(addons.grossWeight){const grossRow=cursor++;setWeightRow(grossRow,'TOTAL GROSS WEIGHT :',weight.goldGrams+weight.allStoneGrams,'g');const grossCell=ws.getCell(`D${grossRow}`);grossCell.border={...cloneStyle(grossCell.border),top:{style:'thin'},bottom:{style:'double'}}}
       if(manualRemark)mergeStyledText(cursor++,2,9,manualRemark);
     }else{
       try{ws.unMergeCells(`C${remarkRow}:H${remarkRow}`)}catch{}
@@ -1558,7 +1560,7 @@ async function exportInvoiceFromTemplate(exportOptions={}){
       mergeStyledText(cursor++,2,9,'');
     }
     if(addStoneDescription){
-      const stoneLabelCell=ws.getCell(`B${cursor}`);if(remarkLabelTemplateCaptured)applyCaptured(stoneLabelCell,remarkLabelTemplateCaptured,false);stoneLabelCell.value='Stone Decsription :';cursor++;
+      const stoneLabelCell=ws.getCell(`B${cursor}`);if(remarkLabelTemplateCaptured)applyCaptured(stoneLabelCell,remarkLabelTemplateCaptured,false);stoneLabelCell.value='Stone Decsription :';ws.getRow(cursor).height=addonRowHeight;cursor++;
       for(let i=0;i<stoneRows;i++){
         const [left,right]=stoneDescriptionPairs[i]||[];
         mergeStyledText(cursor,2,3,left?.text||'');
