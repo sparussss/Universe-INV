@@ -530,5 +530,5 @@ button{width:auto}
 /* v0.14.28: on-screen preview letterhead now uses the provided Universe company logo, left-aligned, matching the Excel invoice direction. Address/company text removed from preview header only. */
 
 /* v0.14.30 PDF Invoice import / compact import button */
-.document-data-title-row{align-items:center;gap:12px}.document-data-title-row h3{margin:0}.document-data-title-row #pdfInvoiceImportWrap{margin-left:auto}.document-data-title-row #importInvoicePdfBtn{white-space:nowrap;padding:7px 10px;font-size:12px;line-height:1.2}.preview-manual-remark{margin-top:10.5pt}
-@media(max-width:560px){.document-data-title-row{align-items:center}.document-data-title-row #importInvoicePdfBtn{padding:6px 8px;font-size:11px}}
+.document-data-title-row{align-items:center;gap:12px;margin-bottom:12px}.document-data-title-row h3{margin:0}.document-data-title-row #pdfInvoiceImportWrap{margin-left:auto}.document-data-title-row #importInvoicePdfBtn{white-space:nowrap}.preview-manual-remark{margin-top:10.5pt}
+@media(max-width:560px){.document-data-title-row{align-items:center}}

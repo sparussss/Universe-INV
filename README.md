@@ -1,4 +1,10 @@
-# Universe Invoice PWA v0.14.30
+# Universe Invoice PWA v0.14.31
+
+## v0.14.31
+- 「匯入 Invoice PDF」按鍵文字改為「匯入 PDF」。
+- 「匯入 PDF」按鍵直接沿用「資料匯入」按鍵的字體大小與高度／padding 規則。
+- 「客人 Invoice 資料」標題列與下方客戶摘要區增加正常垂直間距，避免按鍵貼住「尚未選擇客戶」區塊。
+
 
 
 ## v0.14.30
