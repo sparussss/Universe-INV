@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const APP_VERSION='0.14.23';
+const APP_VERSION='0.14.24';
 const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xlsx',stockIntegrityIssues:[],stockDuplicateLots:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneEnglishNames:new Map(),diamondStoneCodes:new Set(),stoneMappingName:'',stoneDiagnostics:{duplicates:[],multiAlias:[],missingGroup:[],missingType:[],missingQuotation:[],prefixOverlaps:[]},articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',exhibitionName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',currentLondonPm:0,currentLondonPmDate:'',source:'',historicalPm:{},goldPrices:new Map(),goldDates:[],goldDataName:'',goldDataRows:0},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],quotationHeaders:[],quotationItems:[],transactions:[]},recall:null,deliveryReturns:new Set(),exhibitionSession:'',draft:{baseline:'',timer:null,prompted:false,restoring:false},stockSearch:{query:'*',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null,packageFiles:[],customPackageImages:new Map(),packageImageDirtyFiles:new Set(),dataMeta:{},importConflicts:[],health:{},imageIndexProgress:{done:0,total:0},diagnosticLot:'',recordsLoaded:false,recordsFileName:'jmsdata.xlsx / Universe Records',recordsFilePath:'',recordCounters:{invoice:1,consignment:1,quotation:1},recordsDirty:false};
 const EXHIBITION_SESSION_KEY='universeExhibitionSession_v1',EXHIBITION_NAME_KEY='universeExhibitionName_v1',IMAGE_OVERRIDE_LOCAL_KEY='universeImageOverrides_v1';try{state.exhibitionSession=localStorage.getItem(EXHIBITION_SESSION_KEY)||'';state.exhibitionName=localStorage.getItem(EXHIBITION_NAME_KEY)||''}catch{}
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
@@ -552,16 +552,14 @@ function invoicePaymentTermLines(total=totals().total,invoiceDate=norm($('#invoi
 function normalizeExcelAddonOptions(v={}){return{paymentTerm:!!v.paymentTerm,remark:!!v.remark,goldWeight:!!v.goldWeight,semiPrecious:!!v.semiPrecious,diamond:!!v.diamond,allStone:!!v.allStone,grossWeight:!!v.grossWeight,declaration:!!v.declaration,stoneDescription:!!v.stoneDescription}}
 function excelAddonRequested(v={}){const o=normalizeExcelAddonOptions(v);return o.paymentTerm||o.remark||o.declaration||o.stoneDescription}
 function excelAddonNeedsStoneList(v={}){const o=normalizeExcelAddonOptions(v);return o.stoneDescription||(o.remark&&(o.semiPrecious||o.diamond))}
-function excelAddonOptionsFromUI(){return normalizeExcelAddonOptions({paymentTerm:$('#excelOptPayment')?.checked,remark:$('#excelOptRemark')?.checked,goldWeight:$('#excelOptGold')?.checked,semiPrecious:$('#excelOptSemi')?.checked,diamond:$('#excelOptDiamond')?.checked,allStone:$('#excelOptAllStone')?.checked,grossWeight:$('#excelOptGross')?.checked,declaration:$('#excelOptDeclaration')?.checked,stoneDescription:$('#excelOptStoneDescription')?.checked})}
+function excelAddonOptionsFromUI(){const goldWeight=!!$('#excelOptGold')?.checked,semiPrecious=!!$('#excelOptSemi')?.checked,diamond=!!$('#excelOptDiamond')?.checked,allStone=!!$('#excelOptAllStone')?.checked,grossWeight=!!$('#excelOptGross')?.checked;return normalizeExcelAddonOptions({paymentTerm:$('#excelOptPayment')?.checked,remark:goldWeight||semiPrecious||diamond||allStone||grossWeight,goldWeight,semiPrecious,diamond,allStone,grossWeight,declaration:$('#excelOptDeclaration')?.checked,stoneDescription:$('#excelOptStoneDescription')?.checked})}
 function syncPreviewAddonControls(){
-  const remark=$('#excelOptRemark'),subs=[$('#excelOptGold'),$('#excelOptSemi'),$('#excelOptDiamond'),$('#excelOptAllStone'),$('#excelOptGross')].filter(Boolean),enabled=!!remark?.checked;
-  for(const x of subs)x.disabled=!enabled;
   const panel=$('#previewAddonOptions');if(panel)panel.classList.toggle('hidden',state.documentType!=='invoice');
   const hint=$('#previewAddonHint');if(hint){const o=excelAddonOptionsFromUI(),warnings=[];if(excelAddonRequested(o)&&!state.invoiceTemplateBuffer)warnings.push('附加資料正式匯出需要 Invoice Master Template');if(excelAddonNeedsStoneList(o)&&!state.dataMeta?.stone)warnings.push('所選項目需要最新 Stone List');hint.textContent=warnings.join(' · ');hint.classList.toggle('warn',warnings.length>0)}
 }
-function resetPreviewAddonOptions(){for(const id of ['excelOptPayment','excelOptRemark','excelOptGold','excelOptSemi','excelOptDiamond','excelOptAllStone','excelOptGross','excelOptDeclaration','excelOptStoneDescription']){const el=$('#'+id);if(el)el.checked=false}syncPreviewAddonControls();schedulePreview()}
+function resetPreviewAddonOptions(){for(const id of ['excelOptPayment','excelOptGold','excelOptSemi','excelOptDiamond','excelOptAllStone','excelOptGross','excelOptDeclaration','excelOptStoneDescription']){const el=$('#'+id);if(el)el.checked=false}syncPreviewAddonControls();schedulePreview()}
 function setupPreviewAddonControls(){
-  const ids=['excelOptPayment','excelOptRemark','excelOptGold','excelOptSemi','excelOptDiamond','excelOptAllStone','excelOptGross','excelOptDeclaration','excelOptStoneDescription'];
+  const ids=['excelOptPayment','excelOptGold','excelOptSemi','excelOptDiamond','excelOptAllStone','excelOptGross','excelOptDeclaration','excelOptStoneDescription'];
   for(const id of ids){const el=$('#'+id);if(!el)continue;el.addEventListener('change',()=>{syncPreviewAddonControls();schedulePreview()})}
   syncPreviewAddonControls();
 }
@@ -1078,7 +1076,7 @@ function previewAddonFooterHtml(t,items){
   const totalAmount=state.documentType==='invoice'?`<div class="preview-total-amount"><span>Total Amount :</span><strong>${esc(currencyWords(currencyCode()))} ${esc(numberToWords(t.total))}</strong></div>`:'';
   if(addons.paymentTerm){
     const lines=invoicePaymentTermLines(t.total,norm($('#invoiceDate')?.value));
-    blocks.push(`<section class="preview-addon-block"><div class="preview-addon-title">Payment Term :</div>${lines.map(x=>`<div class="preview-addon-line">${esc(x)}</div>`).join('')}</section>`);
+    blocks.push(`<section class="preview-addon-block preview-payment-term"><div class="preview-addon-title">Payment Term :</div>${lines.map(x=>`<div class="preview-addon-line">${esc(x)}</div>`).join('')}</section>`);
   }
   const manualRemark=norm($('#remark')?.value);
   if(addons.remark){
@@ -1092,7 +1090,7 @@ function previewAddonFooterHtml(t,items){
   }else{
     blocks.push(`<section class="preview-addon-block preview-standard-remark"><div class="preview-addon-title">Remark :</div><div class="preview-addon-line">${esc(manualRemark).replace(/\n/g,'<br>')||'&nbsp;'}</div></section>`);
   }
-  if(addons.declaration)blocks.push(`<section class="preview-addon-block"><div class="preview-addon-line">WE, UNIVERSE GEMS &amp; JEWELLERY COMPANY, HEREBY CONFIRM THAT ALL DIAMONDS AND</div><div class="preview-addon-line">SEMI-PRECIOUS STONES ARE NATURAL.</div></section>`);
+  if(addons.declaration)blocks.push(`<section class="preview-addon-block preview-declaration"><div class="preview-addon-line">WE, UNIVERSE GEMS &amp; JEWELLERY COMPANY, HEREBY CONFIRM THAT ALL DIAMONDS AND</div><div class="preview-addon-line">SEMI-PRECIOUS STONES ARE NATURAL.</div></section>`);
   if(addons.stoneDescription){
     const pairs=documentStoneDescriptionPairs(items);
     blocks.push(`<section class="preview-addon-block"><div class="preview-addon-title">Stone Decsription :</div><div class="preview-stone-grid">${pairs.map(([left,right])=>`<div>${esc(left?.text||'')}</div><div>${esc(right?.text||'')}</div>`).join('')}</div></section>`);

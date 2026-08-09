@@ -1,6 +1,6 @@
-# Universe Invoice PWA v0.14.23
+# Universe Invoice PWA v0.14.24
 
-## v0.14.23
+## v0.14.24
 - 將「輸出 Excel 附加資料」由匯出前彈出視窗移到「文件預覽」頁面。
 - Invoice 附加資料全部預設未選；勾選／取消時，下方 Invoice 預覽即時更新。
 - 預覽會模擬實際 Excel footer 的位置與結構：Payment Term、Remarks 重量、Gross Weight 上單線／下雙線、Natural Stone 聲明、Stone Description 兩欄。

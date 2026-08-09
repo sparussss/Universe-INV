@@ -7,16 +7,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Universe Invoice">
-  <link rel="manifest" href="manifest.webmanifest?v=0.14.23">
+  <link rel="manifest" href="manifest.webmanifest?v=0.14.24">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.14.23">
+  <link rel="stylesheet" href="styles.css?v=0.14.24">
   <title>Universe Invoice</title>
 </head>
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow" id="appVersionEyebrow">Jewellery Exhibition PWA · v0.14.23</div>
+    <div class="eyebrow" id="appVersionEyebrow">Jewellery Exhibition PWA · v0.14.24</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -341,14 +341,14 @@
         <div class="preview-addon-head"><strong>Invoice 附加資料</strong><span>預設全部未選；勾選後下方預覽會即時更新。</span></div>
         <div class="excel-option-list preview-option-list">
           <label class="excel-option-main"><input id="excelOptPayment" type="checkbox"> <span>Payment Term</span></label>
-          <div class="excel-option-group">
-            <label class="excel-option-main"><input id="excelOptRemark" type="checkbox"> <span>Remark :</span></label>
+          <div class="excel-option-group remark-option-group">
+            <div class="excel-option-group-title">Remark :</div>
             <div class="excel-option-subs">
-              <label><input id="excelOptGold" type="checkbox" disabled> Gold Weight</label>
-              <label><input id="excelOptSemi" type="checkbox" disabled> Semi-Precious</label>
-              <label><input id="excelOptDiamond" type="checkbox" disabled> Diamond</label>
-              <label><input id="excelOptAllStone" type="checkbox" disabled> All Stone</label>
-              <label><input id="excelOptGross" type="checkbox" disabled> Gross Weight</label>
+              <label><input id="excelOptGold" type="checkbox"> Gold Weight</label>
+              <label><input id="excelOptSemi" type="checkbox"> Semi-Precious</label>
+              <label><input id="excelOptDiamond" type="checkbox"> Diamond</label>
+              <label><input id="excelOptAllStone" type="checkbox"> All Stone</label>
+              <label><input id="excelOptGross" type="checkbox"> Gross Weight</label>
             </div>
           </div>
           <label class="excel-option-main"><input id="excelOptDeclaration" type="checkbox"> <span>聲明</span></label>
@@ -443,6 +443,6 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="app.js?v=0.14.23"></script>
+<script src="app.js?v=0.14.24"></script>
 </body>
 </html>

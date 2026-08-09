@@ -475,3 +475,7 @@ button{width:auto}
   .preview-option-list{grid-template-columns:1fr 1fr}.preview-option-list>.excel-option-group{grid-column:span 2}
   .preview-addon-head{display:block}.preview-addon-head span{display:block;text-align:left;margin-top:3px}
 }
+/* v0.14.24: preview add-on controls / footer refinements */
+.remark-option-group .excel-option-group-title{font-weight:700;color:#172033;padding:10px 12px 4px;font-size:14px}
+.preview-payment-term .preview-addon-line{font-size:8.5px;line-height:1.15}
+.preview-declaration .preview-addon-line{font-size:8.5px;line-height:1.15}
