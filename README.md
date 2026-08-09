@@ -1,11 +1,11 @@
-# Universe Invoice PWA v0.14.27
+# Universe Invoice PWA v0.14.28
 
 
-## v0.14.27
+## v0.14.28
 - Invoice 文件預覽內所有文字節點強制統一為 10px，包含 Header、貨品、Totals、Payment Term、Remarks、聲明、Stone Description、Signature。
 - 使用 `!important` 覆蓋舊有各區獨立預覽字級，只影響 PWA 預覽，不改 Excel 輸出格式。
 
-## v0.14.27
+## v0.14.28
 - 將「輸出 Excel 附加資料」由匯出前彈出視窗移到「文件預覽」頁面。
 - Invoice 附加資料全部預設未選；勾選／取消時，下方 Invoice 預覽即時更新。
 - 預覽會模擬實際 Excel footer 的位置與結構：Payment Term、Remarks 重量、Gross Weight 上單線／下雙線、Natural Stone 聲明、Stone Description 兩欄。
@@ -50,7 +50,12 @@ All other v0.14.20 functionality remains unchanged.
 - 所有附加資料區行高（包括空白行）統一為 10.5 pt。
 - 重量標題更新：TOTAL SEMI-PRECIOUS STONES WEIGHT、TOTAL DIAMOND WEIGHT、TOTAL STONES WEIGHT。
 
-## v0.14.27
+## v0.14.28
 - 文件預覽整張 Invoice 的標題與內容字體大小統一為 Remarks / Stone Description 內容的預覽字級。
 - 包括公司 Header、Invoice 標題、公司／客戶資料、表頭、貨品資料、Totals、Total Amount、Payment Term、Remarks、聲明、Stone Description 及 Signature。
 - 只影響 PWA 文件預覽；實際 Excel 字體及格式仍由 Invoice Master Template / 既有 Excel 輸出規則控制。
+
+## v0.14.28
+- 文件預覽頂部移除文字公司名／地址，改用提供的 Universe Gems & Jewellery Company 公司標誌。
+- 公司標誌在預覽內靠左顯示，方向跟 Excel Invoice 一致。
+- 只修改 PWA 預覽；Excel 輸出仍按 Invoice Master Template 原有內容及格式。
