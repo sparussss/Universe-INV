@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const APP_VERSION='0.14.28';
+const APP_VERSION='0.14.29';
 const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xlsx',stockIntegrityIssues:[],stockDuplicateLots:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneEnglishNames:new Map(),diamondStoneCodes:new Set(),stoneMappingName:'',stoneDiagnostics:{duplicates:[],multiAlias:[],missingGroup:[],missingType:[],missingQuotation:[],prefixOverlaps:[]},articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',exhibitionName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',currentLondonPm:0,currentLondonPmDate:'',source:'',historicalPm:{},goldPrices:new Map(),goldDates:[],goldDataName:'',goldDataRows:0},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],quotationHeaders:[],quotationItems:[],transactions:[]},recall:null,deliveryReturns:new Set(),exhibitionSession:'',draft:{baseline:'',timer:null,prompted:false,restoring:false},stockSearch:{query:'*',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null,packageFiles:[],customPackageImages:new Map(),packageImageDirtyFiles:new Set(),dataMeta:{},importConflicts:[],health:{},imageIndexProgress:{done:0,total:0},diagnosticLot:'',recordsLoaded:false,recordsFileName:'jmsdata.xlsx / Universe Records',recordsFilePath:'',recordCounters:{invoice:1,consignment:1,quotation:1},recordsDirty:false};
 const EXHIBITION_SESSION_KEY='universeExhibitionSession_v1',EXHIBITION_NAME_KEY='universeExhibitionName_v1',IMAGE_OVERRIDE_LOCAL_KEY='universeImageOverrides_v1';try{state.exhibitionSession=localStorage.getItem(EXHIBITION_SESSION_KEY)||'';state.exhibitionName=localStorage.getItem(EXHIBITION_NAME_KEY)||''}catch{}
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
@@ -52,7 +52,7 @@ function updateDocumentTypeUI(){
   $('#documentDateLabel').textContent=l.date;
   $('#documentItemsHeading').textContent=l.items;
   $('#confirmInvoiceBtn').textContent=l.confirm;
-  const bulk=$('#markAllDeliveredBtn');if(bulk)bulk.classList.toggle('hidden',state.documentType!=='invoice');
+  const bulk=$('#markAllDeliveredBtn');if(bulk)bulk.classList.toggle('hidden',state.documentType!=='invoice');const pdfWrap=$('#pdfInvoiceImportWrap');if(pdfWrap)pdfWrap.classList.toggle('hidden',state.documentType!=='invoice');
   $('#exportExcelBtn').textContent=l.export;
   $('#invoiceNo').placeholder=`${documentPrefix()}YY0001`;
   setDefaultInvoiceNo(true);
@@ -774,6 +774,55 @@ function refocusLotInput(selectAll=false){
     else{const n=input.value.length;try{input.setSelectionRange(n,n)}catch{}}
   });
 }
+
+const PDFJS_WORKER_URL='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+function parsePdfMoney(v){return Number(String(v||'').replace(/[$,\s]/g,''))||0}
+function parseInvoicePdfDate(raw){
+  const text=norm(raw).replace(/,/g,' '),m=text.match(/\b(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\b/);if(!m)return'';
+  const months={january:1,february:2,march:3,april:4,may:5,june:6,july:7,august:8,september:9,october:10,november:11,december:12},mo=months[m[2].toLowerCase()];if(!mo)return'';
+  return `${m[3]}-${String(mo).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
+}
+function groupPdfTextItems(items){
+  const rows=[];for(const item of items||[]){const str=norm(item.str);if(!str)continue;const x=Number(item.transform?.[4]||0),y=Number(item.transform?.[5]||0);let row=rows.find(r=>Math.abs(r.y-y)<2.5);if(!row){row={y,parts:[]};rows.push(row)}row.parts.push({x,str})}
+  return rows.sort((a,b)=>b.y-a.y).map(r=>r.parts.sort((a,b)=>a.x-b.x).map(p=>p.str).join(' ').replace(/\s+/g,' ').trim()).filter(Boolean);
+}
+function parseInvoicePdfLines(lines){
+  const all=lines.join('\n'),invoice=(all.match(/\bNo\.?\s*:\s*(INV\d{6})\b/i)||[])[1]||'',dateRaw=(all.match(/(?:Invoice\s+Date|Date)\s*:\s*([^\n]+)/i)||[])[1]||'',date=parseInvoicePdfDate(dateRaw);
+  let total=0;for(const line of lines){const m=line.match(/\bTotal\s*:\s*\(\s*[A-Z]{3}\s*\)\s*\$?([\d,]+(?:\.\d{2})?)/i);if(m)total=parsePdfMoney(m[1])}
+  const items=[];let pending=null;
+  const pushPending=()=>{if(pending&&pending.lotNo&&pending.qty&&Number.isFinite(pending.unitPrice))items.push(pending);pending=null};
+  for(const line of lines){
+    const lotMatch=line.match(/(?:^|\s)(\d+)\s+Lot\.?\s*No\.?\s*:\s*(\d+)/i)||line.match(/Lot\.?\s*No\.?\s*:\s*(\d+)/i);
+    if(lotMatch){pushPending();pending={seq:Number(lotMatch.length>2?lotMatch[1]:items.length+1)||items.length+1,lotNo:String(lotMatch.length>2?lotMatch[2]:lotMatch[1]),qty:0,unitPrice:NaN};
+      const tail=line.slice((lotMatch.index||0)+lotMatch[0].length),pm=tail.match(/\b(\d+(?:\.\d+)?)\s+(PC|PR|ST)\s+\$?([\d,]+(?:\.\d{2})?)\s+\$?([\d,]+(?:\.\d{2})?)/i);if(pm){pending.qty=Number(pm[1])||1;pending.unitPrice=parsePdfMoney(pm[3]);pushPending()}continue;
+    }
+    if(pending){const pm=line.match(/^\s*(\d+(?:\.\d+)?)\s+(PC|PR|ST)\s+\$?([\d,]+(?:\.\d{2})?)\s+\$?([\d,]+(?:\.\d{2})?)/i);if(pm){pending.qty=Number(pm[1])||1;pending.unitPrice=parsePdfMoney(pm[3]);pushPending()}}
+  }
+  pushPending();return{invoiceNo:invoice,date,total,items};
+}
+async function readInvoicePdf(file){
+  if(!window.pdfjsLib)throw new Error('PDF 讀取程式未載入，請確認網絡後重新開啟 PWA。');
+  pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER_URL;const data=await file.arrayBuffer(),doc=await pdfjsLib.getDocument({data}).promise,lines=[];
+  for(let n=1;n<=doc.numPages;n++){const page=await doc.getPage(n),content=await page.getTextContent();lines.push(...groupPdfTextItems(content.items))}
+  return parseInvoicePdfLines(lines);
+}
+function importedPdfValidation(parsed){
+  const errors=[];if(!parsed.invoiceNo)errors.push('讀不到 Invoice No.');if(!parsed.date)errors.push('讀不到 Date');if(!parsed.items.length)errors.push('讀不到 LOTNO / Qty / Unit Price');if(!(parsed.total>=0))errors.push('讀不到 Total');
+  const seen=new Set();for(const r of parsed.items){if(seen.has(r.lotNo))errors.push(`LOTNO ${r.lotNo} 在 PDF 重複`);seen.add(r.lotNo);const p=state.products.get(r.lotNo);if(!p)errors.push(`LOTNO ${r.lotNo} 目前不是 Available／jmsdata 找不到可售貨品`);if(!(r.qty>0))errors.push(`LOTNO ${r.lotNo} Qty 無效`);if(!(r.unitPrice>=0))errors.push(`LOTNO ${r.lotNo} Unit Price 無效`)}
+  if(findLatestDocument('invoice',parsed.invoiceNo))errors.push(`${parsed.invoiceNo} 已存在 Records，請用 Recall，不要重複匯入 PDF`);return errors;
+}
+async function importInvoicePdfFile(file){
+  const box=$('#invoicePdfImportStatus'),btn=$('#importInvoicePdfBtn');if(!file)return;btn.disabled=true;status('#invoicePdfImportStatus','正在讀取 Invoice PDF…','');box?.classList.remove('hidden');
+  try{
+    if(state.documentType!=='invoice')throw new Error('「匯入 Invoice PDF」只適用於 Invoice。');if(!state.stockAllRows.length)throw new Error('請先匯入展覽資料包 / jmsdata.xlsx。');if(!norm($('#customerCode').value)||!norm($('#customerName').value))throw new Error('請先選擇客戶，再匯入 Invoice PDF。');
+    const parsed=await readInvoicePdf(file),errors=importedPdfValidation(parsed);if(errors.length)throw new Error(errors.slice(0,12).join('\n')+(errors.length>12?`\n…另有 ${errors.length-12} 項`:''));
+    if(state.items.length&&!confirm(`目前草稿已有 ${state.items.length} 款貨品。\n\n匯入 PDF 會用 ${parsed.invoiceNo} 的 ${parsed.items.length} 款貨品取代目前草稿，是否繼續？`))return;
+    releaseCustomImages();state.items=[];state.recall=null;state.deliveryReturns=new Set();setRecallLock(false);$('#recallActive')?.classList.add('hidden');$('#invoiceNo').value=parsed.invoiceNo;$('#invoiceDate').value=parsed.date;
+    const code=currencyCode();for(const r of parsed.items){const p=state.products.get(r.lotNo);addProductToDocument(p,{fromSearch:true});const item=state.items[state.items.length-1];item.qty=r.qty;const overrides=activePriceOverrides(item);overrides[code]=r.unitPrice;markManualPriceOverride(item,code);item.unitPrice=r.unitPrice;if(code==='USD')item.usdUnitPrice=r.unitPrice}
+    state.items.forEach((x,i)=>x.seq=i+1);const sub=roundCurrency(state.items.reduce((a,x)=>a+x.qty*(Number(x.unitPrice)||0),0),code),diff=roundCurrency(sub-parsed.total,code);$('#discountAmount').value=diff>=0?diff:0;renderItems();updateTotals();schedulePreview();scheduleDraftSave();
+    const rebuilt=totals().total,delta=Math.abs(rebuilt-parsed.total),message=`已匯入 ${parsed.invoiceNo} · ${parsed.date} · ${parsed.items.length} 款 / ${state.items.reduce((a,x)=>a+x.qty,0)} 件 · PDF Total ${fmt(parsed.total,code)} · PWA 重算 ${fmt(rebuilt,code)}${delta<0.01?' ✓ 一致':' ⚠ 不一致'}`;status('#invoicePdfImportStatus',message,delta<0.01?'ok':'warn');status('#addMessage',`PDF 已作為正式 Invoice 草稿輸入；Confirm 後會正常更新 jmsdata.xlsx / Records。`,'ok');
+  }catch(err){console.error(err);status('#invoicePdfImportStatus','PDF 匯入失敗：'+(err.message||err),'error');alert('PDF 匯入失敗：\n'+(err.message||err))}finally{btn.disabled=false}
+}
 function addProductToDocument(p,{fromSearch=false}={}){
   if(!p)return false;const lot=String(p.lotNo);
   if(state.items.some(x=>x.lotNo===lot)){status('#addMessage',`LOTNO ${lot} 已在 ${documentLabels().short}。`,'error');return false}
@@ -792,6 +841,7 @@ $('#addLotBtn').onclick=()=>addLot($('#lotInput').value);
 $('#lotInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();addLot(e.target.value)}};
 $('#lotInput').oninput=e=>{e.target.value=e.target.value.replace(/[，,。\.\-–—_]/g,' ')};
 $('#lotInput').onfocus=e=>setTimeout(()=>e.target.select(),50);
+$('#importInvoicePdfBtn').onclick=()=>$('#invoicePdfInput').click();$('#invoicePdfInput').onchange=async e=>{const f=e.target.files?.[0];e.target.value='';if(f)await importInvoicePdfFile(f)};
 function getImg(item){
   if(item?.customImage?.file&&item.customImage.url)return {...item.customImage,grayscale:false};
   const overrideRow=imageOverrideForLot(item?.lotNo),overrideFile=item?.imageOverrideFile||overrideRow?.IMAGE_FILE;
@@ -1584,7 +1634,7 @@ async function exportInvoiceFromTemplate(exportOptions={}){
       if(addons.diamond){setWeightRow(cursor++,'TOTAL DIAMOND WEIGHT :',weight.diamondGrams,`g (${weight.diamondCarats.toFixed(2)} CARATS)`)}
       if(addons.allStone){setWeightRow(cursor++,'TOTAL STONES WEIGHT :',weight.allStoneGrams,`g (${weight.allStoneCarats.toFixed(2)} CARATS)`)}
       if(addons.grossWeight){const grossRow=cursor++;setWeightRow(grossRow,'TOTAL GROSS WEIGHT :',weight.goldGrams+weight.allStoneGrams,'g');const grossCell=ws.getCell(`D${grossRow}`);grossCell.border={...cloneStyle(grossCell.border),top:{style:'thin'},bottom:{style:'double'}}}
-      if(manualRemark)mergeStyledText(cursor++,2,9,manualRemark);
+      if(manualRemark){mergeStyledText(cursor++,2,9,'');mergeStyledText(cursor++,2,9,manualRemark);}
     }else{
       try{ws.unMergeCells(`C${remarkRow}:H${remarkRow}`)}catch{}
       try{ws.mergeCells(`C${remarkRow}:H${remarkRow}`)}catch{}
@@ -1635,9 +1685,13 @@ async function exportInvoiceFromTemplate(exportOptions={}){
   if(mapWs)wb.removeWorksheet(mapWs.id);
   ws.name=state.documentType==='consignment'?'Consignment':state.documentType==='quotation'?'Quotation':'Invoice';
   const buffer=await wb.xlsx.writeBuffer();
-  downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`${inv}.xlsx`);
+  downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),excelDocumentFileName());
   setExcelExportStatus(`已依 Template Map 輸出 ${state.invoiceTemplateName}${missingImages?`；${missingImages} 款沒有圖片`:''}。`,'ok');
 }
+
+function safeExportFilePart(v){return norm(v).replace(/[\\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim()||'Customer'}
+function currentExportRevision(){if(state.recall&&state.recall.type===state.documentType&&state.recall.documentNo===norm($('#invoiceNo').value))return Math.max(0,Number(state.recall.baseRevision)||0)+1;const latest=findLatestDocument(state.documentType,norm($('#invoiceNo').value));return latest?Math.max(0,numberValue(docValue(latest.header,'REVISION'))):0}
+function excelDocumentFileName(){const labels=documentLabels(),no=norm($('#invoiceNo').value)||formatDocumentNo(),customer=safeExportFilePart($('#customerName').value),qty=totals().qty,rev=currentExportRevision(),suffix=rev>0?`(${rev})`:'';return `${labels.short}(${no})_${customer}(${qty})${suffix}.xlsx`}
 async function exportInvoiceExcel(){
   if(!fxPricingReady())return alert(`請先取得或輸入 USD → ${currencyCode()} 的 FX Rate。`);
   if(!quote14KReady())return alert('Quotation 金價資料未完成。請輸入最新 London PM，並補齊所有貨品完成日的 London PM。');
@@ -1731,7 +1785,7 @@ async function exportInvoiceExcel(){
     ws.autoFilter={from:{row:headerRow,column:1},to:{row:headerRow,column:8}};
     const buffer=await wb.xlsx.writeBuffer();
     const inv=norm($('#invoiceNo').value)||formatDocumentNo();
-    downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`${inv}.xlsx`);
+    downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),excelDocumentFileName());
     setExcelExportStatus(`Excel Invoice 已輸出${missingImages?`；${missingImages} 款沒有嵌入圖片`:''}。`,'ok');
   }catch(err){console.error(err);setExcelExportStatus('Excel 輸出失敗：'+(err.message||err),'error')}
   finally{btn.disabled=false}

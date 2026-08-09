@@ -1,11 +1,12 @@
-const CACHE='universe-invoice-v0.14.28';
+const CACHE='universe-invoice-v0.14.29';
 const DEP_CACHE='universe-invoice-dependencies-v2';
-const LOCAL_ASSETS=['./','./index.html','./styles.css?v=0.14.28','./app.js?v=0.14.28','./manifest.webmanifest?v=0.14.28','./icon.svg','./icon-192.png','./icon-512.png','./company-logo.png'];
+const LOCAL_ASSETS=['./','./index.html','./styles.css?v=0.14.29','./app.js?v=0.14.29','./manifest.webmanifest?v=0.14.29','./icon.svg','./icon-192.png','./icon-512.png','./company-logo.png'];
 const EXTERNAL_ASSETS=[
   'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
   'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js',
   'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js',
-  'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js'
+  'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
 ];
 self.addEventListener('install',e=>{
   self.skipWaiting();

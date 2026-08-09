@@ -7,16 +7,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Universe Invoice">
-  <link rel="manifest" href="manifest.webmanifest?v=0.14.28">
+  <link rel="manifest" href="manifest.webmanifest?v=0.14.29">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.14.28">
+  <link rel="stylesheet" href="styles.css?v=0.14.29">
   <title>Universe Invoice</title>
 </head>
 <body>
 <header class="topbar">
   <div>
-    <div class="eyebrow" id="appVersionEyebrow">Jewellery Exhibition PWA · v0.14.28</div>
+    <div class="eyebrow" id="appVersionEyebrow">Jewellery Exhibition PWA · v0.14.29</div>
     <h1>Universe Invoice</h1>
   </div>
 </header>
@@ -226,7 +226,8 @@
     </article>
     <article class="card invoice-workspace">
       <div class="workspace-tools hidden"><div id="draftStatus" class="draft-status"></div></div>
-      <h3 id="documentDataHeading">客人 Invoice 資料</h3>
+      <div class="section-title-row document-data-title-row"><h3 id="documentDataHeading">客人 Invoice 資料</h3><div id="pdfInvoiceImportWrap"><button type="button" id="importInvoicePdfBtn" class="ghost">匯入 Invoice PDF</button><input id="invoicePdfInput" type="file" accept="application/pdf,.pdf" hidden></div></div>
+      <div id="invoicePdfImportStatus" class="notice hidden"></div>
       <div id="selectedCustomerSummary" class="selected-customer"></div>
       <div class="document-type-switch" role="group" aria-label="Document Type">
         <label><input type="radio" name="documentType" value="invoice" checked> Invoice</label>
@@ -443,6 +444,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="app.js?v=0.14.28"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="app.js?v=0.14.29"></script>
 </body>
 </html>
