@@ -509,3 +509,12 @@ button{width:auto}
 .preview-final-footer .doc-totals .total {
   line-height:1.18;
 }
+
+
+/* v0.14.26: enforce one actual font size across every text element inside
+   the on-screen Invoice preview. !important intentionally overrides older
+   component-specific preview rules and any nested specificity. Preview only. */
+.preview-continuous,
+.preview-continuous * {
+  font-size:10px !important;
+}
