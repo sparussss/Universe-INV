@@ -1,4 +1,4 @@
-# Universe Invoice PWA v0.14.18
+# Universe Invoice PWA v0.14.19
 
 ## RO1220 customer-specific Invoice footer
 
@@ -41,8 +41,17 @@ For RO1220 Invoice export, both the current Stone List and Invoice Master Templa
 - Universe Records remain embedded in `jmsdata.xlsx` Sheet 2.
 - New-exhibition record isolation and cache-busting / network-first update behaviour remain unchanged.
 
-## v0.14.18 RO1220 footer refinement
+## v0.14.19 RO1220 footer refinement
 - Total Amount / Payment Term / Remarks / Stone Decsription use heading rows with body starting on the following row from Column B.
 - Each RO1220 footer group is separated by one blank row; the natural-stone declaration also starts from Column B.
 - Remarks weight labels start in Column B and numeric totals in Column D; TOTAL GROSS WEIGHT's Column D value cell has a single top border and double bottom border.
 - Stone Description entries start in Column B (left) and Column D (right).
+
+
+## v0.14.19 RO1220 footer refinement
+
+- `Total Amount :` stays on its Template row; the `US DOLLARS ...` wording now starts in Column C on the same row.
+- The next row remains blank before the Payment Term group.
+- The three calculated Remarks values in Column D are horizontally centered.
+- The Gross Weight value cell keeps a thin top border and double bottom border.
+- `Payment Term :`, `Remarks :`, and `Stone Decsription :` no longer force a trailing space after the colon.

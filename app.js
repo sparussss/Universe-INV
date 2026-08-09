@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const APP_VERSION='0.14.18';
+const APP_VERSION='0.14.19';
 const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xlsx',stockIntegrityIssues:[],stockDuplicateLots:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneEnglishNames:new Map(),diamondStoneCodes:new Set(),stoneMappingName:'',stoneDiagnostics:{duplicates:[],multiAlias:[],missingGroup:[],missingType:[],missingQuotation:[],prefixOverlaps:[]},articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',exhibitionName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',currentLondonPm:0,currentLondonPmDate:'',source:'',historicalPm:{},goldPrices:new Map(),goldDates:[],goldDataName:'',goldDataRows:0},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],quotationHeaders:[],quotationItems:[],transactions:[]},recall:null,deliveryReturns:new Set(),exhibitionSession:'',draft:{baseline:'',timer:null,prompted:false,restoring:false},stockSearch:{query:'*',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null,packageFiles:[],customPackageImages:new Map(),packageImageDirtyFiles:new Set(),dataMeta:{},importConflicts:[],health:{},imageIndexProgress:{done:0,total:0},diagnosticLot:'',recordsLoaded:false,recordsFileName:'jmsdata.xlsx / Universe Records',recordsFilePath:'',recordCounters:{invoice:1,consignment:1,quotation:1},recordsDirty:false};
 const EXHIBITION_SESSION_KEY='universeExhibitionSession_v1',EXHIBITION_NAME_KEY='universeExhibitionName_v1',IMAGE_OVERRIDE_LOCAL_KEY='universeImageOverrides_v1';try{state.exhibitionSession=localStorage.getItem(EXHIBITION_SESSION_KEY)||'';state.exhibitionName=localStorage.getItem(EXHIBITION_NAME_KEY)||''}catch{}
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
@@ -1514,27 +1514,29 @@ async function exportInvoiceFromTemplate(){
   if(remarkLabel){
     const manualRemark=norm($('#remark').value),remarkRow=remarkLabel.r;
     if(specialRO1220){
-      // Total Amount body begins below its heading in Column B; one blank row follows.
+      // Total Amount wording shares the heading row and starts at Column C.
+      // Keep the following row blank before the Payment Term group.
       if(amountLabel){
         const oldAmountCell=ws.getRow(amountLabel.r).getCell(Math.min(columnCount,amountLabel.c+1));
         oldAmountCell.value='';
-        mergeStyledText(amountLabel.r+1,2,9,`${currencyWords($('#currency').value)} ${numberToWords(t.total)}`);
-        mergeStyledText(amountLabel.r+2,2,9,'');
+        mergeStyledText(amountLabel.r,3,9,`${currencyWords($('#currency').value)} ${numberToWords(t.total)}`);
+        mergeStyledText(amountLabel.r+1,2,9,'');
       }
 
       // Payment Term heading is on its own row. Five payment lines begin below it in Column B,
       // followed by one full blank row before Remarks.
       const paymentLabelRow=remarkRow-7,paymentLines=ro1220PaymentTermLines(t.total,norm($('#invoiceDate').value));
-      const paymentLabelCell=ws.getCell(`B${paymentLabelRow}`);if(remarkLabelTemplateCaptured)applyCaptured(paymentLabelCell,remarkLabelTemplateCaptured,false);paymentLabelCell.value='Payment Term : ';
+      const paymentLabelCell=ws.getCell(`B${paymentLabelRow}`);if(remarkLabelTemplateCaptured)applyCaptured(paymentLabelCell,remarkLabelTemplateCaptured,false);paymentLabelCell.value='Payment Term :';
       for(let i=0;i<paymentLines.length;i++)mergeStyledText(paymentLabelRow+1+i,2,9,paymentLines[i]);
       mergeStyledText(paymentLabelRow+6,2,9,'');
 
       // Remarks heading is on its own row. Weight labels start in Column B and values in Column D.
-      const labelCell=ws.getCell(`B${remarkRow}`);if(remarkLabelTemplateCaptured)applyCaptured(labelCell,remarkLabelTemplateCaptured,false);labelCell.value='Remarks : ';
+      const labelCell=ws.getCell(`B${remarkRow}`);if(remarkLabelTemplateCaptured)applyCaptured(labelCell,remarkLabelTemplateCaptured,false);labelCell.value='Remarks :';
       const setWeightRow=(rowNo,label,value,unit,isGross=false)=>{
         mergeStyledText(rowNo,2,3,label);
         const valueCell=ws.getCell(`D${rowNo}`);if(remarkTemplateCaptured)applyCaptured(valueCell,remarkTemplateCaptured,false);
         valueCell.value=Number(value)||0;valueCell.numFmt='0.00';
+        valueCell.alignment={...cloneStyle(valueCell.alignment),horizontal:'center',vertical:'middle',wrapText:false};
         if(isGross)valueCell.border={...cloneStyle(valueCell.border),top:{style:'thin'},bottom:{style:'double'}};
         mergeStyledText(rowNo,5,9,unit);
       };
@@ -1555,7 +1557,7 @@ async function exportInvoiceFromTemplate(){
       // Stone Decsription heading is on its own row. Body begins below it:
       // left entries start at Column B; right entries start at Column D.
       const stoneLabelRow=detailRow+4,stoneRows=Math.max(1,stoneDescriptionPairs.length);
-      const stoneLabelCell=ws.getCell(`B${stoneLabelRow}`);if(remarkLabelTemplateCaptured)applyCaptured(stoneLabelCell,remarkLabelTemplateCaptured,false);stoneLabelCell.value='Stone Decsription : ';
+      const stoneLabelCell=ws.getCell(`B${stoneLabelRow}`);if(remarkLabelTemplateCaptured)applyCaptured(stoneLabelCell,remarkLabelTemplateCaptured,false);stoneLabelCell.value='Stone Decsription :';
       for(let i=0;i<stoneRows;i++){
         const rowNo=stoneLabelRow+1+i,[left,right]=stoneDescriptionPairs[i]||[];
         mergeStyledText(rowNo,2,3,left?.text||'');
