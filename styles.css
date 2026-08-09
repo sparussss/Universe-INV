@@ -430,3 +430,17 @@ button{width:auto}
 @media(max-width:800px){.hero-title-row{margin-bottom:12px}.status-grid{margin-top:0}.main-tabs{gap:6px}.main-tabs .tab{padding:9px 10px;font-size:13px}}
 @media(max-width:520px){.hero-title-row h2{font-size:22px}.workspace-import-btn{padding:8px 10px;font-size:12px}.main-tabs{gap:5px}.main-tabs .tab{padding:8px 7px;font-size:12px}.compact-item{grid-template-columns:24px 60px minmax(0,1fr) 72px}.item-side-actions{gap:5px}.item-side-actions .item-delivery-toggle{font-size:10px}.confirm-row{gap:6px}.confirm-row button{padding:10px 7px;font-size:12px}}
 .stock-load-more{width:100%;min-height:42px;border-style:dashed;color:#667085;background:#f8fafc;font-size:12px}
+
+/* v0.14.21 Excel export add-on chooser */
+.excel-options-dialog{width:min(560px,94vw);max-height:86dvh;overflow:auto}
+.excel-options-dialog h3{margin:0}.excel-options-dialog .muted{margin:4px 0 0}
+.excel-option-list{display:grid;gap:10px;margin-top:14px}
+.excel-option-main{display:flex;flex-direction:row;align-items:center;gap:10px;padding:11px 12px;border:1px solid #e2e7ee;border-radius:12px;background:#fff;color:#172033;font-weight:700}
+.excel-option-main input,.excel-option-subs input{width:19px;height:19px;accent-color:var(--accent);flex:0 0 auto}
+.excel-option-group{border:1px solid #e2e7ee;border-radius:12px;padding:0;background:#f8fafc;overflow:hidden}
+.excel-option-group>.excel-option-main{border:0;border-radius:0;background:#fff}
+.excel-option-subs{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 12px 12px}
+.excel-option-subs label{display:flex;flex-direction:row;align-items:center;gap:8px;color:#344054;background:#fff;border:1px solid #e5e9f0;border-radius:10px;padding:9px}
+.excel-option-subs input:disabled+*{opacity:.55}
+.excel-option-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid #e5e9f0}
+@media(max-width:520px){.excel-option-subs{grid-template-columns:1fr}}

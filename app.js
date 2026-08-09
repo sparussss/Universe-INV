@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
-const APP_VERSION='0.14.19';
+const APP_VERSION='0.14.21';
 const state={products:new Map(),stockCatalog:new Map(),customers:new Map(),imageFiles:new Map(),imageFilesByName:new Map(),imageOverrides:new Map(),imageOverrideDirty:0,imageOverrideDirtyLots:new Set(),items:[],stockRows:[],stockAllRows:[],stockHeaders:[],stockRowByLot:new Map(),stockWorkbook:null,stockSheetName:'jmsdata',stockFileName:'jmsdata.xlsx',stockIntegrityIssues:[],stockDuplicateLots:[],stoneAliases:new Map(),stoneVariantAliases:new Map(),stoneGroups:new Map(),stoneEnglishNames:new Map(),diamondStoneCodes:new Set(),stoneMappingName:'',stoneDiagnostics:{duplicates:[],multiAlias:[],missingGroup:[],missingType:[],missingQuotation:[],prefixOverlaps:[]},articleMap:new Map(),articleMappingName:'',invoiceTemplateBuffer:null,invoiceTemplateName:'',documentType:'invoice',packageName:'',exhibitionName:'',sortable:null,scanner:null,scannerBusy:false,scannerRunning:false,scannerZoom:{min:1,max:1,step:1,current:1},fx:{rate:1,date:'',source:'usd',fetching:false},quote:{karat:'18K',currentLondonPm:0,currentLondonPmDate:'',source:'',historicalPm:{},goldPrices:new Map(),goldDates:[],goldDataName:'',goldDataRows:0},inventoryHistory:new Map(),documentStore:{invoiceHeaders:[],invoiceItems:[],consignmentHeaders:[],consignmentItems:[],quotationHeaders:[],quotationItems:[],transactions:[]},recall:null,deliveryReturns:new Set(),exhibitionSession:'',draft:{baseline:'',timer:null,prompted:false,restoring:false},stockSearch:{query:'*',types:[],stones:[],statuses:[],imageIssuesOnly:false,filtersOpen:false},editingItemId:null,stockImageEditLot:null,packageFiles:[],customPackageImages:new Map(),packageImageDirtyFiles:new Set(),dataMeta:{},importConflicts:[],health:{},imageIndexProgress:{done:0,total:0},diagnosticLot:'',recordsLoaded:false,recordsFileName:'jmsdata.xlsx / Universe Records',recordsFilePath:'',recordCounters:{invoice:1,consignment:1,quotation:1},recordsDirty:false};
 const EXHIBITION_SESSION_KEY='universeExhibitionSession_v1',EXHIBITION_NAME_KEY='universeExhibitionName_v1',IMAGE_OVERRIDE_LOCAL_KEY='universeImageOverrides_v1';try{state.exhibitionSession=localStorage.getItem(EXHIBITION_SESSION_KEY)||'';state.exhibitionName=localStorage.getItem(EXHIBITION_NAME_KEY)||''}catch{}
 function formalItems(){return [...state.items].sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0))}
@@ -544,12 +544,15 @@ function goldFreshnessInfo(){const latest=goldFileLatest();if(!latest)return{sta
 function updateGoldFreshnessUI(){const info=goldFreshnessInfo(),el=$('#goldFreshnessStatus');if(el){el.textContent=info.message;el.className='notice '+(info.status==='ok'?'ok':info.status==='missing'?'':'warn')}return info}
 function stonePartsFromDescriptionLine(line){const raw=String(line||'').toUpperCase(),firstDash=raw.indexOf('-');if(firstDash<0)return[];const tail=raw.slice(firstDash+1),nextDash=tail.indexOf('-'),stoneBlock=(nextDash>=0?tail.slice(0,nextDash):tail).replace(/\s+/g,'');if(!stoneBlock)return[];return stoneBlock.split(/[+\/，,]/).map(x=>x.trim()).filter(Boolean).map(part=>({part,code:longestStoneBreakdownPrefix(part)}))}
 function allStoneCodesForProduct(p){const out=[];for(const line of p?.descriptions||[]){for(const x of stonePartsFromDescriptionLine(line)){if(x.code&&!out.includes(x.code))out.push(x.code)}}return out}
-function isRO1220SpecialInvoice(){return state.documentType==='invoice'&&normCode($('#customerCode')?.value)==='RO1220'}
 function documentStoneDescriptionEntries(items=formalItems()){const out=[],seen=new Set();for(const item of items||[]){for(const line of item?.descriptions||[]){for(const x of stonePartsFromDescriptionLine(line)){const code=norm(x.code).toUpperCase();if(!code||seen.has(code))continue;const name=stoneEnglishNameForCode(code);if(!name)continue;seen.add(code);out.push({code,name,text:`${code} = ${name}`})}}}return out.sort((a,b)=>a.code.localeCompare(b.code,'en',{sensitivity:'base'}))}
 function documentStoneDescriptionPairs(items=formalItems()){const entries=documentStoneDescriptionEntries(items),rows=Math.ceil(entries.length/2),pairs=[];for(let i=0;i<rows;i++)pairs.push([entries[i]||null,entries[i+rows]||null]);return pairs}
-function ro1220WeightSummary(items=formalItems()){let goldGrams=0,stoneCarats=0;for(const item of items||[]){const qty=Math.max(0,Number(item?.qty)||0),desc=item?.descriptions||[],goldMatch=norm(desc[0]).match(/^(\d+(?:\.\d+)?)/);if(goldMatch)goldGrams+=Number(goldMatch[1])*qty;for(const line of desc.slice(1)){for(const m of String(line||'').matchAll(/(\d+(?:\.\d+)?)\s*ct\b/ig))stoneCarats+=Number(m[1])*qty}}const stoneGrams=stoneCarats*.2;return{goldGrams,stoneCarats,stoneGrams,grossGrams:goldGrams+stoneGrams}}
+function invoiceWeightSummary(items=formalItems()){let goldGrams=0,allStoneCarats=0,diamondCarats=0,semiPreciousCarats=0;for(const item of items||[]){const qty=Math.max(0,Number(item?.qty)||0),desc=item?.descriptions||[],goldMatch=norm(desc[0]).match(/^(\d+(?:\.\d+)?)/);if(goldMatch)goldGrams+=Number(goldMatch[1])*qty;for(const line of desc.slice(1)){let lineCarats=0;for(const m of String(line||'').matchAll(/(\d+(?:\.\d+)?)\s*ct\b/ig))lineCarats+=Number(m[1]);if(!lineCarats)continue;lineCarats*=qty;allStoneCarats+=lineCarats;const codes=stonePartsFromDescriptionLine(line).map(x=>norm(x.code).toUpperCase()).filter(Boolean);if(codes.length&&codes.every(isDiamondStoneCode))diamondCarats+=lineCarats;else semiPreciousCarats+=lineCarats}}return{goldGrams,allStoneCarats,allStoneGrams:allStoneCarats*.2,diamondCarats,diamondGrams:diamondCarats*.2,semiPreciousCarats,semiPreciousGrams:semiPreciousCarats*.2}}
 function addCalendarMonthsIso(value,months){const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return'';const y=Number(m[1]),month=Number(m[2])-1,day=Number(m[3]),index=month+Number(months||0),ty=y+Math.floor(index/12),tm=((index%12)+12)%12,last=new Date(ty,tm+1,0).getDate(),td=Math.min(day,last);return `${ty}-${String(tm+1).padStart(2,'0')}-${String(td).padStart(2,'0')}`}
-function ro1220PaymentTermLines(total=totals().total,invoiceDate=norm($('#invoiceDate')?.value)||today()){const amount=Number(total)||0,installment=Math.ceil(amount*.2),amounts=[installment,installment,installment,installment,Math.round((amount-installment*4)*100)/100],months=[3,4,5,6],days=[90,120,150,180],lines=[`PAID BY BANK TT 20% - ${fmt(amounts[0])}`];for(let i=0;i<4;i++)lines.push(`TERMS ${days[i]} DAYS 20% (${addCalendarMonthsIso(invoiceDate,months[i])}) - ${fmt(amounts[i+1])} WIRE BANK TRANSFER`);return lines}
+function invoicePaymentTermLines(total=totals().total,invoiceDate=norm($('#invoiceDate')?.value)||today()){const amount=Number(total)||0,installment=Math.ceil(amount*.2),amounts=[installment,installment,installment,installment,Math.round((amount-installment*4)*100)/100],months=[3,4,5,6],days=[90,120,150,180],lines=[`PAID BY BANK TT 20% - ${fmt(amounts[0])}`];for(let i=0;i<4;i++)lines.push(`TERMS ${days[i]} DAYS 20% (${addCalendarMonthsIso(invoiceDate,months[i])}) - ${fmt(amounts[i+1])} WIRE BANK TRANSFER`);return lines}
+function normalizeExcelAddonOptions(v={}){return{paymentTerm:!!v.paymentTerm,remark:!!v.remark,goldWeight:!!v.goldWeight,semiPrecious:!!v.semiPrecious,diamond:!!v.diamond,allStone:!!v.allStone,declaration:!!v.declaration,stoneDescription:!!v.stoneDescription}}
+function excelAddonRequested(v={}){const o=normalizeExcelAddonOptions(v);return o.paymentTerm||o.remark||o.declaration||o.stoneDescription}
+function excelAddonNeedsStoneList(v={}){const o=normalizeExcelAddonOptions(v);return o.stoneDescription||(o.remark&&(o.semiPrecious||o.diamond))}
+function requestExcelAddonOptions(){return new Promise(resolve=>{const dlg=$('#excelOptionsDialog');if(!dlg)return resolve(normalizeExcelAddonOptions());const ids=['excelOptPayment','excelOptRemark','excelOptGold','excelOptSemi','excelOptDiamond','excelOptAllStone','excelOptDeclaration','excelOptStoneDescription'];for(const id of ids){const el=$('#'+id);if(el)el.checked=false}const remark=$('#excelOptRemark'),subs=[$('#excelOptGold'),$('#excelOptSemi'),$('#excelOptDiamond'),$('#excelOptAllStone')].filter(Boolean);const sync=()=>subs.forEach(x=>x.disabled=!remark?.checked);if(remark)remark.onchange=sync;sync();let done=false;const finish=value=>{if(done)return;done=true;try{dlg.close()}catch{}resolve(value)};$('#closeExcelOptionsBtn').onclick=()=>finish(null);$('#cancelExcelOptionsBtn').onclick=()=>finish(null);$('#confirmExcelOptionsBtn').onclick=()=>{const o=normalizeExcelAddonOptions({paymentTerm:$('#excelOptPayment')?.checked,remark:remark?.checked,goldWeight:$('#excelOptGold')?.checked,semiPrecious:$('#excelOptSemi')?.checked,diamond:$('#excelOptDiamond')?.checked,allStone:$('#excelOptAllStone')?.checked,declaration:$('#excelOptDeclaration')?.checked,stoneDescription:$('#excelOptStoneDescription')?.checked});if(o.remark&&!o.goldWeight&&!o.semiPrecious&&!o.diamond&&!o.allStone)return alert('Remark 已選取，請至少選擇一項重量：Gold Weight、Semi-Precious、Diamond 或 All Stone。');finish(o)};dlg.oncancel=e=>{e.preventDefault();finish(null)};dlg.showModal()})}
 function unknownStoneDiagnostics(){const out=[];if(!state.stockAllRows.length||!state.stoneAliases.size)return out;for(const row of state.stockAllRows){const lot=norm(field(row,['LOTNO'])),art=normArt(field(row,['ARTNO']));for(let i=2;i<=6;i++){const line=norm(field(row,[`DESC${i}`]));if(!line)continue;for(const x of stonePartsFromDescriptionLine(line)){if(!x.code)out.push({lotNo:lot,artNo:art,field:`DESC${i}`,line,token:x.part})}}}return out}
 function imageCoverageDiagnostics(){if(!state.stockCatalog.size)return{missingProducts:0,missingArticles:[]};const missing=[];for(const p of state.stockCatalog.values())if(!(state.imageFiles.get(p.artNo)||[]).length)missing.push(p);return{missingProducts:missing.length,missingArticles:[...new Set(missing.map(x=>x.artNo))].sort()}}
 function healthSummaryRows(){
@@ -1160,7 +1163,7 @@ function copyTemplateRowStyle(ws,sourceRow,targetRow){
     d.style=cloneStyle(s.style);d.numFmt=s.numFmt;d.alignment=cloneStyle(s.alignment);d.border=cloneStyle(s.border);d.fill=cloneStyle(s.fill);d.font=cloneStyle(s.font);d.protection=cloneStyle(s.protection);
   }
 }
-async function exportInvoiceFromTemplate(){
+async function exportInvoiceFromTemplate(exportOptions={}){
   const wb=new ExcelJS.Workbook();
   await wb.xlsx.load(state.invoiceTemplateBuffer.slice(0));
 
@@ -1237,22 +1240,27 @@ async function exportInvoiceFromTemplate(){
   const footerQtyCell=getMap('Total Quantity','F25').split(':')[0];
   const footerBaseRow=Number((footerQtyCell.match(/\d+/)||['25'])[0]);
   const originalFooterEnd=ws.rowCount;
-  const specialRO1220=isRO1220SpecialInvoice();
-  const stoneDescriptionPairs=specialRO1220?documentStoneDescriptionPairs(formalItems()):[];
+  const addons=normalizeExcelAddonOptions(exportOptions);
+  const addPayment=state.documentType==='invoice'&&addons.paymentTerm;
+  const addWeights=state.documentType==='invoice'&&addons.remark;
+  const addDeclaration=state.documentType==='invoice'&&addons.declaration;
+  const addStoneDescription=state.documentType==='invoice'&&addons.stoneDescription;
+  const stoneDescriptionPairs=addStoneDescription?documentStoneDescriptionPairs(formalItems()):[];
+  const selectedWeightCount=addWeights?[addons.goldWeight,addons.semiPrecious,addons.diamond,addons.allStone].filter(Boolean).length:0;
   const findOriginalFooterLabelRow=(text)=>{const needle=String(text||'').toLowerCase();for(let r=footerBaseRow;r<=originalFooterEnd;r++)for(let c=1;c<=Math.max(9,ws.columnCount||9);c++){if(norm(ws.getRow(r).getCell(c).value).toLowerCase().includes(needle))return r}return 0};
   const originalRemarkRow=findOriginalFooterLabelRow('remark')||footerBaseRow+9;
   const originalSignatureRow=findOriginalFooterLabelRow('vender signature')||findOriginalFooterLabelRow('accept by')||originalRemarkRow+3;
-  // RO1220 has a customer-specific footer after Total Amount:
-  // RO1220 groups are separated by one blank row. Group headings use their own row,
-  // and each group's body begins on the following row from Column B.
-  // Extra rows before Remarks provide: Total Amount body + blank + Payment Term heading
-  // + five payment lines + blank.
-  const extraPaymentRows=specialRO1220?8:0;
-  const specialStoneRows=specialRO1220?Math.max(1,stoneDescriptionPairs.length):0;
-  const specialManualRemarkRows=specialRO1220&&norm($('#remark')?.value)?1:0;
-  const specialRowsAfterRemark=specialRO1220?9+specialStoneRows+specialManualRemarkRows:0;
+  const extraPaymentRows=addPayment?7:0;
+  const stoneRows=addStoneDescription?Math.max(1,stoneDescriptionPairs.length):0;
+  const manualRemarkRows=addWeights&&norm($('#remark')?.value)?1:0;
+  let postRemarkRows=0;
+  if(addWeights)postRemarkRows+=selectedWeightCount+manualRemarkRows;
+  if(addDeclaration||addStoneDescription)postRemarkRows+=1;
+  if(addDeclaration){postRemarkRows+=2;postRemarkRows+=1}
+  if(addStoneDescription)postRemarkRows+=1+stoneRows+1;
+  if(addWeights&&!addDeclaration&&!addStoneDescription)postRemarkRows+=1;
   const builtInRowsAfterRemark=Math.max(0,originalSignatureRow-originalRemarkRow-1);
-  const extraRemarkRows=specialRO1220?Math.max(0,specialRowsAfterRemark-builtInRowsAfterRemark):0;
+  const extraRemarkRows=Math.max(0,postRemarkRows-builtInRowsAfterRemark);
   const originalContentRows=Math.max(1,footerBaseRow-firstItemRow-1);
   const baseContentRows=Math.min(4,originalContentRows);
   const separatorSourceRow=firstItemRow+baseContentRows;
@@ -1484,7 +1492,7 @@ async function exportInvoiceFromTemplate(){
     return null;
   };
   const amountLabel=findLabelRow('total amount');
-  if(amountLabel&&!specialRO1220){
+  if(amountLabel){
     const amountCell=ws.getRow(amountLabel.r).getCell(Math.min(columnCount,amountLabel.c+1));
     amountCell.value=`${currencyWords($('#currency').value)} ${numberToWords(t.total)}`;
     amountCell.alignment={...cloneStyle(amountCell.alignment),vertical:'middle',wrapText:false};
@@ -1498,7 +1506,7 @@ async function exportInvoiceFromTemplate(){
   const remarkTemplateHeight=Number(footerRows[remarkTemplateOffset]?.height)||Number(ws.getRow(footerStart+remarkTemplateOffset).height)||15;
 
   // Keep the existing approved sheet alignment behaviour, then re-apply Template styles
-  // to the RO1220 footer cells below.
+  // to any optional Invoice footer cells below.
   for(let r=1;r<=requiredEnd;r++)for(let c=1;c<=columnCount;c++){
     const cell=ws.getRow(r).getCell(c);
     cell.alignment={...cloneStyle(cell.alignment),vertical:'middle',wrapText:false};
@@ -1513,63 +1521,53 @@ async function exportInvoiceFromTemplate(){
   };
   if(remarkLabel){
     const manualRemark=norm($('#remark').value),remarkRow=remarkLabel.r;
-    if(specialRO1220){
-      // Total Amount wording shares the heading row and starts at Column C.
-      // Keep the following row blank before the Payment Term group.
-      if(amountLabel){
-        const oldAmountCell=ws.getRow(amountLabel.r).getCell(Math.min(columnCount,amountLabel.c+1));
-        oldAmountCell.value='';
-        mergeStyledText(amountLabel.r,3,9,`${currencyWords($('#currency').value)} ${numberToWords(t.total)}`);
-        mergeStyledText(amountLabel.r+1,2,9,'');
-      }
 
-      // Payment Term heading is on its own row. Five payment lines begin below it in Column B,
-      // followed by one full blank row before Remarks.
-      const paymentLabelRow=remarkRow-7,paymentLines=ro1220PaymentTermLines(t.total,norm($('#invoiceDate').value));
+    if(addPayment){
+      const paymentLabelRow=remarkRow-7,paymentLines=invoicePaymentTermLines(t.total,norm($('#invoiceDate').value));
       const paymentLabelCell=ws.getCell(`B${paymentLabelRow}`);if(remarkLabelTemplateCaptured)applyCaptured(paymentLabelCell,remarkLabelTemplateCaptured,false);paymentLabelCell.value='Payment Term :';
       for(let i=0;i<paymentLines.length;i++)mergeStyledText(paymentLabelRow+1+i,2,9,paymentLines[i]);
       mergeStyledText(paymentLabelRow+6,2,9,'');
+    }
 
-      // Remarks heading is on its own row. Weight labels start in Column B and values in Column D.
+    let cursor=remarkRow+1;
+    if(addWeights){
       const labelCell=ws.getCell(`B${remarkRow}`);if(remarkLabelTemplateCaptured)applyCaptured(labelCell,remarkLabelTemplateCaptured,false);labelCell.value='Remarks :';
-      const setWeightRow=(rowNo,label,value,unit,isGross=false)=>{
+      const weight=invoiceWeightSummary(formalItems());
+      const setWeightRow=(rowNo,label,value,unit)=>{
         mergeStyledText(rowNo,2,3,label);
         const valueCell=ws.getCell(`D${rowNo}`);if(remarkTemplateCaptured)applyCaptured(valueCell,remarkTemplateCaptured,false);
         valueCell.value=Number(value)||0;valueCell.numFmt='0.00';
         valueCell.alignment={...cloneStyle(valueCell.alignment),horizontal:'center',vertical:'middle',wrapText:false};
-        if(isGross)valueCell.border={...cloneStyle(valueCell.border),top:{style:'thin'},bottom:{style:'double'}};
         mergeStyledText(rowNo,5,9,unit);
       };
-      const weight=ro1220WeightSummary(formalItems());
-      setWeightRow(remarkRow+1,'TOTAL GOLD WEIGHT :',weight.goldGrams,'g');
-      setWeightRow(remarkRow+2,'TOTAL STONES WEIGHT (CARATS) :',weight.stoneGrams,`g (${weight.stoneCarats.toFixed(2)} CARATS)`);
-      setWeightRow(remarkRow+3,'TOTAL GROSS WEIGHT :',weight.grossGrams,'g',true);
-
-      let detailRow=remarkRow+4;
-      if(manualRemark){mergeStyledText(detailRow,2,9,manualRemark);detailRow++}
-      // One blank row separates Remarks from the declaration.
-      mergeStyledText(detailRow,2,9,'');
-      mergeStyledText(detailRow+1,2,9,'WE, UNIVERSE GEMS & JEWELLERY COMPANY, HEREBY CONFIRM THAT ALL DIAMONDS AND');
-      mergeStyledText(detailRow+2,2,9,'SEMI-PRECIOUS STONES ARE NATURAL.');
-      // One blank row separates the declaration from Stone Decsription.
-      mergeStyledText(detailRow+3,2,9,'');
-
-      // Stone Decsription heading is on its own row. Body begins below it:
-      // left entries start at Column B; right entries start at Column D.
-      const stoneLabelRow=detailRow+4,stoneRows=Math.max(1,stoneDescriptionPairs.length);
-      const stoneLabelCell=ws.getCell(`B${stoneLabelRow}`);if(remarkLabelTemplateCaptured)applyCaptured(stoneLabelCell,remarkLabelTemplateCaptured,false);stoneLabelCell.value='Stone Decsription :';
-      for(let i=0;i<stoneRows;i++){
-        const rowNo=stoneLabelRow+1+i,[left,right]=stoneDescriptionPairs[i]||[];
-        mergeStyledText(rowNo,2,3,left?.text||'');
-        mergeStyledText(rowNo,4,8,right?.text||'');
-      }
-      // Always leave one full blank row after the final Stone Description line.
-      mergeStyledText(stoneLabelRow+1+stoneRows,2,9,'');
+      if(addons.goldWeight){setWeightRow(cursor++,'TOTAL GOLD WEIGHT :',weight.goldGrams,'g')}
+      if(addons.semiPrecious){setWeightRow(cursor++,'TOTAL SEMI-PRECIOUS STONES WEIGHT (CARATS) :',weight.semiPreciousGrams,`g (${weight.semiPreciousCarats.toFixed(2)} CARATS)`)}
+      if(addons.diamond){setWeightRow(cursor++,'TOTAL DIAMOND WEIGHT (CARATS) :',weight.diamondGrams,`g (${weight.diamondCarats.toFixed(2)} CARATS)`)}
+      if(addons.allStone){setWeightRow(cursor++,'TOTAL STONES WEIGHT (CARATS) :',weight.allStoneGrams,`g (${weight.allStoneCarats.toFixed(2)} CARATS)`)}
+      if(manualRemark)mergeStyledText(cursor++,2,9,manualRemark);
     }else{
-      // All other customers keep the current Template Remark only; no automatic Stone Description.
       try{ws.unMergeCells(`C${remarkRow}:H${remarkRow}`)}catch{}
       try{ws.mergeCells(`C${remarkRow}:H${remarkRow}`)}catch{}
       const remarkCell=ws.getCell(`C${remarkRow}`);if(remarkTemplateCaptured)applyCaptured(remarkCell,remarkTemplateCaptured,false);remarkCell.value=manualRemark;
+    }
+
+    if(addDeclaration||addStoneDescription)mergeStyledText(cursor++,2,9,'');
+    if(addDeclaration){
+      mergeStyledText(cursor++,2,9,'WE, UNIVERSE GEMS & JEWELLERY COMPANY, HEREBY CONFIRM THAT ALL DIAMONDS AND');
+      mergeStyledText(cursor++,2,9,'SEMI-PRECIOUS STONES ARE NATURAL.');
+      mergeStyledText(cursor++,2,9,'');
+    }
+    if(addStoneDescription){
+      const stoneLabelCell=ws.getCell(`B${cursor}`);if(remarkLabelTemplateCaptured)applyCaptured(stoneLabelCell,remarkLabelTemplateCaptured,false);stoneLabelCell.value='Stone Decsription :';cursor++;
+      for(let i=0;i<stoneRows;i++){
+        const [left,right]=stoneDescriptionPairs[i]||[];
+        mergeStyledText(cursor,2,3,left?.text||'');
+        mergeStyledText(cursor,4,8,right?.text||'');
+        cursor++;
+      }
+      mergeStyledText(cursor++,2,9,'');
+    }else if(addWeights&&!addDeclaration){
+      mergeStyledText(cursor++,2,9,'');
     }
   }
   ws.pageSetup=ws.pageSetup||{};
@@ -1604,13 +1602,18 @@ async function exportInvoiceExcel(){
   if(!fxPricingReady())return alert(`請先取得或輸入 USD → ${currencyCode()} 的 FX Rate。`);
   if(!quote14KReady())return alert('Quotation 金價資料未完成。請輸入最新 London PM，並補齊所有貨品完成日的 London PM。');
   if(!state.items.length){alert(`${documentLabels().short} 沒有貨品。`);return}
-  if(isRO1220SpecialInvoice()&&!state.dataMeta?.stone)return alert('RO1220 Invoice 必須先匯入目前展覽使用的 Stone List。');
-  if(isRO1220SpecialInvoice()&&!state.invoiceTemplateBuffer)return alert('RO1220 Invoice 必須先匯入目前展覽使用的 Invoice Master Template.xlsx。');
+  let exportOptions=normalizeExcelAddonOptions();
+  if(state.documentType==='invoice'){
+    exportOptions=await requestExcelAddonOptions();
+    if(!exportOptions)return;
+    if(excelAddonRequested(exportOptions)&&!state.invoiceTemplateBuffer)return alert('已選擇 Invoice 附加資料，請先匯入目前展覽使用的 Invoice Master Template.xlsx。');
+    if(excelAddonNeedsStoneList(exportOptions)&&!state.dataMeta?.stone)return alert('所選附加資料需要 Stone List，請先匯入目前展覽使用的最新 Stone List。');
+  }
   if(!confirmImageIssuesBeforeExport())return;
   if(typeof ExcelJS==='undefined'){setExcelExportStatus('Excel 輸出程式未載入，請連接網絡後重新開啟。','error');return}
   const btn=$('#exportExcelBtn');btn.disabled=true;setExcelExportStatus('正在建立 Excel Invoice…');
   try{
-    if(state.invoiceTemplateBuffer){await exportInvoiceFromTemplate();return}
+    if(state.invoiceTemplateBuffer){await exportInvoiceFromTemplate(exportOptions);return}
     const wb=new ExcelJS.Workbook();
     wb.creator='Universe Invoice PWA';wb.created=new Date();
     const ws=wb.addWorksheet(documentLabels().title,{pageSetup:{paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.25,right:.25,top:.35,bottom:.35,header:.15,footer:.15}}});
