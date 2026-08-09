@@ -479,3 +479,33 @@ button{width:auto}
 .remark-option-group .excel-option-group-title{font-weight:700;color:#172033;padding:10px 12px 4px;font-size:14px}
 .preview-payment-term .preview-addon-line{font-size:8.5px;line-height:1.15}
 .preview-declaration .preview-addon-line{font-size:8.5px;line-height:1.15}
+
+/* v0.14.25: unify the whole on-screen Invoice preview typography to the
+   current Remarks / Stone Description content size. This is preview-only;
+   Excel export styling still comes from Invoice Master Template. */
+.preview-continuous,
+.preview-continuous .letterhead h2,
+.preview-continuous .letterhead p,
+.preview-continuous .doc-title,
+.preview-continuous .doc-meta,
+.preview-continuous .doc-table,
+.preview-continuous .doc-table th,
+.preview-continuous .amount-head small,
+.preview-final-footer,
+.preview-final-footer .doc-totals .total,
+.preview-final-footer .signature-row,
+.preview-total-amount,
+.preview-addon-title,
+.preview-addon-line,
+.preview-weight-grid,
+.preview-stone-grid,
+.preview-payment-term .preview-addon-line,
+.preview-declaration .preview-addon-line {
+  font-size:10px;
+}
+.preview-continuous .letterhead h2,
+.preview-continuous .doc-title,
+.preview-addon-title,
+.preview-final-footer .doc-totals .total {
+  line-height:1.18;
+}

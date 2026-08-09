@@ -1,6 +1,6 @@
-const CACHE='universe-invoice-v0.14.24';
+const CACHE='universe-invoice-v0.14.25';
 const DEP_CACHE='universe-invoice-dependencies-v2';
-const LOCAL_ASSETS=['./','./index.html','./styles.css?v=0.14.24','./app.js?v=0.14.24','./manifest.webmanifest?v=0.14.24','./icon.svg','./icon-192.png','./icon-512.png'];
+const LOCAL_ASSETS=['./','./index.html','./styles.css?v=0.14.25','./app.js?v=0.14.25','./manifest.webmanifest?v=0.14.25','./icon.svg','./icon-192.png','./icon-512.png'];
 const EXTERNAL_ASSETS=[
   'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
   'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js',
